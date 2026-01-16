@@ -203,6 +203,9 @@ declare class Frame {
   gotoxy(x: number, y: number): void;
   putmsg(text: string, attr?: number): void;
   print(text: string): void;
+  top(): void;
+  bottom(): void;
+  refresh(): void;
   attr: number;
   x: number;
   y: number;
@@ -210,7 +213,13 @@ declare class Frame {
   height: number;
   data_width: number;
   data_height: number;
+  transparent: boolean;
+  v_scroll: boolean;
+  h_scroll: boolean;
+  scrollbars: boolean;
+  checkbounds: boolean;
   setData(x: number, y: number, char: string, attr: number): void;
   getData(x: number, y: number): { ch: string; attr: number };
+  clearData(x: number, y: number): void;
   is_open: boolean;
 }

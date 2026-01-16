@@ -28,7 +28,7 @@ class Game {
   private timestep: FixedTimestep;
   private inputMap: InputMap;
   private controls: Controls;
-  private renderer: Renderer;
+  private renderer: IRenderer;
   private trackLoader: TrackLoader;
   private hud: Hud;
   private physicsSystem: PhysicsSystem;
@@ -51,7 +51,8 @@ class Game {
     });
     this.inputMap = new InputMap();
     this.controls = new Controls(this.inputMap);
-    this.renderer = new Renderer(this.config.screenWidth, this.config.screenHeight);
+    // Use FrameRenderer for layered Frame.js rendering
+    this.renderer = new FrameRenderer(this.config.screenWidth, this.config.screenHeight);
     this.trackLoader = new TrackLoader();
     this.hud = new Hud();
     this.physicsSystem = new PhysicsSystem();

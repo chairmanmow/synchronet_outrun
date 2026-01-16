@@ -2070,9 +2070,16 @@ var RoadRenderer = (function () {
         var side = x < leftEdge ? 'left' : 'right';
         var distFromRoad = side === 'left' ? leftEdge - x : x - rightEdge;
         var scale = Math.min(1, 3 / distance);
-        var seed = Math.floor(trackZ / 20) * 100 + x;
+        var gridSize = 8;
+        var worldZ = Math.floor(trackZ + distance * 10);
+        var gridZ = Math.floor(worldZ / gridSize);
+        var anchorX = (side === 'left') ? leftEdge - 8 : rightEdge + 8;
+        var seed = gridZ * 1000 + (side === 'left' ? 1 : 2);
         var rand = this.pseudoRandom(seed);
-        if (rand < 0.15 && distFromRoad > 2 && distFromRoad < 15) {
+        var shouldDraw = (Math.abs(x - anchorX) < 2) &&
+            (rand < 0.7) &&
+            (distFromRoad > 3 && distFromRoad < 20);
+        if (shouldDraw && x === anchorX) {
             this.drawSceneryObject(x, y, distance, scale, rand);
         }
         else if (distFromRoad <= 2) {
@@ -2674,6 +2681,698 @@ var HudRenderer = (function () {
     return HudRenderer;
 }());
 "use strict";
+var FrameManager = (function () {
+    function FrameManager(width, height, horizonY) {
+        this.width = width;
+        this.height = height;
+        this.horizonY = horizonY;
+        this.layers = [];
+        this.roadsidePool = [];
+        this.vehicleFrames = [];
+        this.skyGridFrame = null;
+        this.mountainsFrame = null;
+        this.sunFrame = null;
+        this.roadFrame = null;
+        this.hudFrame = null;
+        this.rootFrame = null;
+    }
+    FrameManager.prototype.init = function () {
+        this.rootFrame = new Frame(1, 1, this.width, this.height, BG_BLACK);
+        this.rootFrame.open();
+        this.skyGridFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
+        this.skyGridFrame.open();
+        this.addLayer(this.skyGridFrame, 'skyGrid', 1);
+        this.mountainsFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
+        this.mountainsFrame.transparent = true;
+        this.mountainsFrame.open();
+        this.addLayer(this.mountainsFrame, 'mountains', 2);
+        this.sunFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
+        this.sunFrame.transparent = true;
+        this.sunFrame.open();
+        this.addLayer(this.sunFrame, 'sun', 3);
+        var roadHeight = this.height - this.horizonY;
+        this.roadFrame = new Frame(1, this.horizonY + 1, this.width, roadHeight, BG_BLACK, this.rootFrame);
+        this.roadFrame.open();
+        this.addLayer(this.roadFrame, 'road', 4);
+        this.hudFrame = new Frame(1, 1, this.width, this.height, BG_BLACK, this.rootFrame);
+        this.hudFrame.transparent = true;
+        this.hudFrame.open();
+        this.addLayer(this.hudFrame, 'hud', 100);
+        this.initRoadsidePool(20);
+        this.initVehicleFrames(8);
+    };
+    FrameManager.prototype.addLayer = function (frame, name, zIndex) {
+        this.layers.push({ frame: frame, name: name, zIndex: zIndex });
+    };
+    FrameManager.prototype.initRoadsidePool = function (count) {
+        for (var i = 0; i < count; i++) {
+            var spriteFrame = new Frame(1, 1, 8, 6, BG_BLACK, this.rootFrame);
+            spriteFrame.transparent = true;
+            this.roadsidePool.push(spriteFrame);
+        }
+    };
+    FrameManager.prototype.initVehicleFrames = function (count) {
+        for (var i = 0; i < count; i++) {
+            var vehicleFrame = new Frame(1, 1, 7, 4, BG_BLACK, this.rootFrame);
+            vehicleFrame.transparent = true;
+            this.vehicleFrames.push(vehicleFrame);
+        }
+    };
+    FrameManager.prototype.getSkyGridFrame = function () {
+        return this.skyGridFrame;
+    };
+    FrameManager.prototype.getMountainsFrame = function () {
+        return this.mountainsFrame;
+    };
+    FrameManager.prototype.getSunFrame = function () {
+        return this.sunFrame;
+    };
+    FrameManager.prototype.getRoadFrame = function () {
+        return this.roadFrame;
+    };
+    FrameManager.prototype.getHudFrame = function () {
+        return this.hudFrame;
+    };
+    FrameManager.prototype.getRoadsideFrame = function (index) {
+        if (index >= 0 && index < this.roadsidePool.length) {
+            return this.roadsidePool[index];
+        }
+        return null;
+    };
+    FrameManager.prototype.getVehicleFrame = function (index) {
+        if (index >= 0 && index < this.vehicleFrames.length) {
+            return this.vehicleFrames[index];
+        }
+        return null;
+    };
+    FrameManager.prototype.getRoadsidePoolSize = function () {
+        return this.roadsidePool.length;
+    };
+    FrameManager.prototype.positionRoadsideFrame = function (index, x, y, visible) {
+        var frame = this.roadsidePool[index];
+        if (!frame)
+            return;
+        if (visible) {
+            frame.moveTo(x, y);
+            if (!frame.is_open) {
+                frame.open();
+            }
+        }
+        else {
+            if (frame.is_open) {
+                frame.close();
+            }
+        }
+    };
+    FrameManager.prototype.positionVehicleFrame = function (index, x, y, visible) {
+        var frame = this.vehicleFrames[index];
+        if (!frame)
+            return;
+        if (visible) {
+            frame.moveTo(x, y);
+            if (!frame.is_open) {
+                frame.open();
+            }
+            frame.top();
+        }
+        else {
+            if (frame.is_open) {
+                frame.close();
+            }
+        }
+    };
+    FrameManager.prototype.cycle = function () {
+        this.rootFrame.cycle();
+    };
+    FrameManager.prototype.clearFrame = function (frame) {
+        if (frame) {
+            frame.clear();
+        }
+    };
+    FrameManager.prototype.shutdown = function () {
+        if (this.hudFrame)
+            this.hudFrame.close();
+        for (var i = 0; i < this.vehicleFrames.length; i++) {
+            if (this.vehicleFrames[i].is_open) {
+                this.vehicleFrames[i].close();
+            }
+        }
+        for (var j = 0; j < this.roadsidePool.length; j++) {
+            if (this.roadsidePool[j].is_open) {
+                this.roadsidePool[j].close();
+            }
+        }
+        if (this.roadFrame)
+            this.roadFrame.close();
+        if (this.sunFrame)
+            this.sunFrame.close();
+        if (this.mountainsFrame)
+            this.mountainsFrame.close();
+        if (this.skyGridFrame)
+            this.skyGridFrame.close();
+        this.rootFrame.close();
+    };
+    return FrameManager;
+}());
+"use strict";
+var SpriteSheet = {
+    createTree: function () {
+        var leafTop = makeAttr(LIGHTGREEN, BG_BLACK);
+        var leafDark = makeAttr(GREEN, BG_BLACK);
+        var trunk = makeAttr(BROWN, BG_BLACK);
+        var leafTrunk = makeAttr(LIGHTGREEN, BG_BROWN);
+        var U = null;
+        return {
+            name: 'tree',
+            variants: [
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: leafTrunk }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.UPPER_HALF, attr: leafDark }],
+                    [U, { char: GLYPH.UPPER_HALF, attr: leafTrunk }, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.UPPER_HALF, attr: leafDark }],
+                    [{ char: GLYPH.DARK_SHADE, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.DARK_SHADE, attr: leafDark }],
+                    [U, { char: GLYPH.UPPER_HALF, attr: leafTrunk }, { char: GLYPH.UPPER_HALF, attr: leafTrunk }, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.UPPER_HALF, attr: leafDark }],
+                    [{ char: GLYPH.DARK_SHADE, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.DARK_SHADE, attr: leafDark }],
+                    [U, { char: GLYPH.LOWER_HALF, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.LOWER_HALF, attr: leafDark }, U],
+                    [U, U, { char: GLYPH.FULL_BLOCK, attr: trunk }, U, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.UPPER_HALF, attr: leafDark }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafDark }],
+                    [U, { char: GLYPH.DARK_SHADE, attr: leafDark }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.FULL_BLOCK, attr: leafTop }, { char: GLYPH.DARK_SHADE, attr: leafDark }, U],
+                    [U, U, { char: GLYPH.FULL_BLOCK, attr: trunk }, { char: GLYPH.FULL_BLOCK, attr: trunk }, U, U],
+                    [U, U, { char: GLYPH.UPPER_HALF, attr: trunk }, { char: GLYPH.UPPER_HALF, attr: trunk }, U, U]
+                ]
+            ]
+        };
+    },
+    createRock: function () {
+        var rock = makeAttr(DARKGRAY, BG_BLACK);
+        var rockLight = makeAttr(LIGHTGRAY, BG_BLACK);
+        return {
+            name: 'rock',
+            variants: [
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: rock }]
+                ],
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rockLight }, { char: GLYPH.LOWER_HALF, attr: rock }]
+                ],
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rockLight }, { char: GLYPH.FULL_BLOCK, attr: rock }, { char: GLYPH.LOWER_HALF, attr: rock }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: rock }, { char: GLYPH.UPPER_HALF, attr: rockLight }, { char: GLYPH.UPPER_HALF, attr: rockLight }, { char: GLYPH.UPPER_HALF, attr: rock }, { char: GLYPH.UPPER_HALF, attr: rock }],
+                    [{ char: GLYPH.LOWER_HALF, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rockLight }, { char: GLYPH.FULL_BLOCK, attr: rock }, { char: GLYPH.LOWER_HALF, attr: rock }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: rock }, { char: GLYPH.UPPER_HALF, attr: rockLight }, { char: GLYPH.UPPER_HALF, attr: rockLight }, { char: GLYPH.UPPER_HALF, attr: rockLight }, { char: GLYPH.UPPER_HALF, attr: rock }, { char: GLYPH.UPPER_HALF, attr: rock }],
+                    [{ char: GLYPH.LOWER_HALF, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rock }, { char: GLYPH.FULL_BLOCK, attr: rockLight }, { char: GLYPH.FULL_BLOCK, attr: rockLight }, { char: GLYPH.FULL_BLOCK, attr: rock }, { char: GLYPH.LOWER_HALF, attr: rock }]
+                ]
+            ]
+        };
+    },
+    createBush: function () {
+        var bush = makeAttr(GREEN, BG_BLACK);
+        var bushLight = makeAttr(LIGHTGREEN, BG_BLACK);
+        var U = null;
+        return {
+            name: 'bush',
+            variants: [
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: bush }]
+                ],
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bushLight }, { char: GLYPH.LOWER_HALF, attr: bush }]
+                ],
+                [
+                    [{ char: GLYPH.LOWER_HALF, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bushLight }, { char: GLYPH.FULL_BLOCK, attr: bush }, { char: GLYPH.LOWER_HALF, attr: bush }]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: bush }, { char: GLYPH.UPPER_HALF, attr: bushLight }, { char: GLYPH.UPPER_HALF, attr: bush }, U],
+                    [{ char: GLYPH.LOWER_HALF, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bushLight }, { char: GLYPH.FULL_BLOCK, attr: bush }, { char: GLYPH.LOWER_HALF, attr: bush }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: bush }, { char: GLYPH.UPPER_HALF, attr: bushLight }, { char: GLYPH.UPPER_HALF, attr: bushLight }, { char: GLYPH.UPPER_HALF, attr: bushLight }, { char: GLYPH.UPPER_HALF, attr: bush }, { char: GLYPH.UPPER_HALF, attr: bush }],
+                    [{ char: GLYPH.LOWER_HALF, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bush }, { char: GLYPH.FULL_BLOCK, attr: bushLight }, { char: GLYPH.FULL_BLOCK, attr: bushLight }, { char: GLYPH.FULL_BLOCK, attr: bush }, { char: GLYPH.LOWER_HALF, attr: bush }]
+                ]
+            ]
+        };
+    },
+    createPlayerCar: function () {
+        var body = makeAttr(YELLOW, BG_BLACK);
+        var trim = makeAttr(WHITE, BG_BLACK);
+        var wheel = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'player_car',
+            variants: [
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: trim }, { char: GLYPH.FULL_BLOCK, attr: trim }, { char: GLYPH.UPPER_HALF, attr: trim }, U],
+                    [{ char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }],
+                    [{ char: GLYPH.LOWER_HALF, attr: wheel }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: wheel }]
+                ]
+            ]
+        };
+    },
+    createAICar: function (color) {
+        var body = makeAttr(color, BG_BLACK);
+        var trim = makeAttr(WHITE, BG_BLACK);
+        var wheel = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'ai_car',
+            variants: [
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: trim }, { char: GLYPH.FULL_BLOCK, attr: trim }, { char: GLYPH.UPPER_HALF, attr: trim }],
+                    [{ char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.LOWER_HALF, attr: body }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: trim }, { char: GLYPH.FULL_BLOCK, attr: trim }, { char: GLYPH.FULL_BLOCK, attr: trim }, { char: GLYPH.UPPER_HALF, attr: trim }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: trim }, { char: GLYPH.FULL_BLOCK, attr: trim }, { char: GLYPH.UPPER_HALF, attr: trim }, U],
+                    [{ char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }],
+                    [{ char: GLYPH.LOWER_HALF, attr: wheel }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: body }, { char: GLYPH.LOWER_HALF, attr: wheel }]
+                ]
+            ]
+        };
+    }
+};
+function renderSpriteToFrame(frame, sprite, scaleIndex) {
+    var variant = sprite.variants[scaleIndex];
+    if (!variant) {
+        variant = sprite.variants[sprite.variants.length - 1];
+    }
+    frame.clear();
+    for (var row = 0; row < variant.length; row++) {
+        for (var col = 0; col < variant[row].length; col++) {
+            var cell = variant[row][col];
+            if (cell !== null && cell !== undefined) {
+                frame.setData(col, row, cell.char, cell.attr);
+            }
+        }
+    }
+}
+function getSpriteSize(sprite, scaleIndex) {
+    var variant = sprite.variants[scaleIndex];
+    if (!variant) {
+        variant = sprite.variants[sprite.variants.length - 1];
+    }
+    var height = variant.length;
+    var width = 0;
+    for (var row = 0; row < variant.length; row++) {
+        if (variant[row].length > width) {
+            width = variant[row].length;
+        }
+    }
+    return { width: width, height: height };
+}
+"use strict";
+var FrameRenderer = (function () {
+    function FrameRenderer(width, height) {
+        this.width = width;
+        this.height = height;
+        this.horizonY = 8;
+        this._mountainScrollOffset = 0;
+        this.frameManager = new FrameManager(width, height, this.horizonY);
+        this.treeSprite = null;
+        this.rockSprite = null;
+        this.bushSprite = null;
+        this.playerCarSprite = null;
+    }
+    FrameRenderer.prototype.init = function () {
+        load('frame.js');
+        this.frameManager.init();
+        this.treeSprite = SpriteSheet.createTree();
+        this.rockSprite = SpriteSheet.createRock();
+        this.bushSprite = SpriteSheet.createBush();
+        this.playerCarSprite = SpriteSheet.createPlayerCar();
+        this.renderSun();
+        this.renderMountains();
+        logInfo('FrameRenderer initialized with layered Frame.js architecture');
+    };
+    FrameRenderer.prototype.beginFrame = function () {
+    };
+    FrameRenderer.prototype.renderSky = function (trackPosition, curvature, playerSteer, speed, dt) {
+        this.renderSkyGrid(trackPosition);
+        if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined) {
+            this.updateParallax(curvature, playerSteer, speed, dt);
+        }
+    };
+    FrameRenderer.prototype.renderRoad = function (trackPosition, cameraX, _track, road) {
+        this.renderRoadSurface(trackPosition, cameraX, road.totalLength);
+        var roadsideObjects = this.buildRoadsideObjects(trackPosition, cameraX, road);
+        this.renderRoadsideSprites(roadsideObjects);
+    };
+    FrameRenderer.prototype.buildRoadsideObjects = function (trackPosition, cameraX, road) {
+        var objects = [];
+        var roadBottom = this.height - 1;
+        var viewDistance = 12;
+        for (var dist = 1; dist < viewDistance; dist += 0.5) {
+            var worldZ = trackPosition + dist;
+            var segment = road.getSegment(worldZ);
+            if (!segment)
+                continue;
+            var t = 1 - (dist / viewDistance);
+            var screenY = this.horizonY + Math.round(t * (roadBottom - this.horizonY));
+            var curvatureOffset = segment.curve * dist * 5;
+            var baseX = 40 - cameraX * 2 - curvatureOffset;
+            if (Math.floor(worldZ) % 8 === 0) {
+                var leftX = baseX - 25 - Math.random() * 5;
+                if (leftX >= 0 && leftX < 20) {
+                    objects.push({ x: leftX, y: screenY, distance: dist, type: 'tree' });
+                }
+                var rightX = baseX + 25 + Math.random() * 5;
+                if (rightX >= 60 && rightX < 80) {
+                    objects.push({ x: rightX, y: screenY, distance: dist, type: 'tree' });
+                }
+            }
+            if (Math.floor(worldZ) % 12 === 4) {
+                var rockX = baseX + (Math.random() > 0.5 ? 30 : -30);
+                if (rockX >= 0 && rockX < 80) {
+                    objects.push({ x: rockX, y: screenY, distance: dist, type: 'rock' });
+                }
+            }
+            if (Math.floor(worldZ) % 5 === 0) {
+                var bushX = baseX + (Math.random() > 0.5 ? 22 : -22);
+                if (bushX >= 0 && bushX < 80) {
+                    objects.push({ x: bushX, y: screenY, distance: dist, type: 'bush' });
+                }
+            }
+        }
+        objects.sort(function (a, b) { return b.distance - a.distance; });
+        return objects;
+    };
+    FrameRenderer.prototype.renderEntities = function (playerVehicle, _vehicles, _items) {
+        this.renderPlayerVehicle(playerVehicle.x);
+    };
+    FrameRenderer.prototype.endFrame = function () {
+        this.cycle();
+    };
+    FrameRenderer.prototype.renderSun = function () {
+        var sunFrame = this.frameManager.getSunFrame();
+        if (!sunFrame)
+            return;
+        var sunCoreAttr = makeAttr(YELLOW, BG_RED);
+        var sunGlowAttr = makeAttr(LIGHTRED, BG_BLACK);
+        var sunX = Math.floor(this.width / 2) - 3;
+        var sunY = this.horizonY - 5;
+        for (var dy = 0; dy < 3; dy++) {
+            for (var dx = 0; dx < 5; dx++) {
+                sunFrame.setData(sunX + dx, sunY + dy, GLYPH.FULL_BLOCK, sunCoreAttr);
+            }
+        }
+        var glowChar = GLYPH.DARK_SHADE;
+        for (var x = sunX - 1; x <= sunX + 5; x++) {
+            sunFrame.setData(x, sunY - 1, glowChar, sunGlowAttr);
+        }
+        for (var x = sunX - 1; x <= sunX + 5; x++) {
+            sunFrame.setData(x, sunY + 3, glowChar, sunGlowAttr);
+        }
+        sunFrame.setData(sunX - 1, sunY, glowChar, sunGlowAttr);
+        sunFrame.setData(sunX - 1, sunY + 1, glowChar, sunGlowAttr);
+        sunFrame.setData(sunX - 1, sunY + 2, glowChar, sunGlowAttr);
+        sunFrame.setData(sunX + 5, sunY, glowChar, sunGlowAttr);
+        sunFrame.setData(sunX + 5, sunY + 1, glowChar, sunGlowAttr);
+        sunFrame.setData(sunX + 5, sunY + 2, glowChar, sunGlowAttr);
+    };
+    FrameRenderer.prototype.renderMountains = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var mountainAttr = colorToAttr(PALETTE.MOUNTAIN);
+        var highlightAttr = colorToAttr(PALETTE.MOUNTAIN_HIGHLIGHT);
+        var mountains = [
+            { x: 5, height: 4, width: 12 },
+            { x: 20, height: 6, width: 16 },
+            { x: 42, height: 5, width: 14 },
+            { x: 60, height: 4, width: 10 },
+            { x: 72, height: 3, width: 8 }
+        ];
+        for (var i = 0; i < mountains.length; i++) {
+            this.drawMountainToFrame(frame, mountains[i].x, this.horizonY - 1, mountains[i].height, mountains[i].width, mountainAttr, highlightAttr);
+        }
+    };
+    FrameRenderer.prototype.drawMountainToFrame = function (frame, baseX, baseY, height, width, attr, highlightAttr) {
+        var peakX = baseX + Math.floor(width / 2);
+        for (var h = 0; h < height; h++) {
+            var y = baseY - h;
+            if (y < 0)
+                continue;
+            var halfWidth = Math.floor((height - h) * width / height / 2);
+            for (var dx = -halfWidth; dx <= halfWidth; dx++) {
+                var x = peakX + dx;
+                if (x >= 0 && x < this.width) {
+                    if (dx < 0) {
+                        frame.setData(x, y, '/', attr);
+                    }
+                    else if (dx > 0) {
+                        frame.setData(x, y, '\\', attr);
+                    }
+                    else {
+                        if (h === height - 1) {
+                            frame.setData(x, y, GLYPH.TRIANGLE_UP, highlightAttr);
+                        }
+                        else {
+                            frame.setData(x, y, GLYPH.BOX_V, attr);
+                        }
+                    }
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderSkyGrid = function (trackPosition) {
+        var frame = this.frameManager.getSkyGridFrame();
+        if (!frame)
+            return;
+        frame.clear();
+        var gridAttr = colorToAttr(PALETTE.SKY_GRID);
+        var glowAttr = colorToAttr(PALETTE.SKY_GRID_GLOW);
+        var vanishX = 40;
+        for (var y = this.horizonY - 1; y >= 1; y--) {
+            var distFromHorizon = this.horizonY - y;
+            var spread = distFromHorizon * 6;
+            for (var offset = 0; offset <= spread && offset < 40; offset += 10) {
+                if (offset === 0) {
+                    frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
+                }
+                else {
+                    var leftX = vanishX - offset;
+                    var rightX = vanishX + offset;
+                    if (leftX >= 0)
+                        frame.setData(leftX, y, '/', glowAttr);
+                    if (rightX < this.width)
+                        frame.setData(rightX, y, '\\', glowAttr);
+                }
+            }
+            var linePhase = Math.floor(trackPosition / 50 + distFromHorizon) % 4;
+            if (linePhase === 0) {
+                var lineSpread = Math.min(spread, 38);
+                for (var x = vanishX - lineSpread; x <= vanishX + lineSpread; x++) {
+                    if (x >= 0 && x < this.width) {
+                        frame.setData(x, y, GLYPH.BOX_H, glowAttr);
+                    }
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.updateParallax = function (curvature, steer, speed, dt) {
+        var scrollAmount = (curvature * 0.8 + steer * 0.2) * speed * dt * 0.1;
+        this._mountainScrollOffset += scrollAmount * 0.3;
+    };
+    FrameRenderer.prototype.renderRoadSurface = function (trackPosition, cameraX, roadLength) {
+        var frame = this.frameManager.getRoadFrame();
+        if (!frame)
+            return;
+        frame.clear();
+        var roadBottom = this.height - this.horizonY - 1;
+        for (var screenY = roadBottom; screenY >= 0; screenY--) {
+            var t = (roadBottom - screenY) / roadBottom;
+            var distance = 1 / (1 - t * 0.95);
+            var roadWidth = Math.round(40 / distance);
+            var halfWidth = Math.floor(roadWidth / 2);
+            var centerX = 40 - Math.round(cameraX * 0.5);
+            var leftEdge = centerX - halfWidth;
+            var rightEdge = centerX + halfWidth;
+            var stripePhase = Math.floor((trackPosition + distance * 5) / 15) % 2;
+            var worldZ = trackPosition + distance * 5;
+            var wrappedZ = worldZ % roadLength;
+            if (wrappedZ < 0)
+                wrappedZ += roadLength;
+            var isFinishLine = (wrappedZ < 200) || (wrappedZ > roadLength - 200);
+            this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine);
+        }
+    };
+    FrameRenderer.prototype.renderRoadScanline = function (frame, y, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine) {
+        var roadAttr = colorToAttr(distance < 10 ? PALETTE.ROAD_LIGHT : PALETTE.ROAD_DARK);
+        var gridAttr = colorToAttr(PALETTE.ROAD_GRID);
+        var edgeAttr = colorToAttr(PALETTE.ROAD_EDGE);
+        var stripeAttr = colorToAttr(PALETTE.ROAD_STRIPE);
+        var dirtAttr = colorToAttr(PALETTE.OFFROAD_DIRT);
+        for (var x = 0; x < this.width; x++) {
+            if (x >= leftEdge && x <= rightEdge) {
+                if (isFinishLine) {
+                    this.renderFinishCell(frame, x, y, centerX, leftEdge, rightEdge, distance);
+                }
+                else if (x === leftEdge || x === rightEdge) {
+                    frame.setData(x, y, GLYPH.BOX_V, edgeAttr);
+                }
+                else if (Math.abs(x - centerX) < 1 && stripePhase === 0) {
+                    frame.setData(x, y, GLYPH.BOX_V, stripeAttr);
+                }
+                else {
+                    var gridPhase = Math.floor(distance) % 3;
+                    if (gridPhase === 0 && distance > 5) {
+                        frame.setData(x, y, GLYPH.BOX_H, gridAttr);
+                    }
+                    else {
+                        frame.setData(x, y, ' ', roadAttr);
+                    }
+                }
+            }
+            else {
+                var distFromRoad = (x < leftEdge) ? leftEdge - x : x - rightEdge;
+                if (distFromRoad <= 2) {
+                    frame.setData(x, y, GLYPH.GRASS, dirtAttr);
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderFinishCell = function (frame, x, y, centerX, leftEdge, rightEdge, distance) {
+        if (x === leftEdge || x === rightEdge) {
+            frame.setData(x, y, GLYPH.BOX_V, makeAttr(WHITE, BG_BLACK));
+            return;
+        }
+        var checkerSize = Math.max(1, Math.floor(3 / distance));
+        var checkerX = Math.floor((x - centerX) / checkerSize);
+        var checkerY = Math.floor(y / 2);
+        var isWhite = ((checkerX + checkerY) % 2) === 0;
+        if (isWhite) {
+            frame.setData(x, y, GLYPH.FULL_BLOCK, makeAttr(WHITE, BG_LIGHTGRAY));
+        }
+        else {
+            frame.setData(x, y, ' ', makeAttr(BLACK, BG_BLACK));
+        }
+    };
+    FrameRenderer.prototype.renderRoadsideSprites = function (objects) {
+        objects.sort(function (a, b) { return b.distance - a.distance; });
+        var poolSize = this.frameManager.getRoadsidePoolSize();
+        var used = 0;
+        for (var i = 0; i < objects.length && used < poolSize; i++) {
+            var obj = objects[i];
+            var spriteFrame = this.frameManager.getRoadsideFrame(used);
+            if (!spriteFrame)
+                continue;
+            var sprite;
+            if (obj.type === 'tree') {
+                sprite = this.treeSprite;
+            }
+            else if (obj.type === 'rock') {
+                sprite = this.rockSprite;
+            }
+            else {
+                sprite = this.bushSprite;
+            }
+            var scaleIndex = this.getScaleForDistance(obj.distance);
+            renderSpriteToFrame(spriteFrame, sprite, scaleIndex);
+            var size = getSpriteSize(sprite, scaleIndex);
+            var frameX = Math.round(obj.x - size.width / 2);
+            var frameY = Math.round(obj.y - size.height + 1);
+            this.frameManager.positionRoadsideFrame(used, frameX, frameY, true);
+            used++;
+        }
+        for (var j = used; j < poolSize; j++) {
+            this.frameManager.positionRoadsideFrame(j, 0, 0, false);
+        }
+    };
+    FrameRenderer.prototype.getScaleForDistance = function (distance) {
+        if (distance > 8)
+            return 0;
+        if (distance > 5)
+            return 1;
+        if (distance > 3)
+            return 2;
+        if (distance > 1.5)
+            return 3;
+        return 4;
+    };
+    FrameRenderer.prototype.renderPlayerVehicle = function (playerX) {
+        var frame = this.frameManager.getVehicleFrame(0);
+        if (!frame)
+            return;
+        renderSpriteToFrame(frame, this.playerCarSprite, 0);
+        var screenX = 40 + Math.round(playerX * 5) - 2;
+        var screenY = this.height - 3;
+        this.frameManager.positionVehicleFrame(0, screenX, screenY, true);
+    };
+    FrameRenderer.prototype.renderHud = function (hudData) {
+        var frame = this.frameManager.getHudFrame();
+        if (!frame)
+            return;
+        frame.clear();
+        var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
+        var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
+        this.writeStringToFrame(frame, 2, 0, 'LAP', labelAttr);
+        this.writeStringToFrame(frame, 6, 0, hudData.lap + '/' + hudData.totalLaps, valueAttr);
+        this.writeStringToFrame(frame, 14, 0, 'POS', labelAttr);
+        this.writeStringToFrame(frame, 18, 0, hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position), valueAttr);
+        this.writeStringToFrame(frame, 26, 0, 'TIME', labelAttr);
+        this.writeStringToFrame(frame, 31, 0, LapTimer.format(hudData.lapTime), valueAttr);
+        this.writeStringToFrame(frame, 66, 0, 'SPD', labelAttr);
+        this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
+        this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
+    };
+    FrameRenderer.prototype.renderSpeedometerBar = function (frame, speed, maxSpeed) {
+        var y = this.height - 1;
+        var barX = 2;
+        var barWidth = 20;
+        var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
+        var filledAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+        var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+        var highAttr = colorToAttr({ fg: LIGHTRED, bg: BG_BLACK });
+        frame.setData(barX, y, '[', labelAttr);
+        var fillAmount = speed / maxSpeed;
+        var fillWidth = Math.round(fillAmount * barWidth);
+        for (var i = 0; i < barWidth; i++) {
+            var attr = (i < fillWidth) ? (fillAmount > 0.8 ? highAttr : filledAttr) : emptyAttr;
+            var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
+            frame.setData(barX + 1 + i, y, char, attr);
+        }
+        frame.setData(barX + barWidth + 1, y, ']', labelAttr);
+    };
+    FrameRenderer.prototype.writeStringToFrame = function (frame, x, y, str, attr) {
+        for (var i = 0; i < str.length; i++) {
+            frame.setData(x + i, y, str.charAt(i), attr);
+        }
+    };
+    FrameRenderer.prototype.padLeft = function (str, len) {
+        while (str.length < len) {
+            str = ' ' + str;
+        }
+        return str;
+    };
+    FrameRenderer.prototype.cycle = function () {
+        this.frameManager.cycle();
+    };
+    FrameRenderer.prototype.shutdown = function () {
+        this.frameManager.shutdown();
+        console.clear();
+    };
+    return FrameRenderer;
+}());
+"use strict";
 var Renderer = (function () {
     function Renderer(width, height) {
         this.width = width;
@@ -2861,7 +3560,7 @@ var Game = (function () {
         });
         this.inputMap = new InputMap();
         this.controls = new Controls(this.inputMap);
-        this.renderer = new Renderer(this.config.screenWidth, this.config.screenHeight);
+        this.renderer = new FrameRenderer(this.config.screenWidth, this.config.screenHeight);
         this.trackLoader = new TrackLoader();
         this.hud = new Hud();
         this.physicsSystem = new PhysicsSystem();
