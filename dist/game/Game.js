@@ -1,0 +1,171 @@
+"use strict";
+var DEFAULT_CONFIG = {
+    screenWidth: 80,
+    screenHeight: 24,
+    tickRate: 60,
+    maxTicksPerFrame: 5
+};
+var Game = (function () {
+    function Game(config) {
+        this.config = config || DEFAULT_CONFIG;
+        this.running = false;
+        this.paused = false;
+        this.clock = new Clock();
+        this.timestep = new FixedTimestep({
+            tickRate: this.config.tickRate,
+            maxTicksPerFrame: this.config.maxTicksPerFrame
+        });
+        this.inputMap = new InputMap();
+        this.controls = new Controls(this.inputMap);
+        this.renderer = new FrameRenderer(this.config.screenWidth, this.config.screenHeight);
+        this.trackLoader = new TrackLoader();
+        this.hud = new Hud();
+        this.physicsSystem = new PhysicsSystem();
+        this.raceSystem = new RaceSystem();
+        this.itemSystem = new ItemSystem();
+        this.state = null;
+    }
+    Game.prototype.initWithTrack = function (trackDef) {
+        logInfo("Game.initWithTrack(): " + trackDef.name);
+        this.renderer.init();
+        var road = buildRoadFromDefinition(trackDef);
+        var track = this.trackLoader.load("neon_coast_01");
+        track.laps = trackDef.laps;
+        track.name = trackDef.name;
+        var playerVehicle = new Vehicle();
+        playerVehicle.driver = new HumanDriver(this.controls);
+        playerVehicle.color = YELLOW;
+        playerVehicle.trackZ = 0;
+        playerVehicle.playerX = 0;
+        this.state = createInitialState(track, road, playerVehicle);
+        this.physicsSystem.init(this.state);
+        this.raceSystem.init(this.state);
+        this.itemSystem.initFromTrack(track);
+        this.hud.init(0);
+        this.running = true;
+        this.state.racing = true;
+        debugLog.info("Game initialized with track: " + trackDef.name);
+        debugLog.info("  Road segments: " + road.segments.length);
+        debugLog.info("  Road length: " + road.totalLength);
+        debugLog.info("  Laps: " + road.laps);
+    };
+    Game.prototype.init = function () {
+        logInfo("Game.init()");
+        var defaultTrack = getTrackDefinition('test_oval');
+        if (defaultTrack) {
+            this.initWithTrack(defaultTrack);
+        }
+        else {
+            this.initWithTrack({
+                id: 'fallback',
+                name: 'Fallback Track',
+                description: 'Default fallback',
+                difficulty: 1,
+                laps: 2,
+                themeId: 'synthwave',
+                estimatedLapTime: 30,
+                sections: [
+                    { type: 'straight', length: 15 },
+                    { type: 'curve', length: 15, curve: 0.5 },
+                    { type: 'straight', length: 15 },
+                    { type: 'curve', length: 15, curve: 0.5 }
+                ]
+            });
+        }
+    };
+    Game.prototype.run = function () {
+        debugLog.info("Entering game loop");
+        this.clock.reset();
+        var frameCount = 0;
+        var lastLogTime = 0;
+        while (this.running) {
+            var deltaMs = this.clock.getDelta();
+            frameCount++;
+            this.processInput();
+            if (!this.paused && this.state) {
+                var ticks = this.timestep.update(deltaMs);
+                for (var i = 0; i < ticks; i++) {
+                    this.tick(this.timestep.getDt());
+                }
+                if (this.state.time - lastLogTime >= 1.0) {
+                    debugLog.logVehicle(this.state.playerVehicle);
+                    lastLogTime = this.state.time;
+                }
+            }
+            this.render();
+            mswait(1);
+        }
+    };
+    Game.prototype.processInput = function () {
+        var now = this.clock.now();
+        var key;
+        while ((key = console.inkey(K_NONE, 0)) !== '') {
+            this.controls.handleKey(key, now);
+        }
+        this.controls.update(now);
+        if (this.controls.wasJustPressed(GameAction.QUIT)) {
+            debugLog.info("QUIT action triggered - exiting game loop");
+            this.running = false;
+            this.controls.endFrame();
+            return;
+        }
+        if (this.controls.wasJustPressed(GameAction.PAUSE)) {
+            this.togglePause();
+            this.controls.endFrame();
+            return;
+        }
+        this.controls.endFrame();
+    };
+    Game.prototype.tick = function (dt) {
+        if (!this.state)
+            return;
+        this.state.time += dt;
+        this.physicsSystem.update(this.state, dt);
+        this.raceSystem.update(this.state, dt);
+        this.itemSystem.update(dt);
+        this.itemSystem.checkPickups(this.state.vehicles);
+        if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
+            this.itemSystem.useItem(this.state.playerVehicle);
+        }
+        this.state.cameraX = this.state.playerVehicle.x;
+        if (this.state.finished && this.state.racing === false) {
+            debugLog.info("Race complete! Exiting game loop. Final time: " + this.state.time.toFixed(2));
+            this.running = false;
+        }
+    };
+    Game.prototype.render = function () {
+        if (!this.state)
+            return;
+        var trackZ = this.state.playerVehicle.z;
+        var vehicle = this.state.playerVehicle;
+        var road = this.state.road;
+        var curvature = road.getCurvature(trackZ);
+        var playerSteer = vehicle.playerX;
+        var speed = vehicle.speed;
+        var dt = 1.0 / this.config.tickRate;
+        this.renderer.beginFrame();
+        this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
+        this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);
+        this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes());
+        var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time);
+        this.renderer.renderHud(hudData);
+        this.renderer.endFrame();
+    };
+    Game.prototype.togglePause = function () {
+        this.paused = !this.paused;
+        if (!this.paused) {
+            this.clock.reset();
+            this.timestep.reset();
+        }
+        logInfo("Game " + (this.paused ? "paused" : "resumed"));
+    };
+    Game.prototype.isRunning = function () {
+        return this.running;
+    };
+    Game.prototype.shutdown = function () {
+        logInfo("Game.shutdown()");
+        this.renderer.shutdown();
+        this.controls.clearAll();
+    };
+    return Game;
+}());

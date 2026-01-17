@@ -89,8 +89,8 @@ class FrameRenderer implements IRenderer {
    * Render road (IRenderer interface).
    */
   renderRoad(trackPosition: number, cameraX: number, _track: ITrack, road: Road): void {
-    // Render road surface
-    this.renderRoadSurface(trackPosition, cameraX, road.totalLength);
+    // Render road surface with curves
+    this.renderRoadSurface(trackPosition, cameraX, road);
     
     // Build roadside objects from track/road
     var roadsideObjects = this.buildRoadsideObjects(trackPosition, cameraX, road);
@@ -99,70 +99,121 @@ class FrameRenderer implements IRenderer {
   
   /**
    * Build roadside object list from road data.
+   * 
+   * ARCHITECTURE:
+   * - Roadside objects exist at fixed WORLD positions (worldZ, side)
+   * - We project world positions to SCREEN positions each frame
+   * - Screen X is calculated based on road edge position at that depth
+   * - This ensures objects stay alongside the road through curves
    */
   private buildRoadsideObjects(trackPosition: number, cameraX: number, road: Road): { x: number; y: number; distance: number; type: string }[] {
     var objects: { x: number; y: number; distance: number; type: string }[] = [];
-    var roadBottom = this.height - 1;
-    var viewDistance = 12;  // How far ahead we can see
+    var roadHeight = this.height - this.horizonY;
     
-    // Sample road segments and place objects
-    for (var dist = 1; dist < viewDistance; dist += 0.5) {
-      var worldZ = trackPosition + dist;
-      var segment = road.getSegment(worldZ);
-      if (!segment) continue;
+    // Iterate through world Z positions that are visible
+    // View distance in world units (matching road rendering)
+    var viewDistanceWorld = 100;  // How far ahead in world units
+    var startZ = trackPosition;
+    var endZ = trackPosition + viewDistanceWorld;
+    
+    // Objects are placed at fixed intervals in the world
+    // Use spacing of 10 world units to ensure consistent visibility
+    var objectSpacing = 10;
+    
+    // Align to grid so objects stay at fixed world positions
+    var firstObjectZ = Math.ceil(startZ / objectSpacing) * objectSpacing;
+    
+    // Sample at fixed world positions
+    for (var worldZ = firstObjectZ; worldZ < endZ; worldZ += objectSpacing) {
+      // Determine object type based on world position (deterministic)
+      var worldZInt = Math.floor(worldZ);
+      var typeIndex = worldZInt % 3;  // 0=tree, 1=rock, 2=bush - always place something
+      var hasTree = (typeIndex === 0);
+      var hasRock = (typeIndex === 1);
+      var hasBush = (typeIndex === 2);
       
-      // Calculate screen Y based on distance
-      var t = 1 - (dist / viewDistance);
-      var screenY = this.horizonY + Math.round(t * (roadBottom - this.horizonY));
+      // PROJECT: World Z -> Screen Y and distance
+      // This is the inverse of the road rendering projection
+      var relativeZ = worldZ - trackPosition;
+      if (relativeZ <= 0) continue;
       
-      // Calculate screen X offset based on curvature and camera
-      var curvatureOffset = segment.curve * dist * 5;
-      var baseX = 40 - cameraX * 2 - curvatureOffset;
+      // Distance factor (same formula as road uses)
+      var distance = relativeZ / 5;  // Convert world units to distance units
+      if (distance < 1 || distance > 20) continue;
       
-      // Add trees on both sides (sparse)
-      if (Math.floor(worldZ) % 8 === 0) {
-        // Left side
-        var leftX = baseX - 25 - Math.random() * 5;
-        if (leftX >= 0 && leftX < 20) {
-          objects.push({ x: leftX, y: screenY, distance: dist, type: 'tree' });
+      // Screen Y from distance (inverse of road formula)
+      // Road uses: distance = 1 / (1 - t * 0.95) where t = (roadBottom - screenY) / roadBottom
+      // Solving for screenY: t = 1 - 1/distance, screenY = roadBottom * (1 - t) = roadBottom / distance * 0.95
+      var t = 1 - (1 / distance);
+      var screenY = Math.round(this.horizonY + roadHeight * (1 - t));
+      
+      if (screenY <= this.horizonY || screenY >= this.height) continue;
+      
+      // Calculate road center at this screen Y (same as road rendering)
+      // Accumulate curve from player to this point
+      var accumulatedCurve = 0;
+      for (var z = trackPosition; z < worldZ; z += 5) {
+        var seg = road.getSegment(z);
+        if (seg) accumulatedCurve += seg.curve * 0.5;
+      }
+      var curveOffset = accumulatedCurve * distance * 0.8;
+      var centerX = 40 + Math.round(curveOffset) - Math.round(cameraX * 0.5);
+      
+      // Road width at this distance
+      var roadHalfWidth = Math.round(20 / distance);
+      
+      // Left and right edges of road
+      var leftEdge = centerX - roadHalfWidth;
+      var rightEdge = centerX + roadHalfWidth;
+      
+      // Position objects OUTSIDE road edges
+      // Offset from edge scales inversely with distance (larger offset when close)
+      var edgeOffset = Math.round(15 / distance) + 3;  // Offset from road edge
+      
+      var leftX = leftEdge - edgeOffset;
+      var rightX = rightEdge + edgeOffset;
+      
+      if (hasTree) {
+        // Trees on both sides
+        if (leftX >= 0) {
+          objects.push({ x: leftX, y: screenY, distance: distance, type: 'tree' });
         }
-        // Right side
-        var rightX = baseX + 25 + Math.random() * 5;
-        if (rightX >= 60 && rightX < 80) {
-          objects.push({ x: rightX, y: screenY, distance: dist, type: 'tree' });
+        if (rightX < 80) {
+          objects.push({ x: rightX, y: screenY, distance: distance, type: 'tree' });
         }
       }
       
-      // Add rocks (less frequent)
-      if (Math.floor(worldZ) % 12 === 4) {
-        var rockX = baseX + (Math.random() > 0.5 ? 30 : -30);
+      if (hasRock) {
+        // Rocks alternate sides
+        var rockSide = (Math.floor(worldZ / 50) % 2 === 0) ? -1 : 1;
+        var rockX = (rockSide < 0) ? leftX - 2 : rightX + 2;
         if (rockX >= 0 && rockX < 80) {
-          objects.push({ x: rockX, y: screenY, distance: dist, type: 'rock' });
+          objects.push({ x: rockX, y: screenY, distance: distance, type: 'rock' });
         }
       }
       
-      // Add bushes (more frequent)
-      if (Math.floor(worldZ) % 5 === 0) {
-        var bushX = baseX + (Math.random() > 0.5 ? 22 : -22);
+      if (hasBush) {
+        // Bushes alternate sides
+        var bushSide = (Math.floor(worldZ / 20) % 2 === 0) ? -1 : 1;
+        var bushX = (bushSide < 0) ? leftX + 2 : rightX - 2;
         if (bushX >= 0 && bushX < 80) {
-          objects.push({ x: bushX, y: screenY, distance: dist, type: 'bush' });
+          objects.push({ x: bushX, y: screenY, distance: distance, type: 'bush' });
         }
       }
     }
     
     // Sort by distance (far to near) for proper z-ordering
     objects.sort(function(a, b) { return b.distance - a.distance; });
-    
     return objects;
   }
-  
+
   /**
    * Render entities (IRenderer interface).
    */
   renderEntities(playerVehicle: IVehicle, _vehicles: IVehicle[], _items: Item[]): void {
     // TODO: Render AI vehicles and items
-    // For now just render player vehicle
-    this.renderPlayerVehicle(playerVehicle.x);
+    // Render player vehicle with flash effect
+    this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0);
   }
   
   /**
@@ -333,23 +384,40 @@ class FrameRenderer implements IRenderer {
   /**
    * Render the road surface to its frame (internal method).
    */
-  private renderRoadSurface(trackPosition: number, cameraX: number, roadLength: number): void {
+  private renderRoadSurface(trackPosition: number, cameraX: number, road: Road): void {
     var frame = this.frameManager.getRoadFrame();
     if (!frame) return;
     
     frame.clear();
     
     var roadBottom = this.height - this.horizonY - 1;  // Frame-relative Y
+    var roadLength = road.totalLength;
+    
+    // Accumulate curvature for perspective curve effect
+    var accumulatedCurve = 0;
     
     for (var screenY = roadBottom; screenY >= 0; screenY--) {
       var t = (roadBottom - screenY) / roadBottom;
       var distance = 1 / (1 - t * 0.95);
       
+      // Get road segment at this distance
+      var worldZ = trackPosition + distance * 5;
+      var segment = road.getSegment(worldZ);
+      
+      // Accumulate curve - each segment's curve affects the road center
+      // Further segments have more accumulated curvature
+      if (segment) {
+        accumulatedCurve += segment.curve * 0.5;
+      }
+      
       // Road width narrows with distance
       var roadWidth = Math.round(40 / distance);
       var halfWidth = Math.floor(roadWidth / 2);
       
-      var centerX = 40 - Math.round(cameraX * 0.5);
+      // Apply curve offset - road center shifts based on accumulated curvature
+      var curveOffset = accumulatedCurve * distance * 0.8;
+      var centerX = 40 + Math.round(curveOffset) - Math.round(cameraX * 0.5);
+      
       var leftEdge = centerX - halfWidth;
       var rightEdge = centerX + halfWidth;
       
@@ -357,7 +425,6 @@ class FrameRenderer implements IRenderer {
       var stripePhase = Math.floor((trackPosition + distance * 5) / 15) % 2;
       
       // Check finish line
-      var worldZ = trackPosition + distance * 5;
       var wrappedZ = worldZ % roadLength;
       if (wrappedZ < 0) wrappedZ += roadLength;
       var isFinishLine = (wrappedZ < 200) || (wrappedZ > roadLength - 200);
@@ -492,11 +559,27 @@ class FrameRenderer implements IRenderer {
   /**
    * Render player vehicle.
    */
-  renderPlayerVehicle(playerX: number): void {
+  renderPlayerVehicle(playerX: number, isFlashing?: boolean): void {
     var frame = this.frameManager.getVehicleFrame(0);
     if (!frame) return;
     
+    // Render sprite to frame
     renderSpriteToFrame(frame, this.playerCarSprite, 0);
+    
+    // If flashing, override with flash color (white/red alternating)
+    if (isFlashing) {
+      var flashColor = (Math.floor(Date.now() / 100) % 2 === 0) ? WHITE : LIGHTRED;
+      var flashAttr = makeAttr(flashColor, BG_BLACK);
+      // Overlay flash on all non-transparent cells
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 5; x++) {
+          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          if (cell) {
+            frame.setData(x, y, cell.char, flashAttr);
+          }
+        }
+      }
+    }
     
     // Player is always at bottom center-ish
     var screenX = 40 + Math.round(playerX * 5) - 2;
@@ -530,8 +613,41 @@ class FrameRenderer implements IRenderer {
     this.writeStringToFrame(frame, 66, 0, 'SPD', labelAttr);
     this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
     
-    // Speedometer bar at bottom
+    // Speedometer bar at bottom left
     this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
+    
+    // Track progress bar at bottom right
+    this.renderTrackProgress(frame, hudData.lapProgress);
+  }
+  
+  /**
+   * Render track progress bar on bottom right.
+   */
+  private renderTrackProgress(frame: Frame, progress: number): void {
+    var y = this.height - 1;
+    var barX = 60;  // Bottom right area
+    var barWidth = 15;
+    
+    var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
+    var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    var finishAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+    
+    // Label
+    this.writeStringToFrame(frame, barX - 5, y, 'TRK', labelAttr);
+    
+    frame.setData(barX, y, '[', labelAttr);
+    
+    var fillWidth = Math.round(progress * barWidth);
+    
+    for (var i = 0; i < barWidth; i++) {
+      var attr = (i < fillWidth) ? filledAttr : emptyAttr;
+      var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
+      frame.setData(barX + 1 + i, y, char, attr);
+    }
+    
+    // Finish flag marker at end
+    frame.setData(barX + barWidth + 1, y, ']', finishAttr);
   }
   
   /**

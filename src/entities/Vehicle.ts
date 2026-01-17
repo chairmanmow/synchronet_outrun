@@ -51,6 +51,9 @@ interface IVehicle extends IEntity {
   /** Crash recovery timer */
   crashTimer: number;
 
+  /** Flash timer for collision/reset visual feedback */
+  flashTimer: number;
+
   /** Update vehicle with road data */
   updatePhysics(road: Road, intent: DriverIntent, dt: number): void;
 }
@@ -98,6 +101,7 @@ class Vehicle extends Entity implements IVehicle {
   isOffRoad: boolean;
   isCrashed: boolean;
   crashTimer: number;
+  flashTimer: number;
 
   constructor() {
     super();
@@ -115,6 +119,7 @@ class Vehicle extends Entity implements IVehicle {
     this.isOffRoad = false;
     this.isCrashed = false;
     this.crashTimer = 0;
+    this.flashTimer = 0;
   }
 
   /**
@@ -122,6 +127,12 @@ class Vehicle extends Entity implements IVehicle {
    * This is the core pseudo-3D racer physics.
    */
   updatePhysics(road: Road, intent: DriverIntent, dt: number): void {
+    // --- FLASH TIMER (visual feedback) ---
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer < 0) this.flashTimer = 0;
+    }
+    
     // --- CRASH RECOVERY ---
     if (this.isCrashed) {
       this.crashTimer -= dt;
@@ -129,6 +140,7 @@ class Vehicle extends Entity implements IVehicle {
         this.isCrashed = false;
         this.crashTimer = 0;
         this.playerX = 0;  // Reset to center after crash
+        this.flashTimer = 0.5;  // Flash when recovering
       }
       return;  // No control during crash
     }
@@ -147,17 +159,36 @@ class Vehicle extends Entity implements IVehicle {
     this.isOffRoad = Math.abs(this.playerX) > VEHICLE_PHYSICS.ROAD_HALF_WIDTH;
     if (this.isOffRoad) {
       this.speed -= VEHICLE_PHYSICS.OFFROAD_DECEL * dt;
+      
+      // Flash while off-road to indicate collision with terrain
+      if (this.flashTimer <= 0) {
+        this.flashTimer = 0.15;  // Quick flashes while off-road
+      }
+      
+      // If we've slowed to a near stop while off-road, reset to center
+      if (this.speed < 10) {
+        this.speed = 0;
+        this.playerX = 0;  // Snap back to center of road
+        this.isOffRoad = false;
+        this.flashTimer = 0.5;  // Longer flash on reset
+      }
     }
 
     // Clamp speed (can't go negative or over max)
     this.speed = clamp(this.speed, 0, VEHICLE_PHYSICS.MAX_SPEED);
 
-    // --- STEERING ---
-    // Steering effectiveness decreases at high speed
+    // Speed ratio is used for steering and centrifugal force
     var speedRatio = this.speed / VEHICLE_PHYSICS.MAX_SPEED;
-    var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
-    var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
-    this.playerX += steerDelta;
+
+    // --- STEERING ---
+    // Can't steer effectively without forward motion
+    // At 0 speed, steering should do nothing
+    if (this.speed >= 5) {
+      // Steering effectiveness decreases at high speed
+      var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
+      var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
+      this.playerX += steerDelta;
+    }
 
     // --- CENTRIFUGAL FORCE ---
     // Road curves push you toward the outside
