@@ -252,3 +252,8 @@ function getSpriteSize(sprite: SpriteDefinition, scaleIndex: number): { width: n
   
   return { width: width, height: height };
 }
+
+// Register nature sprites for theme system
+registerRoadsideSprite('tree', SpriteSheet.createTree);
+registerRoadsideSprite('rock', SpriteSheet.createRock);
+registerRoadsideSprite('bush', SpriteSheet.createBush);

@@ -2699,6 +2699,283 @@ var HudRenderer = (function () {
     return HudRenderer;
 }());
 "use strict";
+var ThemeRegistry = {};
+var ROADSIDE_SPRITES = {};
+function registerTheme(theme) {
+    ThemeRegistry[theme.name] = theme;
+}
+function registerRoadsideSprite(name, creator) {
+    ROADSIDE_SPRITES[name] = creator;
+}
+function getTheme(name) {
+    return ThemeRegistry[name] || null;
+}
+function getThemeNames() {
+    var names = [];
+    for (var key in ThemeRegistry) {
+        if (ThemeRegistry.hasOwnProperty(key)) {
+            names.push(key);
+        }
+    }
+    return names;
+}
+"use strict";
+var CitySprites = {
+    createBuilding: function () {
+        var wall = makeAttr(DARKGRAY, BG_BLACK);
+        var window = makeAttr(YELLOW, BG_BLACK);
+        var windowDark = makeAttr(DARKGRAY, BG_BLACK);
+        var roof = makeAttr(LIGHTGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'building',
+            variants: [
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: roof }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: roof }, { char: GLYPH.UPPER_HALF, attr: roof }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }],
+                    [{ char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: roof }, { char: GLYPH.FULL_BLOCK, attr: roof }, { char: GLYPH.UPPER_HALF, attr: roof }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: windowDark }, { char: GLYPH.FULL_BLOCK, attr: wall }]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: roof }, { char: GLYPH.UPPER_HALF, attr: roof }, U],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: windowDark }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: roof }, { char: GLYPH.FULL_BLOCK, attr: roof }, { char: GLYPH.UPPER_HALF, attr: roof }, U],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: '.', attr: windowDark }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: window }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: '.', attr: windowDark }, { char: GLYPH.FULL_BLOCK, attr: wall }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }, { char: GLYPH.FULL_BLOCK, attr: wall }]
+                ]
+            ]
+        };
+    },
+    createLamppost: function () {
+        var pole = makeAttr(DARKGRAY, BG_BLACK);
+        var light = makeAttr(YELLOW, BG_BLACK);
+        var lightBright = makeAttr(WHITE, BG_BLACK);
+        var U = null;
+        return {
+            name: 'lamppost',
+            variants: [
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: light }]
+                ],
+                [
+                    [{ char: '*', attr: light }],
+                    [{ char: GLYPH.BOX_V, attr: pole }]
+                ],
+                [
+                    [{ char: '*', attr: lightBright }, { char: '*', attr: light }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }]
+                ],
+                [
+                    [{ char: GLYPH.DARK_SHADE, attr: light }, { char: '*', attr: lightBright }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }]
+                ],
+                [
+                    [{ char: GLYPH.DARK_SHADE, attr: light }, { char: '*', attr: lightBright }, { char: GLYPH.DARK_SHADE, attr: light }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, U],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, U],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, U],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, U]
+                ]
+            ]
+        };
+    },
+    createSign: function () {
+        var sign = makeAttr(GREEN, BG_BLACK);
+        var signBright = makeAttr(LIGHTGREEN, BG_BLACK);
+        var text = makeAttr(WHITE, BG_GREEN);
+        var pole = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'sign',
+            variants: [
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: sign }]
+                ],
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: sign }, { char: GLYPH.FULL_BLOCK, attr: sign }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }]
+                ],
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: sign }, { char: '-', attr: text }, { char: GLYPH.FULL_BLOCK, attr: sign }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, U]
+                ],
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: sign }, { char: 'E', attr: text }, { char: 'X', attr: text }, { char: GLYPH.FULL_BLOCK, attr: sign }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: signBright }, { char: 'I', attr: text }, { char: 'T', attr: text }, { char: GLYPH.FULL_BLOCK, attr: signBright }],
+                    [U, { char: GLYPH.BOX_V, attr: pole }, { char: GLYPH.BOX_V, attr: pole }, U]
+                ],
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: sign }, { char: 'E', attr: text }, { char: 'X', attr: text }, { char: 'I', attr: text }, { char: GLYPH.FULL_BLOCK, attr: sign }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: signBright }, { char: ' ', attr: text }, { char: '1', attr: text }, { char: ' ', attr: text }, { char: GLYPH.FULL_BLOCK, attr: signBright }],
+                    [U, U, { char: GLYPH.BOX_V, attr: pole }, U, U]
+                ]
+            ]
+        };
+    }
+};
+registerRoadsideSprite('building', CitySprites.createBuilding);
+registerRoadsideSprite('lamppost', CitySprites.createLamppost);
+registerRoadsideSprite('sign', CitySprites.createSign);
+"use strict";
+var SynthwaveTheme = {
+    name: 'synthwave',
+    description: 'Classic 80s synthwave with magenta sky, purple mountains, and setting sun',
+    colors: {
+        skyTop: { fg: MAGENTA, bg: BG_BLACK },
+        skyMid: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+        skyHorizon: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+        skyGrid: { fg: MAGENTA, bg: BG_BLACK },
+        skyGridGlow: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+        celestialCore: { fg: YELLOW, bg: BG_RED },
+        celestialGlow: { fg: LIGHTRED, bg: BG_BLACK },
+        starBright: { fg: WHITE, bg: BG_BLACK },
+        starDim: { fg: LIGHTGRAY, bg: BG_BLACK },
+        sceneryPrimary: { fg: MAGENTA, bg: BG_BLACK },
+        scenerySecondary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+        sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
+        roadSurface: { fg: CYAN, bg: BG_BLACK },
+        roadSurfaceAlt: { fg: LIGHTCYAN, bg: BG_BLACK },
+        roadStripe: { fg: WHITE, bg: BG_BLACK },
+        roadEdge: { fg: LIGHTRED, bg: BG_BLACK },
+        roadGrid: { fg: CYAN, bg: BG_BLACK },
+        shoulderPrimary: { fg: BROWN, bg: BG_BLACK },
+        shoulderSecondary: { fg: BROWN, bg: BG_BLACK },
+        roadsideColors: {
+            'tree': {
+                primary: { fg: LIGHTGREEN, bg: BG_BLACK },
+                secondary: { fg: GREEN, bg: BG_BLACK },
+                tertiary: { fg: BROWN, bg: BG_BLACK }
+            },
+            'rock': {
+                primary: { fg: DARKGRAY, bg: BG_BLACK },
+                secondary: { fg: LIGHTGRAY, bg: BG_BLACK }
+            },
+            'bush': {
+                primary: { fg: GREEN, bg: BG_BLACK },
+                secondary: { fg: LIGHTGREEN, bg: BG_BLACK }
+            }
+        }
+    },
+    background: {
+        type: 'mountains',
+        config: {
+            count: 5,
+            minHeight: 3,
+            maxHeight: 6,
+            parallaxSpeed: 0.1
+        }
+    },
+    celestial: {
+        type: 'sun',
+        size: 3,
+        positionX: 0.5,
+        positionY: 0.6
+    },
+    stars: {
+        enabled: false,
+        density: 0,
+        twinkle: false
+    },
+    roadside: {
+        spriteTypes: ['tree', 'rock', 'bush'],
+        spacing: 10,
+        density: 1.0
+    }
+};
+registerTheme(SynthwaveTheme);
+"use strict";
+var CityNightTheme = {
+    name: 'city_night',
+    description: 'Midnight city drive with skyscrapers, stars, and neon lights',
+    colors: {
+        skyTop: { fg: BLUE, bg: BG_BLACK },
+        skyMid: { fg: BLUE, bg: BG_BLACK },
+        skyHorizon: { fg: LIGHTBLUE, bg: BG_BLACK },
+        skyGrid: { fg: BLUE, bg: BG_BLACK },
+        skyGridGlow: { fg: LIGHTBLUE, bg: BG_BLACK },
+        celestialCore: { fg: WHITE, bg: BG_BLACK },
+        celestialGlow: { fg: YELLOW, bg: BG_BLACK },
+        starBright: { fg: YELLOW, bg: BG_BLACK },
+        starDim: { fg: BROWN, bg: BG_BLACK },
+        sceneryPrimary: { fg: DARKGRAY, bg: BG_BLACK },
+        scenerySecondary: { fg: YELLOW, bg: BG_BLACK },
+        sceneryTertiary: { fg: LIGHTRED, bg: BG_BLACK },
+        roadSurface: { fg: DARKGRAY, bg: BG_LIGHTGRAY },
+        roadSurfaceAlt: { fg: BLACK, bg: BG_LIGHTGRAY },
+        roadStripe: { fg: YELLOW, bg: BG_LIGHTGRAY },
+        roadEdge: { fg: LIGHTBLUE, bg: BG_BLUE },
+        roadGrid: { fg: DARKGRAY, bg: BG_LIGHTGRAY },
+        shoulderPrimary: { fg: LIGHTGRAY, bg: BG_BLUE },
+        shoulderSecondary: { fg: DARKGRAY, bg: BG_BLACK },
+        roadsideColors: {
+            'building': {
+                primary: { fg: DARKGRAY, bg: BG_BLACK },
+                secondary: { fg: YELLOW, bg: BG_BLACK },
+                tertiary: { fg: LIGHTCYAN, bg: BG_BLACK }
+            },
+            'lamppost': {
+                primary: { fg: DARKGRAY, bg: BG_BLACK },
+                secondary: { fg: YELLOW, bg: BG_BLACK }
+            },
+            'sign': {
+                primary: { fg: GREEN, bg: BG_BLACK },
+                secondary: { fg: WHITE, bg: BG_BLACK }
+            },
+            'tree': {
+                primary: { fg: GREEN, bg: BG_BLACK },
+                secondary: { fg: GREEN, bg: BG_BLACK },
+                tertiary: { fg: DARKGRAY, bg: BG_BLACK }
+            }
+        }
+    },
+    background: {
+        type: 'skyscrapers',
+        config: {
+            density: 0.8,
+            hasWindows: true,
+            hasAntennas: true,
+            parallaxSpeed: 0.15
+        }
+    },
+    celestial: {
+        type: 'moon',
+        size: 2,
+        positionX: 0.8,
+        positionY: 0.2
+    },
+    stars: {
+        enabled: true,
+        density: 0.3,
+        twinkle: true
+    },
+    roadside: {
+        spriteTypes: ['building', 'lamppost', 'sign'],
+        spacing: 12,
+        density: 1.2
+    }
+};
+registerTheme(CityNightTheme);
+"use strict";
 var FrameManager = (function () {
     function FrameManager(width, height, horizonY) {
         this.width = width;
@@ -3017,6 +3294,9 @@ function getSpriteSize(sprite, scaleIndex) {
     }
     return { width: width, height: height };
 }
+registerRoadsideSprite('tree', SpriteSheet.createTree);
+registerRoadsideSprite('rock', SpriteSheet.createRock);
+registerRoadsideSprite('bush', SpriteSheet.createBush);
 "use strict";
 var FrameRenderer = (function () {
     function FrameRenderer(width, height) {

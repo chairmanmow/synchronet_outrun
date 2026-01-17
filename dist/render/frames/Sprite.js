@@ -163,3 +163,6 @@ function getSpriteSize(sprite, scaleIndex) {
     }
     return { width: width, height: height };
 }
+registerRoadsideSprite('tree', SpriteSheet.createTree);
+registerRoadsideSprite('rock', SpriteSheet.createRock);
+registerRoadsideSprite('bush', SpriteSheet.createBush);
