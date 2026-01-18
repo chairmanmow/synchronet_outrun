@@ -88,7 +88,7 @@ class RaceSystem implements ISystem {
       this.lastTrackZ[vehicle.id] = currentZ;
     }
 
-    // Update race positions
-    PositionIndicator.calculatePositions(state.vehicles);
+    // Update race positions (pass roadLength for wrap-around handling)
+    PositionIndicator.calculatePositions(state.vehicles, roadLength);
   }
 }

@@ -25,8 +25,9 @@ var Game = (function () {
         this.itemSystem = new ItemSystem();
         this.state = null;
     }
-    Game.prototype.initWithTrack = function (trackDef) {
-        logInfo("Game.initWithTrack(): " + trackDef.name);
+    Game.prototype.initWithTrack = function (trackDef, raceMode) {
+        logInfo("Game.initWithTrack(): " + trackDef.name + " mode: " + (raceMode || RaceMode.GRAND_PRIX));
+        var mode = raceMode || RaceMode.GRAND_PRIX;
         this.renderer.init();
         var themeMapping = {
             'synthwave': 'synthwave',
@@ -43,7 +44,8 @@ var Game = (function () {
             'villains_lair': 'villains_lair',
             'ancient_ruins': 'ancient_ruins',
             'thunder_stadium': 'thunder_stadium',
-            'glitch_circuit': 'glitch_circuit'
+            'glitch_circuit': 'glitch_circuit',
+            'kaiju_rampage': 'kaiju_rampage'
         };
         var themeName = themeMapping[trackDef.themeId] || 'synthwave';
         if (this.renderer.setTheme) {
@@ -56,27 +58,44 @@ var Game = (function () {
         var playerVehicle = new Vehicle();
         playerVehicle.driver = new HumanDriver(this.controls);
         playerVehicle.color = YELLOW;
-        playerVehicle.trackZ = 0;
-        playerVehicle.playerX = 0;
-        this.state = createInitialState(track, road, playerVehicle);
-        var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
-        this.spawnNPCs(npcCount, road);
+        playerVehicle.isNPC = false;
+        this.state = createInitialState(track, road, playerVehicle, mode);
+        if (mode === RaceMode.GRAND_PRIX) {
+            this.spawnRacers(7, road);
+            this.positionOnStartingGrid(road);
+            for (var i = 0; i < this.state.vehicles.length; i++) {
+                var v = this.state.vehicles[i];
+                var drv = v.driver;
+                if (drv && drv.setCanMove) {
+                    drv.setCanMove(false);
+                }
+            }
+        }
+        else {
+            var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
+            this.spawnNPCs(npcCount, road);
+            playerVehicle.trackZ = 0;
+            playerVehicle.playerX = 0;
+        }
         this.physicsSystem.init(this.state);
         this.raceSystem.init(this.state);
         this.itemSystem.initFromTrack(track);
-        this.hud.init(0);
+        var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
+        this.hud.init(totalRacers);
         this.running = true;
         this.state.racing = true;
         debugLog.info("Game initialized with track: " + trackDef.name);
+        debugLog.info("  Race mode: " + mode);
         debugLog.info("  Road segments: " + road.segments.length);
         debugLog.info("  Road length: " + road.totalLength);
         debugLog.info("  Laps: " + road.laps);
+        debugLog.info("  Total racers: " + this.state.vehicles.length);
     };
     Game.prototype.init = function () {
         logInfo("Game.init()");
         var defaultTrack = getTrackDefinition('test_oval');
         if (defaultTrack) {
-            this.initWithTrack(defaultTrack);
+            this.initWithTrack(defaultTrack, RaceMode.GRAND_PRIX);
         }
         else {
             this.initWithTrack({
@@ -114,6 +133,11 @@ var Game = (function () {
                     debugLog.logVehicle(this.state.playerVehicle);
                     lastLogTime = this.state.time;
                 }
+                if (this.state.finished && this.state.racing === false) {
+                    debugLog.info("Race complete! Final time: " + this.state.time.toFixed(2));
+                    this.showGameOverScreen();
+                    this.running = false;
+                }
             }
             this.render();
             mswait(1);
@@ -142,22 +166,126 @@ var Game = (function () {
     Game.prototype.tick = function (dt) {
         if (!this.state)
             return;
+        if (!this.state.raceStarted && this.state.raceMode === RaceMode.GRAND_PRIX) {
+            this.state.countdown -= dt;
+            if (this.state.countdown <= 0) {
+                this.state.raceStarted = true;
+                this.state.countdown = 0;
+                this.state.time = 0;
+                this.state.lapStartTime = 0;
+                for (var i = 0; i < this.state.vehicles.length; i++) {
+                    var vehicle = this.state.vehicles[i];
+                    var driver = vehicle.driver;
+                    if (driver && driver.setCanMove) {
+                        driver.setCanMove(true);
+                    }
+                }
+                debugLog.info("Race started! GO!");
+            }
+            return;
+        }
         this.state.time += dt;
         this.physicsSystem.update(this.state, dt);
         this.raceSystem.update(this.state, dt);
-        this.activateDormantNPCs();
-        this.applyNPCPacing();
+        if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+            this.activateDormantNPCs();
+            this.applyNPCPacing();
+        }
         this.itemSystem.update(dt);
         this.itemSystem.checkPickups(this.state.vehicles);
         if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
             this.itemSystem.useItem(this.state.playerVehicle);
         }
         Collision.processVehicleCollisions(this.state.vehicles);
-        this.checkNPCRespawn();
+        if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+            this.checkNPCRespawn();
+        }
         this.state.cameraX = this.state.playerVehicle.x;
-        if (this.state.finished && this.state.racing === false) {
-            debugLog.info("Race complete! Exiting game loop. Final time: " + this.state.time.toFixed(2));
-            this.running = false;
+    };
+    Game.prototype.showGameOverScreen = function () {
+        if (!this.state)
+            return;
+        debugLog.info("Showing game over screen, waiting for ENTER...");
+        var player = this.state.playerVehicle;
+        var finalPosition = player.racePosition;
+        var finalTime = this.state.time;
+        var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
+        while (true) {
+            this.renderResultsScreen(finalPosition, finalTime, bestLap);
+            var key = console.inkey(K_NONE, 0);
+            if (key === '\r' || key === '\n') {
+                debugLog.info("ENTER pressed, exiting game over screen");
+                break;
+            }
+            mswait(16);
+        }
+    };
+    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap) {
+        this.renderer.beginFrame();
+        var composer = this.renderer.getComposer();
+        for (var y = 0; y < 25; y++) {
+            for (var x = 0; x < 80; x++) {
+                composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
+            }
+        }
+        var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+        var labelAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+        var valueAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+        var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+        var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+        var boxWidth = 40;
+        var boxHeight = 12;
+        var boxX = 20;
+        var topY = 6;
+        composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
+        composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
+        composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
+        composer.setCell(boxX + boxWidth - 1, topY + boxHeight - 1, GLYPH.DBOX_BR, boxAttr);
+        for (var i = 1; i < boxWidth - 1; i++) {
+            composer.setCell(boxX + i, topY, GLYPH.DBOX_H, boxAttr);
+            composer.setCell(boxX + i, topY + boxHeight - 1, GLYPH.DBOX_H, boxAttr);
+        }
+        for (var j = 1; j < boxHeight - 1; j++) {
+            composer.setCell(boxX, topY + j, GLYPH.DBOX_V, boxAttr);
+            composer.setCell(boxX + boxWidth - 1, topY + j, GLYPH.DBOX_V, boxAttr);
+        }
+        var title = "=== RACE COMPLETE ===";
+        composer.writeString(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2, title, titleAttr);
+        var posSuffix = PositionIndicator.getOrdinalSuffix(position);
+        composer.writeString(boxX + 4, topY + 4, "FINAL POSITION:", labelAttr);
+        composer.writeString(boxX + 22, topY + 4, position + posSuffix, valueAttr);
+        composer.writeString(boxX + 4, topY + 5, "TOTAL TIME:", labelAttr);
+        composer.writeString(boxX + 22, topY + 5, LapTimer.format(totalTime), valueAttr);
+        composer.writeString(boxX + 4, topY + 6, "BEST LAP:", labelAttr);
+        composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
+        composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
+        composer.writeString(boxX + 22, topY + 8, this.state.track.name, valueAttr);
+        var prompt = "Press ENTER to continue";
+        composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
+        this.flushComposerToConsole(composer);
+    };
+    Game.prototype.flushComposerToConsole = function (composer) {
+        console.home();
+        var buffer = composer.getBuffer();
+        for (var y = 0; y < buffer.length; y++) {
+            var row = buffer[y];
+            var line = '';
+            var lastAttr = -1;
+            for (var x = 0; x < row.length; x++) {
+                var cell = row[x];
+                if (cell.attr !== lastAttr) {
+                    if (line.length > 0) {
+                        console.print(line);
+                        line = '';
+                    }
+                    console.attributes = cell.attr;
+                    lastAttr = cell.attr;
+                }
+                line += cell.char;
+            }
+            if (line.length > 0) {
+                console.print(line);
+            }
         }
     };
     Game.prototype.activateDormantNPCs = function () {
@@ -167,7 +295,7 @@ var Game = (function () {
         var roadLength = this.state.road.totalLength;
         for (var i = 0; i < this.state.vehicles.length; i++) {
             var npc = this.state.vehicles[i];
-            if (!npc.isNPC)
+            if (!npc.isNPC || npc.isRacer)
                 continue;
             var driver = npc.driver;
             if (driver.isActive())
@@ -189,7 +317,7 @@ var Game = (function () {
         var respawnDistance = 100;
         var npcs = [];
         for (var i = 0; i < this.state.vehicles.length; i++) {
-            if (this.state.vehicles[i].isNPC) {
+            if (this.state.vehicles[i].isNPC && !this.state.vehicles[i].isRacer) {
                 npcs.push(this.state.vehicles[i]);
             }
         }
@@ -264,7 +392,7 @@ var Game = (function () {
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
         this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);
         this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes());
-        var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time);
+        var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time, this.state.countdown, this.state.raceMode);
         this.renderer.renderHud(hudData);
         this.renderer.endFrame();
     };
@@ -275,6 +403,72 @@ var Game = (function () {
             this.timestep.reset();
         }
         logInfo("Game " + (this.paused ? "paused" : "resumed"));
+    };
+    Game.prototype.spawnRacers = function (count, _road) {
+        if (!this.state)
+            return;
+        var racerColors = [
+            { body: LIGHTRED, highlight: WHITE },
+            { body: LIGHTBLUE, highlight: LIGHTCYAN },
+            { body: LIGHTGREEN, highlight: WHITE },
+            { body: LIGHTMAGENTA, highlight: WHITE },
+            { body: LIGHTCYAN, highlight: WHITE },
+            { body: WHITE, highlight: LIGHTGRAY },
+            { body: BROWN, highlight: YELLOW }
+        ];
+        var skillLevels = [0.82, 0.75, 0.58, 0.52, 0.42, 0.38, 0.35];
+        for (var i = 0; i < count && i < racerColors.length; i++) {
+            var racer = new Vehicle();
+            var skill = skillLevels[i] || 0.6;
+            racer.driver = new RacerDriver(skill);
+            racer.isNPC = true;
+            racer.isRacer = true;
+            var typeIndex = Math.floor(Math.random() * NPC_VEHICLE_TYPES.length);
+            racer.npcType = NPC_VEHICLE_TYPES[typeIndex];
+            var colorPalette = racerColors[i];
+            racer.color = colorPalette.body;
+            racer.npcColorIndex = i;
+            racer.trackZ = 0;
+            racer.z = 0;
+            racer.playerX = 0;
+            this.state.vehicles.push(racer);
+        }
+        debugLog.info("Spawned " + count + " CPU racers for Grand Prix");
+    };
+    Game.prototype.positionOnStartingGrid = function (_road) {
+        if (!this.state)
+            return;
+        var vehicles = this.state.vehicles;
+        var gridColSpacing = 0.4;
+        var startZ = 0;
+        var playerIdx = -1;
+        for (var p = 0; p < vehicles.length; p++) {
+            if (!vehicles[p].isNPC) {
+                playerIdx = p;
+                break;
+            }
+        }
+        var gridSlot = 0;
+        for (var v = 0; v < vehicles.length; v++) {
+            var vehicle = vehicles[v];
+            vehicle.trackZ = startZ;
+            vehicle.z = startZ;
+            if (v === playerIdx) {
+                vehicle.playerX = 0;
+            }
+            else {
+                var side = (gridSlot % 2 === 0) ? -1 : 1;
+                var offset = Math.floor(gridSlot / 2) * 0.15;
+                vehicle.playerX = side * (gridColSpacing + offset);
+                gridSlot++;
+            }
+            vehicle.speed = 0;
+            vehicle.lap = 1;
+            vehicle.checkpoint = 0;
+            vehicle.racePosition = v + 1;
+            debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+        }
+        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
     };
     Game.prototype.spawnNPCs = function (count, road) {
         if (!this.state)

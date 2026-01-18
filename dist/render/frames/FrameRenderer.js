@@ -6,7 +6,11 @@ var FrameRenderer = (function () {
         this.horizonY = 8;
         this._mountainScrollOffset = 0;
         this._staticElementsDirty = true;
+        this._currentRoad = null;
+        this._currentTrackPosition = 0;
+        this._currentCameraX = 0;
         this.frameManager = new FrameManager(width, height, this.horizonY);
+        this.composer = new SceneComposer(width, height);
         this.activeTheme = SynthwaveTheme;
         this.spriteCache = {};
         this.playerCarSprite = null;
@@ -83,6 +87,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.celestial.type === 'dual_moons') {
             this.renderDualMoons();
         }
+        else if (this.activeTheme.celestial.type === 'monster') {
+            this.renderMonsterSilhouette();
+        }
         if (this.activeTheme.background.type === 'mountains') {
             this.renderMountains();
         }
@@ -119,6 +126,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'stadium') {
             this.renderStadium();
         }
+        else if (this.activeTheme.background.type === 'destroyed_city') {
+            this.renderDestroyedCity();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -145,6 +155,9 @@ var FrameRenderer = (function () {
         }
     };
     FrameRenderer.prototype.renderRoad = function (trackPosition, cameraX, _track, road) {
+        this._currentRoad = road;
+        this._currentTrackPosition = trackPosition;
+        this._currentCameraX = cameraX;
         if (this.activeTheme.ground) {
             if (this.activeTheme.ground.type === 'grid') {
                 this.renderHolodeckFloor(trackPosition);
@@ -265,8 +278,16 @@ var FrameRenderer = (function () {
         var visualHorizonY = 5;
         var roadBottom = this.height - 4;
         var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
+        var curveOffset = 0;
+        if (this._currentRoad && relativeZ > 0) {
+            var npcWorldZ = this._currentTrackPosition + relativeZ;
+            var seg = this._currentRoad.getSegment(npcWorldZ);
+            if (seg) {
+                curveOffset = seg.curve * t * 15;
+            }
+        }
         var perspectiveScale = t * t;
-        var screenX = Math.round(40 + relativeX * perspectiveScale * 25);
+        var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
         var roadHeight = roadBottom - visualHorizonY;
         var screenProgress = (screenY - visualHorizonY) / roadHeight;
         var scaleIndex;
@@ -314,6 +335,9 @@ var FrameRenderer = (function () {
             this.applyGlitchEffects();
         }
         this.cycle();
+    };
+    FrameRenderer.prototype.getComposer = function () {
+        return this.composer;
     };
     FrameRenderer.prototype.applyGlitchEffects = function () {
         var roadFrame = this.frameManager.getRoadFrame();
@@ -557,6 +581,146 @@ var FrameRenderer = (function () {
         moonFrame.setData(moon2X + 1, moon2Y, GLYPH.LIGHT_SHADE, moon2GlowAttr);
         moonFrame.setData(moon2X, moon2Y - 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
         moonFrame.setData(moon2X, moon2Y + 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
+    };
+    FrameRenderer.prototype.renderMonsterSilhouette = function () {
+        var frame = this.frameManager.getSunFrame();
+        if (!frame)
+            return;
+        var baseY = this.horizonY - 1;
+        var mothraX = 24;
+        var godzillaX = 56;
+        var mothBody = makeAttr(BROWN, BG_BLACK);
+        var mothWing = makeAttr(YELLOW, BG_BLACK);
+        var mothWingLight = makeAttr(WHITE, BG_BROWN);
+        var mothEye = makeAttr(LIGHTCYAN, BG_CYAN);
+        frame.setData(mothraX - 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+        frame.setData(mothraX - 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+        for (var wx = mothraX - 12; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX - 11; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx > mothraX - 9) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX - 10; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx > mothraX - 8) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 12; wx++) {
+            frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 11; wx++) {
+            frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx < mothraX + 9) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 10; wx++) {
+            frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx < mothraX + 8) ? mothWingLight : mothWing);
+        }
+        frame.setData(mothraX - 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        for (var wx = mothraX - 8; wx <= mothraX - 2; wx++) {
+            frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX - 6; wx <= mothraX - 2; wx++) {
+            frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 2; wx <= mothraX + 8; wx++) {
+            frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 2; wx <= mothraX + 6; wx++) {
+            frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+        }
+        frame.setData(mothraX - 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 2, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 1, GLYPH.FULL_BLOCK, mothBody);
+        var godzBody = makeAttr(GREEN, BG_BLACK);
+        var godzLight = makeAttr(LIGHTGREEN, BG_BLACK);
+        var godzEye = makeAttr(LIGHTRED, BG_RED);
+        var godzSpine = makeAttr(LIGHTCYAN, BG_CYAN);
+        var godzBreath = makeAttr(LIGHTCYAN, BG_BLACK);
+        frame.setData(godzillaX + 1, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 2, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 3, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 4, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX - 3, baseY - 9, GLYPH.UPPER_HALF, godzLight);
+        frame.setData(godzillaX - 2, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 9, GLYPH.UPPER_HALF, godzBody);
+        frame.setData(godzillaX - 4, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 4, baseY - 7, GLYPH.FULL_BLOCK, godzEye);
+        frame.setData(godzillaX - 3, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 7, GLYPH.FULL_BLOCK, godzEye);
+        frame.setData(godzillaX - 1, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 7, baseY - 6, GLYPH.LEFT_HALF, godzBody);
+        frame.setData(godzillaX - 6, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 4, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 3, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 1, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 8, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+        frame.setData(godzillaX - 9, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 6, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX - 11, baseY - 6, GLYPH.MEDIUM_SHADE, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 5, GLYPH.LIGHT_SHADE, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 7, GLYPH.LIGHT_SHADE, godzBreath);
+        frame.setData(godzillaX - 3, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 4, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 6, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 3, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 2, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 4, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 5, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 6, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 7, baseY - 1, GLYPH.RIGHT_HALF, godzBody);
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -1219,6 +1383,70 @@ var FrameRenderer = (function () {
             }
         }
     };
+    FrameRenderer.prototype.renderDestroyedCity = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var fire = makeAttr(LIGHTRED, BG_BLACK);
+        var fireGlow = makeAttr(YELLOW, BG_BLACK);
+        var heli = makeAttr(GREEN, BG_BLACK);
+        var tracer = makeAttr(YELLOW, BG_BLACK);
+        this.drawSimpleHelicopter(frame, 70, 3, heli);
+        frame.setData(67, 4, '-', tracer);
+        frame.setData(65, 4, '-', tracer);
+        frame.setData(63, 4, '-', tracer);
+        frame.setData(61, 5, '*', fire);
+        this.drawSimpleHelicopter(frame, 75, 6, heli);
+        this.drawSimpleBuilding(frame, 2, 6, 3, true);
+        this.drawSimpleBuilding(frame, 7, 8, 3, false);
+        this.drawSimpleBuilding(frame, 12, 5, 3, true);
+        this.drawSimpleBuilding(frame, 62, 7, 3, true);
+        this.drawSimpleBuilding(frame, 68, 9, 4, true);
+        frame.setData(70, this.horizonY - 10, '^', fireGlow);
+        frame.setData(70, this.horizonY - 11, '*', fire);
+        this.drawSimpleBuilding(frame, 74, 6, 3, false);
+        frame.setData(5, this.horizonY - 1, '^', fireGlow);
+        frame.setData(5, this.horizonY - 2, '*', fire);
+        frame.setData(72, this.horizonY - 1, '^', fireGlow);
+        frame.setData(72, this.horizonY - 2, '*', fire);
+    };
+    FrameRenderer.prototype.drawSimpleHelicopter = function (frame, x, y, attr) {
+        frame.setData(x - 1, y - 1, '-', attr);
+        frame.setData(x, y - 1, '+', attr);
+        frame.setData(x + 1, y - 1, '-', attr);
+        frame.setData(x - 1, y, '<', attr);
+        frame.setData(x, y, GLYPH.FULL_BLOCK, attr);
+        frame.setData(x + 1, y, GLYPH.FULL_BLOCK, attr);
+        frame.setData(x + 2, y, '-', attr);
+        frame.setData(x + 3, y, '>', attr);
+    };
+    FrameRenderer.prototype.drawSimpleBuilding = function (frame, x, height, width, damaged) {
+        var building = makeAttr(DARKGRAY, BG_BLACK);
+        var window = makeAttr(BLACK, BG_BLACK);
+        var baseY = this.horizonY - 1;
+        for (var h = 0; h < height; h++) {
+            var y = baseY - h;
+            if (y < 0)
+                continue;
+            if (damaged && h >= height - 1) {
+                for (var w = 0; w < width; w++) {
+                    if ((x + w) % 2 === 0) {
+                        frame.setData(x + w, y, GLYPH.DARK_SHADE, building);
+                    }
+                }
+            }
+            else {
+                for (var w = 0; w < width; w++) {
+                    if (h % 2 === 1 && w > 0 && w < width - 1) {
+                        frame.setData(x + w, y, GLYPH.MEDIUM_SHADE, window);
+                    }
+                    else {
+                        frame.setData(x + w, y, GLYPH.FULL_BLOCK, building);
+                    }
+                }
+            }
+        }
+    };
     FrameRenderer.prototype.drawMountainToFrame = function (frame, baseX, baseY, height, width, attr, highlightAttr) {
         var peakX = baseX + Math.floor(width / 2);
         for (var h = 0; h < height; h++) {
@@ -1671,10 +1899,10 @@ var FrameRenderer = (function () {
             if (wrappedZ < 0)
                 wrappedZ += roadLength;
             var isFinishLine = (wrappedZ < 200) || (wrappedZ > roadLength - 200);
-            this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, accumulatedCurve);
+            this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, accumulatedCurve, worldZ);
         }
     };
-    FrameRenderer.prototype.renderRoadScanline = function (frame, y, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, curve) {
+    FrameRenderer.prototype.renderRoadScanline = function (frame, y, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, curve, worldZ) {
         var colors = this.activeTheme.colors;
         var baseSurfaceFg = distance < 10 ? colors.roadSurfaceAlt.fg : colors.roadSurface.fg;
         var baseSurfaceBg = distance < 10 ? colors.roadSurfaceAlt.bg : colors.roadSurface.bg;
@@ -1686,6 +1914,23 @@ var FrameRenderer = (function () {
         var baseStripeBg = colors.roadStripe.bg;
         var baseShoulderFg = colors.shoulderPrimary.fg;
         var baseShoulderBg = colors.shoulderPrimary.bg;
+        var isRainbowRoad = this.activeTheme.road && this.activeTheme.road.rainbow;
+        if (isRainbowRoad) {
+            var rainbowColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+            var trackPos = worldZ || 0;
+            var colorIndex = Math.floor(trackPos * 0.02) % rainbowColors.length;
+            var nextColorIndex = (colorIndex + 1) % rainbowColors.length;
+            baseSurfaceFg = rainbowColors[colorIndex];
+            baseSurfaceBg = BG_BLACK;
+            baseGridFg = rainbowColors[nextColorIndex];
+            baseGridBg = BG_BLACK;
+            baseEdgeFg = rainbowColors[colorIndex];
+            baseEdgeBg = BG_BLACK;
+            baseStripeFg = WHITE;
+            baseStripeBg = BG_BLACK;
+            baseShoulderFg = rainbowColors[(colorIndex + 2) % rainbowColors.length];
+            baseShoulderBg = BG_BLACK;
+        }
         if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined' && GlitchState.roadColorGlitch !== 0) {
             var surfaceGlitch = GlitchState.getGlitchedRoadColor(baseSurfaceFg, baseSurfaceBg, distance);
             baseSurfaceFg = surfaceGlitch.fg;
@@ -1708,12 +1953,13 @@ var FrameRenderer = (function () {
         var edgeAttr = makeAttr(baseEdgeFg, baseEdgeBg);
         var stripeAttr = makeAttr(baseStripeFg, baseStripeBg);
         var shoulderAttr = makeAttr(baseShoulderFg, baseShoulderBg);
+        var hideEdgeMarkers = this.activeTheme.road && this.activeTheme.road.hideEdgeMarkers;
         for (var x = 0; x < this.width; x++) {
             if (x >= leftEdge && x <= rightEdge) {
                 if (isFinishLine) {
                     this.renderFinishCell(frame, x, y, centerX, leftEdge, rightEdge, distance);
                 }
-                else if (x === leftEdge || x === rightEdge) {
+                else if ((x === leftEdge || x === rightEdge) && !hideEdgeMarkers) {
                     frame.setData(x, y, GLYPH.BOX_V, edgeAttr);
                 }
                 else if (Math.abs(x - centerX) < 1 && stripePhase === 0) {
@@ -1725,7 +1971,12 @@ var FrameRenderer = (function () {
                         frame.setData(x, y, GLYPH.BOX_H, gridAttr);
                     }
                     else {
-                        frame.setData(x, y, ' ', roadAttr);
+                        if (isRainbowRoad) {
+                            frame.setData(x, y, GLYPH.FULL_BLOCK, roadAttr);
+                        }
+                        else {
+                            frame.setData(x, y, ' ', roadAttr);
+                        }
                     }
                 }
             }
@@ -1936,6 +2187,47 @@ var FrameRenderer = (function () {
         this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
         this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
         this.renderTrackProgress(frame, hudData.lapProgress);
+        if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
+            this.renderStoplight(frame, hudData.countdown);
+        }
+    };
+    FrameRenderer.prototype.renderStoplight = function (frame, countdown) {
+        var countNum = Math.ceil(countdown);
+        var centerX = 40;
+        var topY = 3;
+        var frameAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+        var redOn = countNum >= 3;
+        var yellowOn = countNum === 2;
+        var greenOn = countNum === 1;
+        var redAttr = redOn ? colorToAttr({ fg: LIGHTRED, bg: BG_RED }) : colorToAttr({ fg: RED, bg: BG_BLACK });
+        var yellowAttr = yellowOn ? colorToAttr({ fg: YELLOW, bg: BG_BROWN }) : colorToAttr({ fg: BROWN, bg: BG_BLACK });
+        var greenAttr = greenOn ? colorToAttr({ fg: LIGHTGREEN, bg: BG_GREEN }) : colorToAttr({ fg: GREEN, bg: BG_BLACK });
+        var boxX = centerX - 7;
+        frame.setData(boxX, topY, GLYPH.DBOX_TL, frameAttr);
+        for (var i = 1; i < 14; i++) {
+            frame.setData(boxX + i, topY, GLYPH.DBOX_H, frameAttr);
+        }
+        frame.setData(boxX + 14, topY, GLYPH.DBOX_TR, frameAttr);
+        frame.setData(boxX, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 1, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 2, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 3, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 4, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 5, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 6, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 7, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 8, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 9, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 10, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 11, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 12, topY + 1, ' ', frameAttr);
+        frame.setData(boxX + 13, topY + 1, countNum.toString(), colorToAttr({ fg: WHITE, bg: BG_BLACK }));
+        frame.setData(boxX + 14, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX, topY + 2, GLYPH.DBOX_BL, frameAttr);
+        for (var j = 1; j < 14; j++) {
+            frame.setData(boxX + j, topY + 2, GLYPH.DBOX_H, frameAttr);
+        }
+        frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
     FrameRenderer.prototype.renderTrackProgress = function (frame, progress) {
         var y = this.height - 1;

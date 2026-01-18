@@ -16,6 +16,8 @@ interface HudData {
   totalTime: number;
   heldItem: ItemType | null;
   raceFinished: boolean;
+  countdown: number;       // Seconds until race starts (0 = started)
+  raceMode: RaceMode;      // Current race mode
 }
 
 class Hud {
@@ -52,7 +54,7 @@ class Hud {
   /**
    * Compute HUD data from game state.
    */
-  compute(vehicle: IVehicle, track: ITrack, road: Road, vehicles: IVehicle[], currentTime: number): HudData {
+  compute(vehicle: IVehicle, track: ITrack, road: Road, vehicles: IVehicle[], currentTime: number, countdown?: number, raceMode?: RaceMode): HudData {
     // Calculate lap progress (0.0 to 1.0)
     var lapProgress = 0;
     if (road.totalLength > 0) {
@@ -61,7 +63,17 @@ class Hud {
     }
 
     // Count only actual racers (not commuter NPCs)
-    var racers = vehicles.filter(function(v) { return !v.isNPC; });
+    var racers = vehicles.filter(function(v) { return !v.isNPC || v.isRacer; });
+    
+    // During countdown, show 0:00.00 for times
+    // Also ensure we never show negative times
+    var isCountdown = (countdown !== undefined && countdown > 0);
+    var lapTime = currentTime - this.lapStartTime;
+    var totalTime = currentTime - this.startTime;
+    
+    // Clamp to zero - never show negative
+    var displayLapTime = isCountdown ? 0 : Math.max(0, lapTime);
+    var displayTotalTime = isCountdown ? 0 : Math.max(0, totalTime);
     
     return {
       speed: Math.round(vehicle.speed),
@@ -71,11 +83,13 @@ class Hud {
       lapProgress: lapProgress,
       position: vehicle.racePosition,
       totalRacers: racers.length,
-      lapTime: currentTime - this.lapStartTime,
+      lapTime: displayLapTime,
       bestLapTime: this.bestLapTime === Infinity ? 0 : this.bestLapTime,
-      totalTime: currentTime - this.startTime,
+      totalTime: displayTotalTime,
       heldItem: vehicle.heldItem,
-      raceFinished: vehicle.lap > track.laps
+      raceFinished: vehicle.lap > track.laps,
+      countdown: countdown || 0,
+      raceMode: raceMode !== undefined ? raceMode : RaceMode.TIME_TRIAL
     };
   }
 

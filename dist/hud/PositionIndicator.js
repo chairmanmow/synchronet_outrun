@@ -17,14 +17,20 @@ var PositionIndicator = (function () {
     PositionIndicator.format = function (data) {
         return data.position + data.suffix + " / " + data.totalRacers;
     };
-    PositionIndicator.calculatePositions = function (vehicles) {
-        var racers = vehicles.filter(function (v) { return !v.isNPC; });
+    PositionIndicator.calculatePositions = function (vehicles, roadLength) {
+        var racers = vehicles.filter(function (v) { return !v.isNPC || v.isRacer; });
         var sorted = racers.slice().sort(function (a, b) {
             if (a.lap !== b.lap)
                 return b.lap - a.lap;
             if (a.checkpoint !== b.checkpoint)
                 return b.checkpoint - a.checkpoint;
-            return b.z - a.z;
+            var aZ = a.trackZ;
+            var bZ = b.trackZ;
+            if (roadLength && roadLength > 0) {
+                aZ = aZ % roadLength;
+                bZ = bZ % roadLength;
+            }
+            return bZ - aZ;
         });
         for (var i = 0; i < sorted.length; i++) {
             sorted[i].racePosition = i + 1;

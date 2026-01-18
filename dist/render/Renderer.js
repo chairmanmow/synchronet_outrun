@@ -29,6 +29,9 @@ var Renderer = (function () {
     Renderer.prototype.beginFrame = function () {
         this.composer.clear();
     };
+    Renderer.prototype.getComposer = function () {
+        return this.composer;
+    };
     Renderer.prototype.renderSky = function (trackPosition, curvature, playerSteer, speed, dt) {
         this.skylineRenderer.render(trackPosition, curvature, playerSteer, speed, dt);
     };

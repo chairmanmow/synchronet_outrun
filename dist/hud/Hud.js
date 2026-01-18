@@ -17,14 +17,19 @@ var Hud = (function () {
         }
         this.lapStartTime = currentTime;
     };
-    Hud.prototype.compute = function (vehicle, track, road, vehicles, currentTime) {
+    Hud.prototype.compute = function (vehicle, track, road, vehicles, currentTime, countdown, raceMode) {
         var lapProgress = 0;
         if (road.totalLength > 0) {
             lapProgress = (vehicle.trackZ % road.totalLength) / road.totalLength;
             if (lapProgress < 0)
                 lapProgress += 1.0;
         }
-        var racers = vehicles.filter(function (v) { return !v.isNPC; });
+        var racers = vehicles.filter(function (v) { return !v.isNPC || v.isRacer; });
+        var isCountdown = (countdown !== undefined && countdown > 0);
+        var lapTime = currentTime - this.lapStartTime;
+        var totalTime = currentTime - this.startTime;
+        var displayLapTime = isCountdown ? 0 : Math.max(0, lapTime);
+        var displayTotalTime = isCountdown ? 0 : Math.max(0, totalTime);
         return {
             speed: Math.round(vehicle.speed),
             speedMax: VEHICLE_PHYSICS.MAX_SPEED,
@@ -33,11 +38,13 @@ var Hud = (function () {
             lapProgress: lapProgress,
             position: vehicle.racePosition,
             totalRacers: racers.length,
-            lapTime: currentTime - this.lapStartTime,
+            lapTime: displayLapTime,
             bestLapTime: this.bestLapTime === Infinity ? 0 : this.bestLapTime,
-            totalTime: currentTime - this.startTime,
+            totalTime: displayTotalTime,
             heldItem: vehicle.heldItem,
-            raceFinished: vehicle.lap > track.laps
+            raceFinished: vehicle.lap > track.laps,
+            countdown: countdown || 0,
+            raceMode: raceMode !== undefined ? raceMode : RaceMode.TIME_TRIAL
         };
     };
     Hud.formatTime = function (seconds) {

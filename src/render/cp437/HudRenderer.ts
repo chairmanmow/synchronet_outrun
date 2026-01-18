@@ -17,6 +17,12 @@ class HudRenderer {
     this.renderLapProgress(hudData);
     this.renderSpeedometer(hudData);
     this.renderItemSlot(hudData);
+    
+    // Render countdown overlay if race hasn't started
+    if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
+      this.renderCountdown(hudData.countdown);
+    }
+    // Note: raceFinished overlay removed - now using dedicated results screen
   }
 
   /**
@@ -186,5 +192,92 @@ class HudRenderer {
       str = ' ' + str;
     }
     return str;
+  }
+
+  /**
+   * Render stoplight countdown graphic in center of screen.
+   */
+  private renderCountdown(countdown: number): void {
+    var countNum = Math.ceil(countdown);
+    var centerX = 40;
+    var topY = 8;
+    
+    // Stoplight frame colors
+    var frameAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    var poleAttr = colorToAttr({ fg: BROWN, bg: BG_BLACK });
+    
+    // Light states based on countdown
+    var redOn = countNum >= 3;
+    var yellowOn = countNum === 2;
+    var greenOn = countNum <= 1;
+    
+    // Light colors (on vs off)
+    var redAttr = redOn ? colorToAttr({ fg: LIGHTRED, bg: BG_RED }) : colorToAttr({ fg: RED, bg: BG_BLACK });
+    var yellowAttr = yellowOn ? colorToAttr({ fg: YELLOW, bg: BG_BROWN }) : colorToAttr({ fg: BROWN, bg: BG_BLACK });
+    var greenAttr = greenOn ? colorToAttr({ fg: LIGHTGREEN, bg: BG_GREEN }) : colorToAttr({ fg: GREEN, bg: BG_BLACK });
+    
+    // Stoplight housing (7 chars wide, 9 rows tall)
+    var boxX = centerX - 3;
+    
+    // Top of housing
+    this.composer.setCell(boxX, topY, GLYPH.DBOX_TL, frameAttr);
+    for (var i = 1; i < 6; i++) {
+      this.composer.setCell(boxX + i, topY, GLYPH.DBOX_H, frameAttr);
+    }
+    this.composer.setCell(boxX + 6, topY, GLYPH.DBOX_TR, frameAttr);
+    
+    // RED light row (row 1-2)
+    this.composer.setCell(boxX, topY + 1, GLYPH.DBOX_V, frameAttr);
+    this.composer.writeString(boxX + 1, topY + 1, " ", frameAttr);
+    this.composer.setCell(boxX + 2, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    this.composer.setCell(boxX + 3, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    this.composer.setCell(boxX + 4, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    this.composer.writeString(boxX + 5, topY + 1, " ", frameAttr);
+    this.composer.setCell(boxX + 6, topY + 1, GLYPH.DBOX_V, frameAttr);
+    
+    // Separator
+    this.composer.setCell(boxX, topY + 2, GLYPH.DBOX_V, frameAttr);
+    this.composer.writeString(boxX + 1, topY + 2, "     ", frameAttr);
+    this.composer.setCell(boxX + 6, topY + 2, GLYPH.DBOX_V, frameAttr);
+    
+    // YELLOW light row (row 3-4)
+    this.composer.setCell(boxX, topY + 3, GLYPH.DBOX_V, frameAttr);
+    this.composer.writeString(boxX + 1, topY + 3, " ", frameAttr);
+    this.composer.setCell(boxX + 2, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+    this.composer.setCell(boxX + 3, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+    this.composer.setCell(boxX + 4, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+    this.composer.writeString(boxX + 5, topY + 3, " ", frameAttr);
+    this.composer.setCell(boxX + 6, topY + 3, GLYPH.DBOX_V, frameAttr);
+    
+    // Separator
+    this.composer.setCell(boxX, topY + 4, GLYPH.DBOX_V, frameAttr);
+    this.composer.writeString(boxX + 1, topY + 4, "     ", frameAttr);
+    this.composer.setCell(boxX + 6, topY + 4, GLYPH.DBOX_V, frameAttr);
+    
+    // GREEN light row (row 5-6)
+    this.composer.setCell(boxX, topY + 5, GLYPH.DBOX_V, frameAttr);
+    this.composer.writeString(boxX + 1, topY + 5, " ", frameAttr);
+    this.composer.setCell(boxX + 2, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+    this.composer.setCell(boxX + 3, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+    this.composer.setCell(boxX + 4, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+    this.composer.writeString(boxX + 5, topY + 5, " ", frameAttr);
+    this.composer.setCell(boxX + 6, topY + 5, GLYPH.DBOX_V, frameAttr);
+    
+    // Bottom of housing
+    this.composer.setCell(boxX, topY + 6, GLYPH.DBOX_BL, frameAttr);
+    for (var j = 1; j < 6; j++) {
+      this.composer.setCell(boxX + j, topY + 6, GLYPH.DBOX_H, frameAttr);
+    }
+    this.composer.setCell(boxX + 6, topY + 6, GLYPH.DBOX_BR, frameAttr);
+    
+    // Pole below stoplight
+    this.composer.setCell(centerX, topY + 7, GLYPH.DBOX_V, poleAttr);
+    this.composer.setCell(centerX, topY + 8, GLYPH.DBOX_V, poleAttr);
+    
+    // "GO!" text when green
+    if (greenOn && countNum <= 0) {
+      var goAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+      this.composer.writeString(centerX - 2, topY + 9, "GO!!!", goAttr);
+    }
   }
 }

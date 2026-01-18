@@ -17,6 +17,7 @@ interface IRenderer {
   renderHud(hudData: HudData): void;
   endFrame(): void;
   shutdown(): void;
+  getComposer(): SceneComposer;
   
   // Optional theme support
   setTheme?(themeName: string): void;
@@ -75,6 +76,13 @@ class Renderer implements IRenderer {
    */
   beginFrame(): void {
     this.composer.clear();
+  }
+
+  /**
+   * Get the scene composer for direct rendering.
+   */
+  getComposer(): SceneComposer {
+    return this.composer;
   }
 
   /**

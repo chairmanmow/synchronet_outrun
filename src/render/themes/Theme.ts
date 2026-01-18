@@ -61,7 +61,7 @@ interface ThemeColors {
 interface ThemeBackgroundElement {
   type: 'mountains' | 'skyscrapers' | 'dunes' | 'forest' | 'hills' | 'ocean' | 
         'jungle_canopy' | 'candy_hills' | 'nebula' | 'castle_fortress' | 
-        'volcanic' | 'pyramids' | 'stadium';
+        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city';
   // Configuration varies by type
   config: {
     // Mountains/hills
@@ -94,7 +94,7 @@ interface ThemeBackgroundElement {
 }
 
 interface ThemeCelestialBody {
-  type: 'sun' | 'moon' | 'dual_moons' | 'none';
+  type: 'sun' | 'moon' | 'dual_moons' | 'monster' | 'none';
   size: number;           // 1-5 scale
   positionX: number;      // 0=left, 0.5=center, 1=right
   positionY: number;      // 0=top of sky, 1=at horizon
@@ -190,6 +190,12 @@ interface Theme {
   
   // Roadside objects configuration
   roadside: ThemeRoadsideConfig;
+  
+  // Road rendering options (optional)
+  road?: {
+    rainbow?: boolean;        // Cycles through rainbow colors
+    hideEdgeMarkers?: boolean; // Hide edge markers (for rainbow road blend)
+  };
 }
 
 /**

@@ -28,6 +28,14 @@ class FrameRenderer implements IRenderer {
   // Flag to track if static elements need re-rendering
   private _staticElementsDirty: boolean;
   
+  // SceneComposer for dedicated screens (results, etc.)
+  private composer: SceneComposer;
+  
+  // Road data cached during renderRoad() for use in renderEntities()
+  private _currentRoad: Road | null;
+  private _currentTrackPosition: number;
+  private _currentCameraX: number;
+  
   constructor(width: number, height: number) {
     this.width = width;
     this.height = height;
@@ -36,7 +44,13 @@ class FrameRenderer implements IRenderer {
     this._mountainScrollOffset = 0;
     this._staticElementsDirty = true;
     
+    // Initialize road cache
+    this._currentRoad = null;
+    this._currentTrackPosition = 0;
+    this._currentCameraX = 0;
+    
     this.frameManager = new FrameManager(width, height, this.horizonY);
+    this.composer = new SceneComposer(width, height);
     
     // Default to synthwave theme
     this.activeTheme = SynthwaveTheme;
@@ -159,6 +173,8 @@ class FrameRenderer implements IRenderer {
       this.renderMoon();
     } else if (this.activeTheme.celestial.type === 'dual_moons') {
       this.renderDualMoons();
+    } else if (this.activeTheme.celestial.type === 'monster') {
+      this.renderMonsterSilhouette();
     }
     
     // Background
@@ -186,6 +202,8 @@ class FrameRenderer implements IRenderer {
       this.renderDunes();
     } else if (this.activeTheme.background.type === 'stadium') {
       this.renderStadium();
+    } else if (this.activeTheme.background.type === 'destroyed_city') {
+      this.renderDestroyedCity();
     }
     
     this._staticElementsDirty = false;
@@ -237,6 +255,11 @@ class FrameRenderer implements IRenderer {
    * Render road (IRenderer interface).
    */
   renderRoad(trackPosition: number, cameraX: number, _track: ITrack, road: Road): void {
+    // Cache road data for use in renderEntities() (for NPC curve offset calculation)
+    this._currentRoad = road;
+    this._currentTrackPosition = trackPosition;
+    this._currentCameraX = cameraX;
+    
     // Render ground pattern based on theme type
     if (this.activeTheme.ground) {
       if (this.activeTheme.ground.type === 'grid') {
@@ -438,9 +461,24 @@ class FrameRenderer implements IRenderer {
     var roadBottom = this.height - 4;
     var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
     
+    // Calculate curve offset for visual curve following
+    // Use a simple approach: sample the curve at the NPC's position and scale by t
+    var curveOffset = 0;
+    if (this._currentRoad && relativeZ > 0) {
+      var npcWorldZ = this._currentTrackPosition + relativeZ;
+      var seg = this._currentRoad.getSegment(npcWorldZ);
+      if (seg) {
+        // Use t (screen depth) to scale the curve effect
+        // Cars further away (smaller t) have less curve offset
+        // Cars closer (larger t) have more curve offset
+        curveOffset = seg.curve * t * 15;
+      }
+    }
+    
     // Lateral position scales with perspective
+    // Include curve offset so cars follow the road visually
     var perspectiveScale = t * t;  // Non-linear for more realistic perspective
-    var screenX = Math.round(40 + relativeX * perspectiveScale * 25);
+    var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
     
     // Select sprite scale based on screen position (5 scales now: 0=dot, 1=tiny, 2=small, 3=medium, 4=large)
     var roadHeight = roadBottom - visualHorizonY;
@@ -508,6 +546,14 @@ class FrameRenderer implements IRenderer {
     }
     
     this.cycle();
+  }
+  
+  /**
+   * Get the underlying scene composer for direct rendering.
+   * Used for dedicated screens like game over.
+   */
+  getComposer(): SceneComposer {
+    return this.composer;
   }
   
   /**
@@ -856,7 +902,199 @@ class FrameRenderer implements IRenderer {
     moonFrame.setData(moon2X, moon2Y - 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
     moonFrame.setData(moon2X, moon2Y + 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
   }
-  
+
+  /**
+   * Render DUAL monster silhouettes for kaiju theme.
+   * Mothra on left, Godzilla on right - you drive between them!
+   */
+  private renderMonsterSilhouette(): void {
+    var frame = this.frameManager.getSunFrame();
+    if (!frame) return;
+    
+    var baseY = this.horizonY - 1;
+    
+    // Position monsters closer together, between road and buildings
+    var mothraX = 24;    // Mothra on left side
+    var godzillaX = 56;  // Godzilla on right side
+    
+    // === MOTHRA (left side) - Giant moth viewed from front, wings spread WIDE ===
+    var mothBody = makeAttr(BROWN, BG_BLACK);
+    var mothWing = makeAttr(YELLOW, BG_BLACK);
+    var mothWingLight = makeAttr(WHITE, BG_BROWN);
+    var mothEye = makeAttr(LIGHTCYAN, BG_CYAN);
+    
+    // Antennae (curving outward at top)
+    frame.setData(mothraX - 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX - 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+    
+    // Head with big compound eyes
+    frame.setData(mothraX - 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+    frame.setData(mothraX - 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+    
+    // Upper wings - spread WIDE horizontally (main visual feature)
+    // Left upper wing - wide and horizontal
+    for (var wx = mothraX - 12; wx <= mothraX - 3; wx++) {
+      frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+    }
+    for (var wx = mothraX - 11; wx <= mothraX - 3; wx++) {
+      frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx > mothraX - 9) ? mothWingLight : mothWing);
+    }
+    for (var wx = mothraX - 10; wx <= mothraX - 3; wx++) {
+      frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx > mothraX - 8) ? mothWingLight : mothWing);
+    }
+    
+    // Right upper wing - mirror
+    for (var wx = mothraX + 3; wx <= mothraX + 12; wx++) {
+      frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+    }
+    for (var wx = mothraX + 3; wx <= mothraX + 11; wx++) {
+      frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx < mothraX + 9) ? mothWingLight : mothWing);
+    }
+    for (var wx = mothraX + 3; wx <= mothraX + 10; wx++) {
+      frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx < mothraX + 8) ? mothWingLight : mothWing);
+    }
+    
+    // Thorax/body center (connects wings)
+    frame.setData(mothraX - 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX - 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+    
+    frame.setData(mothraX - 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+    
+    // Lower wings (smaller, below body)
+    for (var wx = mothraX - 8; wx <= mothraX - 2; wx++) {
+      frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+    }
+    for (var wx = mothraX - 6; wx <= mothraX - 2; wx++) {
+      frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+    }
+    for (var wx = mothraX + 2; wx <= mothraX + 8; wx++) {
+      frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+    }
+    for (var wx = mothraX + 2; wx <= mothraX + 6; wx++) {
+      frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+    }
+    
+    // Abdomen (fuzzy body below thorax)
+    frame.setData(mothraX - 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX + 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 2, GLYPH.FULL_BLOCK, mothBody);
+    frame.setData(mothraX, baseY - 1, GLYPH.FULL_BLOCK, mothBody);
+    
+    // === GODZILLA (right side) - Green dinosaur ===
+    var godzBody = makeAttr(GREEN, BG_BLACK);
+    var godzLight = makeAttr(LIGHTGREEN, BG_BLACK);
+    var godzEye = makeAttr(LIGHTRED, BG_RED);
+    var godzSpine = makeAttr(LIGHTCYAN, BG_CYAN);
+    var godzBreath = makeAttr(LIGHTCYAN, BG_BLACK);
+    
+    // Dorsal spines
+    frame.setData(godzillaX + 1, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+    frame.setData(godzillaX + 2, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+    frame.setData(godzillaX + 3, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+    frame.setData(godzillaX + 4, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+    
+    // Head (angular dinosaur) - solid, no gaps
+    frame.setData(godzillaX - 3, baseY - 9, GLYPH.UPPER_HALF, godzLight);
+    frame.setData(godzillaX - 2, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 1, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 1, baseY - 9, GLYPH.UPPER_HALF, godzBody);
+    
+    frame.setData(godzillaX - 4, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 3, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 2, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 1, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 1, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Eye row - solid
+    frame.setData(godzillaX - 5, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 4, baseY - 7, GLYPH.FULL_BLOCK, godzEye);  // LEFT EYE
+    frame.setData(godzillaX - 3, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 2, baseY - 7, GLYPH.FULL_BLOCK, godzEye);  // RIGHT EYE
+    frame.setData(godzillaX - 1, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 1, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Snout/jaw - open mouth
+    frame.setData(godzillaX - 7, baseY - 6, GLYPH.LEFT_HALF, godzBody);
+    frame.setData(godzillaX - 6, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 5, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 4, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 3, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 2, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 1, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Atomic breath shooting LEFT toward Mothra!
+    frame.setData(godzillaX - 8, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+    frame.setData(godzillaX - 9, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+    frame.setData(godzillaX - 10, baseY - 6, GLYPH.FULL_BLOCK, godzSpine);
+    frame.setData(godzillaX - 11, baseY - 6, GLYPH.MEDIUM_SHADE, godzBreath);
+    frame.setData(godzillaX - 10, baseY - 5, GLYPH.LIGHT_SHADE, godzBreath);
+    frame.setData(godzillaX - 10, baseY - 7, GLYPH.LIGHT_SHADE, godzBreath);
+    
+    // Neck - solid connection to body
+    frame.setData(godzillaX - 3, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 2, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 1, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 1, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 2, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Body - wider torso
+    frame.setData(godzillaX - 4, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 2, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 1, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 1, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 2, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Arms reaching
+    frame.setData(godzillaX - 6, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 5, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Lower body
+    frame.setData(godzillaX - 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 2, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 1, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 1, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 2, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Legs - LEFT LEG
+    frame.setData(godzillaX - 3, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 2, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX - 3, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX - 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Legs - RIGHT LEG
+    frame.setData(godzillaX + 1, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+    frame.setData(godzillaX + 2, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 1, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+    
+    // Tail going right
+    frame.setData(godzillaX + 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 4, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 5, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 6, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+    frame.setData(godzillaX + 7, baseY - 1, GLYPH.RIGHT_HALF, godzBody);
+  }
+
   /**
    * Render mountains to their frame (can be scrolled for parallax).
    */
@@ -1730,6 +1968,105 @@ class FrameRenderer implements IRenderer {
   }
 
   /**
+   * Render destroyed city background for Kaiju Rampage theme.
+   * Buildings on edges only - CENTER is clear for the giant monster.
+   */
+  private renderDestroyedCity(): void {
+    var frame = this.frameManager.getMountainsFrame();
+    if (!frame) return;
+    
+    // Simple color palette
+    var fire = makeAttr(LIGHTRED, BG_BLACK);
+    var fireGlow = makeAttr(YELLOW, BG_BLACK);
+    var heli = makeAttr(GREEN, BG_BLACK);
+    var tracer = makeAttr(YELLOW, BG_BLACK);
+    
+    // === MILITARY attacking from the right ===
+    
+    // Helicopter on far right
+    this.drawSimpleHelicopter(frame, 70, 3, heli);
+    // Tracer fire going left toward monster
+    frame.setData(67, 4, '-', tracer);
+    frame.setData(65, 4, '-', tracer);
+    frame.setData(63, 4, '-', tracer);
+    frame.setData(61, 5, '*', fire);
+    
+    // Second helicopter
+    this.drawSimpleHelicopter(frame, 75, 6, heli);
+    
+    // === BUILDINGS ON FAR LEFT (behind monster's tail area) ===
+    this.drawSimpleBuilding(frame, 2, 6, 3, true);
+    this.drawSimpleBuilding(frame, 7, 8, 3, false);
+    this.drawSimpleBuilding(frame, 12, 5, 3, true);
+    
+    // === BUILDINGS ON FAR RIGHT ===
+    this.drawSimpleBuilding(frame, 62, 7, 3, true);
+    this.drawSimpleBuilding(frame, 68, 9, 4, true);
+    // Fire on this building
+    frame.setData(70, this.horizonY - 10, '^', fireGlow);
+    frame.setData(70, this.horizonY - 11, '*', fire);
+    
+    this.drawSimpleBuilding(frame, 74, 6, 3, false);
+    
+    // === GROUND FIRES on edges ===
+    frame.setData(5, this.horizonY - 1, '^', fireGlow);
+    frame.setData(5, this.horizonY - 2, '*', fire);
+    
+    frame.setData(72, this.horizonY - 1, '^', fireGlow);
+    frame.setData(72, this.horizonY - 2, '*', fire);
+  }
+
+  /**
+   * Draw a simple, clean helicopter shape.
+   */
+  private drawSimpleHelicopter(frame: Frame, x: number, y: number, attr: number): void {
+    // Rotor
+    frame.setData(x - 1, y - 1, '-', attr);
+    frame.setData(x, y - 1, '+', attr);
+    frame.setData(x + 1, y - 1, '-', attr);
+    // Body
+    frame.setData(x - 1, y, '<', attr);
+    frame.setData(x, y, GLYPH.FULL_BLOCK, attr);
+    frame.setData(x + 1, y, GLYPH.FULL_BLOCK, attr);
+    frame.setData(x + 2, y, '-', attr);
+    frame.setData(x + 3, y, '>', attr);
+  }
+
+  /**
+   * Draw a simple building silhouette.
+   */
+  private drawSimpleBuilding(frame: Frame, x: number, height: number, width: number, damaged: boolean): void {
+    var building = makeAttr(DARKGRAY, BG_BLACK);
+    var window = makeAttr(BLACK, BG_BLACK);
+    var baseY = this.horizonY - 1;
+    
+    for (var h = 0; h < height; h++) {
+      var y = baseY - h;
+      if (y < 0) continue;
+      
+      // Damaged buildings have jagged tops
+      if (damaged && h >= height - 1) {
+        // Only draw some blocks at top
+        for (var w = 0; w < width; w++) {
+          if ((x + w) % 2 === 0) {
+            frame.setData(x + w, y, GLYPH.DARK_SHADE, building);
+          }
+        }
+      } else {
+        // Normal building row
+        for (var w = 0; w < width; w++) {
+          // Windows every other row
+          if (h % 2 === 1 && w > 0 && w < width - 1) {
+            frame.setData(x + w, y, GLYPH.MEDIUM_SHADE, window);
+          } else {
+            frame.setData(x + w, y, GLYPH.FULL_BLOCK, building);
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Draw a single mountain shape to a frame.
    */
   private drawMountainToFrame(frame: Frame, baseX: number, baseY: number, 
@@ -2353,7 +2690,7 @@ class FrameRenderer implements IRenderer {
       var isFinishLine = (wrappedZ < 200) || (wrappedZ > roadLength - 200);
       
       this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, 
-                              distance, stripePhase, isFinishLine, accumulatedCurve);
+                              distance, stripePhase, isFinishLine, accumulatedCurve, worldZ);
     }
   }
   
@@ -2363,7 +2700,7 @@ class FrameRenderer implements IRenderer {
   private renderRoadScanline(frame: Frame, y: number, centerX: number,
                               leftEdge: number, rightEdge: number,
                               distance: number, stripePhase: number,
-                              isFinishLine: boolean, curve?: number): void {
+                              isFinishLine: boolean, curve?: number, worldZ?: number): void {
     var colors = this.activeTheme.colors;
     
     // Get base colors
@@ -2377,6 +2714,28 @@ class FrameRenderer implements IRenderer {
     var baseStripeBg = colors.roadStripe.bg;
     var baseShoulderFg = colors.shoulderPrimary.fg;
     var baseShoulderBg = colors.shoulderPrimary.bg;
+    
+    // Apply rainbow road colors - cycles through spectrum based on WORLD position
+    // worldZ makes the colors move as you drive!
+    var isRainbowRoad = this.activeTheme.road && this.activeTheme.road.rainbow;
+    if (isRainbowRoad) {
+      var rainbowColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+      // Use worldZ (track position) so colors change as you drive
+      var trackPos = worldZ || 0;
+      var colorIndex = Math.floor(trackPos * 0.02) % rainbowColors.length;
+      var nextColorIndex = (colorIndex + 1) % rainbowColors.length;
+      baseSurfaceFg = rainbowColors[colorIndex];
+      baseSurfaceBg = BG_BLACK;
+      baseGridFg = rainbowColors[nextColorIndex];
+      baseGridBg = BG_BLACK;
+      baseEdgeFg = rainbowColors[colorIndex];
+      baseEdgeBg = BG_BLACK;
+      baseStripeFg = WHITE;
+      baseStripeBg = BG_BLACK;
+      // Extend rainbow to shoulders for seamless blend
+      baseShoulderFg = rainbowColors[(colorIndex + 2) % rainbowColors.length];
+      baseShoulderBg = BG_BLACK;
+    }
     
     // Apply glitch color corruption if on glitch theme
     if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined' && GlitchState.roadColorGlitch !== 0) {
@@ -2406,13 +2765,14 @@ class FrameRenderer implements IRenderer {
     var edgeAttr = makeAttr(baseEdgeFg, baseEdgeBg);
     var stripeAttr = makeAttr(baseStripeFg, baseStripeBg);
     var shoulderAttr = makeAttr(baseShoulderFg, baseShoulderBg);
+    var hideEdgeMarkers = this.activeTheme.road && this.activeTheme.road.hideEdgeMarkers;
     
     for (var x = 0; x < this.width; x++) {
       if (x >= leftEdge && x <= rightEdge) {
         // On road
         if (isFinishLine) {
           this.renderFinishCell(frame, x, y, centerX, leftEdge, rightEdge, distance);
-        } else if (x === leftEdge || x === rightEdge) {
+        } else if ((x === leftEdge || x === rightEdge) && !hideEdgeMarkers) {
           frame.setData(x, y, GLYPH.BOX_V, edgeAttr);
         } else if (Math.abs(x - centerX) < 1 && stripePhase === 0) {
           frame.setData(x, y, GLYPH.BOX_V, stripeAttr);
@@ -2421,7 +2781,12 @@ class FrameRenderer implements IRenderer {
           if (gridPhase === 0 && distance > 5) {
             frame.setData(x, y, GLYPH.BOX_H, gridAttr);
           } else {
-            frame.setData(x, y, ' ', roadAttr);
+            // For rainbow road, use full blocks to show the color
+            if (isRainbowRoad) {
+              frame.setData(x, y, GLYPH.FULL_BLOCK, roadAttr);
+            } else {
+              frame.setData(x, y, ' ', roadAttr);
+            }
           }
         }
       } else {
@@ -2738,6 +3103,77 @@ class FrameRenderer implements IRenderer {
     
     // Track progress bar at bottom right
     this.renderTrackProgress(frame, hudData.lapProgress);
+    
+    // Render countdown stoplight if race hasn't started
+    if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
+      this.renderStoplight(frame, hudData.countdown);
+    }
+  }
+  
+  /**
+   * Render stoplight countdown graphic - horizontal layout above track.
+   */
+  private renderStoplight(frame: Frame, countdown: number): void {
+    var countNum = Math.ceil(countdown);
+    var centerX = 40;
+    var topY = 3;  // Near top, below HUD bar
+    
+    // Frame/housing colors
+    var frameAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    
+    // Light states based on countdown
+    var redOn = countNum >= 3;
+    var yellowOn = countNum === 2;
+    var greenOn = countNum === 1;
+    
+    // Light colors (on vs off) - brighter when on
+    var redAttr = redOn ? colorToAttr({ fg: LIGHTRED, bg: BG_RED }) : colorToAttr({ fg: RED, bg: BG_BLACK });
+    var yellowAttr = yellowOn ? colorToAttr({ fg: YELLOW, bg: BG_BROWN }) : colorToAttr({ fg: BROWN, bg: BG_BLACK });
+    var greenAttr = greenOn ? colorToAttr({ fg: LIGHTGREEN, bg: BG_GREEN }) : colorToAttr({ fg: GREEN, bg: BG_BLACK });
+    
+    // Horizontal stoplight (15 chars wide x 3 tall)
+    // [###] [###] [###]
+    var boxX = centerX - 7;
+    
+    // Top border
+    frame.setData(boxX, topY, GLYPH.DBOX_TL, frameAttr);
+    for (var i = 1; i < 14; i++) {
+      frame.setData(boxX + i, topY, GLYPH.DBOX_H, frameAttr);
+    }
+    frame.setData(boxX + 14, topY, GLYPH.DBOX_TR, frameAttr);
+    
+    // Middle row with lights: | ## | ## | ## |
+    frame.setData(boxX, topY + 1, GLYPH.DBOX_V, frameAttr);
+    
+    // RED light (positions 1-3)
+    frame.setData(boxX + 1, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    frame.setData(boxX + 2, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    frame.setData(boxX + 3, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+    
+    frame.setData(boxX + 4, topY + 1, GLYPH.DBOX_V, frameAttr);
+    
+    // YELLOW light (positions 5-7)
+    frame.setData(boxX + 5, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+    frame.setData(boxX + 6, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+    frame.setData(boxX + 7, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+    
+    frame.setData(boxX + 8, topY + 1, GLYPH.DBOX_V, frameAttr);
+    
+    // GREEN light (positions 9-11)
+    frame.setData(boxX + 9, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+    frame.setData(boxX + 10, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+    frame.setData(boxX + 11, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+    
+    frame.setData(boxX + 12, topY + 1, ' ', frameAttr);
+    frame.setData(boxX + 13, topY + 1, countNum.toString(), colorToAttr({ fg: WHITE, bg: BG_BLACK }));
+    frame.setData(boxX + 14, topY + 1, GLYPH.DBOX_V, frameAttr);
+    
+    // Bottom border
+    frame.setData(boxX, topY + 2, GLYPH.DBOX_BL, frameAttr);
+    for (var j = 1; j < 14; j++) {
+      frame.setData(boxX + j, topY + 2, GLYPH.DBOX_H, frameAttr);
+    }
+    frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
   }
   
   /**

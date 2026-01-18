@@ -124,6 +124,12 @@ var RainbowRoadTheme: Theme = {
     ],
     spacing: 45,
     density: 1.0
+  },
+  
+  // Rainbow road effect - cycles through colors, no edge markers
+  road: {
+    rainbow: true,
+    hideEdgeMarkers: true
   }
 };
 

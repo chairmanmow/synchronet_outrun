@@ -47,6 +47,7 @@ var Vehicle = (function (_super) {
         _this.crashTimer = 0;
         _this.flashTimer = 0;
         _this.isNPC = false;
+        _this.isRacer = false;
         _this.npcType = 'sedan';
         _this.npcColorIndex = 0;
         return _this;

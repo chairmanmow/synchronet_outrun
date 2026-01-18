@@ -51,7 +51,7 @@ var RaceSystem = (function () {
             }
             this.lastTrackZ[vehicle.id] = currentZ;
         }
-        PositionIndicator.calculatePositions(state.vehicles);
+        PositionIndicator.calculatePositions(state.vehicles, roadLength);
     };
     return RaceSystem;
 }());

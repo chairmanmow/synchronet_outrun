@@ -587,6 +587,37 @@ var TRACK_THEMES: { [id: string]: TrackTheme } = {
       color: { fg: GREEN, bg: BG_BLACK },
       highlightColor: { fg: LIGHTGREEN, bg: BG_BLACK }
     }
+  },
+
+  'kaiju_rampage': {
+    id: 'kaiju_rampage',
+    name: 'Kaiju Rampage',
+    sky: {
+      top: { fg: DARKGRAY, bg: BG_BLACK },
+      horizon: { fg: RED, bg: BG_BLACK },
+      gridColor: { fg: BROWN, bg: BG_BLACK }
+    },
+    sun: {
+      color: { fg: LIGHTRED, bg: BG_RED },
+      glowColor: { fg: YELLOW, bg: BG_BLACK },
+      position: 0.3
+    },
+    road: {
+      surface: { fg: DARKGRAY, bg: BG_BLACK },
+      stripe: { fg: YELLOW, bg: BG_BLACK },
+      edge: { fg: LIGHTRED, bg: BG_BLACK },
+      grid: { fg: BROWN, bg: BG_BLACK }
+    },
+    offroad: {
+      groundColor: { fg: BROWN, bg: BG_BLACK },
+      sceneryTypes: ['rubble', 'wrecked_car', 'fire', 'monster_footprint', 'fallen_building', 'tank'],
+      sceneryDensity: 0.35
+    },
+    background: {
+      type: 'destroyed_city',
+      color: { fg: DARKGRAY, bg: BG_BLACK },
+      highlightColor: { fg: LIGHTRED, bg: BG_BLACK }
+    }
   }
 };
 
@@ -595,561 +626,475 @@ var TRACK_THEMES: { [id: string]: TrackTheme } = {
 // ============================================================
 
 var TRACK_CATALOG: TrackDefinition[] = [
-  // ---- TEST TRACK (short, for debugging) ----
-  {
-    id: 'test_oval',
-    name: 'Test Oval',
-    description: 'Short oval for testing (30 sec lap)',
-    difficulty: 1,
-    laps: 2,
-    themeId: 'synthwave',
-    estimatedLapTime: 30,
-    npcCount: 3,
-    sections: [
-      { type: 'straight', length: 15 },
-      { type: 'ease_in', length: 5, targetCurve: 0.5 },
-      { type: 'curve', length: 15, curve: 0.5 },
-      { type: 'ease_out', length: 5 },
-      { type: 'straight', length: 15 },
-      { type: 'ease_in', length: 5, targetCurve: 0.5 },
-      { type: 'curve', length: 15, curve: 0.5 },
-      { type: 'ease_out', length: 5 }
-    ]
-  },
+  // ============================================================
+  // SPRINT TRACKS (~1:00-1:30 total race time, 20-30 seg laps)
+  // ============================================================
 
-  // ---- NEON COAST (original track) ----
-  {
-    id: 'neon_coast',
-    name: 'Neon Coast',
-    description: 'Synthwave sunset drive along the coast',
-    difficulty: 2,
-    laps: 3,
-    themeId: 'synthwave',
-    estimatedLapTime: 90,
-    npcCount: 6,
-    sections: [
-      { type: 'straight', length: 30 },
-      { type: 'ease_in', length: 10, targetCurve: 0.4 },
-      { type: 'curve', length: 30, curve: 0.4 },
-      { type: 'ease_out', length: 10 },
-      { type: 'straight', length: 40 },
-      { type: 'ease_in', length: 8, targetCurve: -0.6 },
-      { type: 'curve', length: 25, curve: -0.6 },
-      { type: 'ease_out', length: 8 },
-      { type: 'straight', length: 25 },
-      { type: 's_curve', length: 54 },  // S-curve section
-      { type: 'straight', length: 35 }
-    ]
-  },
-
-  // ---- DOWNTOWN DASH ----
-  {
-    id: 'downtown_dash',
-    name: 'Downtown Dash',
-    description: 'Race through the neon-lit city streets',
-    difficulty: 3,
-    laps: 3,
-    themeId: 'midnight_city',
-    estimatedLapTime: 75,
-    npcCount: 8,
-    sections: [
-      { type: 'straight', length: 20 },
-      { type: 'ease_in', length: 5, targetCurve: 0.7 },
-      { type: 'curve', length: 12, curve: 0.7 },
-      { type: 'ease_out', length: 5 },
-      { type: 'straight', length: 15 },
-      { type: 'ease_in', length: 4, targetCurve: -0.8 },
-      { type: 'curve', length: 10, curve: -0.8 },
-      { type: 'ease_out', length: 4 },
-      { type: 'straight', length: 20 },
-      { type: 's_curve', length: 30 },
-      { type: 'straight', length: 15 },
-      { type: 'ease_in', length: 6, targetCurve: 0.5 },
-      { type: 'curve', length: 20, curve: 0.5 },
-      { type: 'ease_out', length: 6 }
-    ]
-  },
-
-  // ---- SUNSET BEACH ----
+  // ---- SUNSET BEACH (easy intro track) ----
   {
     id: 'sunset_beach',
     name: 'Sunset Beach',
-    description: 'Cruise along the beautiful coastline',
+    description: 'Gentle coastal cruise - perfect for beginners',
     difficulty: 1,
     laps: 3,
     themeId: 'beach_paradise',
-    estimatedLapTime: 60,
+    estimatedLapTime: 25,
     npcCount: 4,
     sections: [
-      { type: 'straight', length: 25 },
-      { type: 'ease_in', length: 8, targetCurve: 0.3 },
-      { type: 'curve', length: 20, curve: 0.3 },
-      { type: 'ease_out', length: 8 },
-      { type: 'straight', length: 30 },
-      { type: 'ease_in', length: 8, targetCurve: -0.3 },
-      { type: 'curve', length: 20, curve: -0.3 },
-      { type: 'ease_out', length: 8 },
-      { type: 'straight', length: 20 }
+      { type: 'straight', length: 8 },
+      { type: 'ease_in', length: 3, targetCurve: 0.3 },
+      { type: 'curve', length: 6, curve: 0.3 },
+      { type: 'ease_out', length: 3 },
+      { type: 'straight', length: 5 }
     ]
   },
 
-  // ---- HAUNTED HOLLOW (horror themed) ----
+  // ---- SUGAR RUSH (fun candy sprint) ----
   {
-    id: 'haunted_hollow',
-    name: 'Haunted Hollow',
-    description: 'Race through the cemetery under a blood moon',
-    difficulty: 4,
-    laps: 3,
-    themeId: 'haunted_hollow',
-    estimatedLapTime: 70,
-    npcCount: 3,
-    sections: [
-      // Start at cemetery gates
-      { type: 'straight', length: 15 },
-      // Wind around gravestones
-      { type: 'ease_in', length: 5, targetCurve: -0.4 },
-      { type: 'curve', length: 12, curve: -0.4 },
-      { type: 'ease_out', length: 4 },
-      // Brief straight past the crypt
-      { type: 'straight', length: 10 },
-      // Sharp turn around haunted mausoleum
-      { type: 'ease_in', length: 4, targetCurve: 0.7 },
-      { type: 'curve', length: 15, curve: 0.7 },
-      { type: 'ease_out', length: 4 },
-      // S-curve through dead tree grove
-      { type: 'ease_in', length: 3, targetCurve: -0.5 },
-      { type: 'curve', length: 10, curve: -0.5 },
-      { type: 'ease_in', length: 3, targetCurve: 0.5 },
-      { type: 'curve', length: 10, curve: 0.5 },
-      { type: 'ease_out', length: 3 },
-      // Tight turn around the gallows
-      { type: 'ease_in', length: 3, targetCurve: -0.8 },
-      { type: 'curve', length: 8, curve: -0.8 },
-      { type: 'ease_out', length: 3 },
-      // Final stretch back to gates
-      { type: 'straight', length: 12 }
-    ]
-  },
-
-  // ---- WINTER WONDERLAND (snowy themed) ----
-  {
-    id: 'winter_wonderland',
-    name: 'Winter Wonderland',
-    description: 'Magical snowy race through a frosty forest',
+    id: 'sugar_rush',
+    name: 'Sugar Rush',
+    description: 'Sweet sprint through candy land!',
     difficulty: 2,
     laps: 3,
-    themeId: 'winter_wonderland',
-    estimatedLapTime: 65,
+    themeId: 'candy_land',
+    estimatedLapTime: 28,
     npcCount: 4,
     sections: [
-      // Start at ski lodge
-      { type: 'straight', length: 20 },
-      // Gentle curve around frozen lake
-      { type: 'ease_in', length: 6, targetCurve: 0.3 },
-      { type: 'curve', length: 18, curve: 0.3 },
-      { type: 'ease_out', length: 6 },
-      // Straight through pine forest
-      { type: 'straight', length: 15 },
-      // Sweeping turn past snowman village
-      { type: 'ease_in', length: 5, targetCurve: -0.4 },
-      { type: 'curve', length: 15, curve: -0.4 },
-      { type: 'ease_out', length: 5 },
-      // S-curve through ice crystal canyon
-      { type: 'ease_in', length: 4, targetCurve: 0.35 },
-      { type: 'curve', length: 10, curve: 0.35 },
-      { type: 'ease_in', length: 4, targetCurve: -0.35 },
-      { type: 'curve', length: 10, curve: -0.35 },
-      { type: 'ease_out', length: 4 },
-      // Final stretch back to lodge
-      { type: 'straight', length: 18 }
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 5, curve: 0.4 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.35 },
+      { type: 'curve', length: 5, curve: -0.35 },
+      { type: 'ease_out', length: 2 }
     ]
   },
 
-  // ---- CACTUS CANYON (desert themed) ----
+  // ---- THUNDER STADIUM (oval-style) ----
   {
-    id: 'cactus_canyon',
-    name: 'Cactus Canyon',
-    description: 'Blazing desert race through the Southwest canyons',
-    difficulty: 3,
-    laps: 3,
-    themeId: 'cactus_canyon',
-    estimatedLapTime: 75,
-    npcCount: 5,
-    sections: [
-      // Start at old west town
-      { type: 'straight', length: 18 },
-      // Sweeping turn into canyon
-      { type: 'ease_in', length: 5, targetCurve: 0.45 },
-      { type: 'curve', length: 20, curve: 0.45 },
-      { type: 'ease_out', length: 5 },
-      // Straight through saguaro forest
-      { type: 'straight', length: 15 },
-      // Sharp hairpin around mesa
-      { type: 'ease_in', length: 4, targetCurve: -0.7 },
-      { type: 'curve', length: 12, curve: -0.7 },
-      { type: 'ease_out', length: 4 },
-      // Brief straight past cow skull landmark
-      { type: 'straight', length: 10 },
-      // S-curve through rocky canyon
-      { type: 'ease_in', length: 4, targetCurve: 0.5 },
-      { type: 'curve', length: 12, curve: 0.5 },
-      { type: 'ease_in', length: 4, targetCurve: -0.5 },
-      { type: 'curve', length: 12, curve: -0.5 },
-      { type: 'ease_out', length: 4 },
-      // Final stretch back to town
-      { type: 'straight', length: 20 }
-    ]
-  },
-
-  // ---- QUICK TEST (very short) ----
-  {
-    id: 'quick_test',
-    name: 'Quick Test',
-    description: 'Ultra-short track for quick testing',
+    id: 'thunder_stadium',
+    name: 'Thunder Stadium',
+    description: 'Oval speedway under the lights',
     difficulty: 1,
-    laps: 2,
-    themeId: 'synthwave',
-    estimatedLapTime: 15,
-    npcCount: 2,
+    laps: 4,
+    themeId: 'thunder_stadium',
+    estimatedLapTime: 22,
+    npcCount: 6,
     sections: [
-      { type: 'straight', length: 10 },
-      { type: 'ease_in', length: 3, targetCurve: 0.4 },
-      { type: 'curve', length: 8, curve: 0.4 },
-      { type: 'ease_out', length: 3 },
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 6, curve: 0.5 },
+      { type: 'ease_out', length: 2 },
       { type: 'straight', length: 6 }
     ]
   },
 
-  // ---- TWILIGHT GROVE (forest track) ----
+  // ============================================================
+  // STANDARD TRACKS (~1:45-2:30 total race time, 35-50 seg laps)
+  // ============================================================
+
+  // ---- NEON COAST (signature track) ----
   {
-    id: 'twilight_grove',
-    name: 'Twilight Grove',
-    description: 'Winding forest road under dual moons and dancing fireflies',
-    difficulty: 3,
+    id: 'neon_coast',
+    name: 'Neon Coast',
+    description: 'Synthwave sunset along the coast',
+    difficulty: 2,
     laps: 3,
-    themeId: 'forest_night',
-    estimatedLapTime: 55,
+    themeId: 'synthwave',
+    estimatedLapTime: 38,
+    npcCount: 6,
     sections: [
-      // Start in a clearing
-      { type: 'straight', length: 12 },
-      // Wind into the forest
-      { type: 'ease_in', length: 5, targetCurve: -0.3 },
-      { type: 'curve', length: 10, curve: -0.3 },
-      { type: 'ease_out', length: 4 },
-      // Brief straight through tall trees
       { type: 'straight', length: 8 },
-      // Sharp turn around old oak
-      { type: 'ease_in', length: 4, targetCurve: 0.6 },
-      { type: 'curve', length: 12, curve: 0.6 },
-      { type: 'ease_out', length: 4 },
-      // S-curve through the grove
-      { type: 'ease_in', length: 3, targetCurve: -0.4 },
-      { type: 'curve', length: 8, curve: -0.4 },
       { type: 'ease_in', length: 3, targetCurve: 0.4 },
       { type: 'curve', length: 8, curve: 0.4 },
       { type: 'ease_out', length: 3 },
-      // Final stretch back to clearing
-      { type: 'straight', length: 10 }
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 2, targetCurve: -0.5 },
+      { type: 'curve', length: 6, curve: -0.5 },
+      { type: 'ease_out', length: 2 }
     ]
   },
 
-  // ---- JUNGLE RUN (tropical jungle) ----
+  // ---- DOWNTOWN DASH (city streets) ----
+  {
+    id: 'downtown_dash',
+    name: 'Downtown Dash',
+    description: 'Tight corners through city streets',
+    difficulty: 3,
+    laps: 3,
+    themeId: 'midnight_city',
+    estimatedLapTime: 42,
+    npcCount: 7,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.7 },
+      { type: 'curve', length: 5, curve: 0.7 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.75 },
+      { type: 'curve', length: 5, curve: -0.75 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 6, curve: 0.5 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- WINTER WONDERLAND (snowy) ----
+  {
+    id: 'winter_wonderland',
+    name: 'Winter Wonderland',
+    description: 'Icy roads through a frosty forest',
+    difficulty: 2,
+    laps: 3,
+    themeId: 'winter_wonderland',
+    estimatedLapTime: 35,
+    npcCount: 4,
+    sections: [
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 3, targetCurve: 0.35 },
+      { type: 'curve', length: 7, curve: 0.35 },
+      { type: 'ease_out', length: 3 },
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: -0.4 },
+      { type: 'curve', length: 6, curve: -0.4 },
+      { type: 'ease_out', length: 3 }
+    ]
+  },
+
+  // ---- CACTUS CANYON (desert) ----
+  {
+    id: 'cactus_canyon',
+    name: 'Cactus Canyon',
+    description: 'Blazing trails through desert canyons',
+    difficulty: 3,
+    laps: 3,
+    themeId: 'cactus_canyon',
+    estimatedLapTime: 40,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 7, curve: 0.5 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.65 },
+      { type: 'curve', length: 6, curve: -0.65 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 4, curve: 0.4 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- TWILIGHT GROVE (forest) ----
+  {
+    id: 'twilight_grove',
+    name: 'Twilight Grove',
+    description: 'Winding paths under dual moons',
+    difficulty: 3,
+    laps: 3,
+    themeId: 'forest_night',
+    estimatedLapTime: 38,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: -0.4 },
+      { type: 'curve', length: 5, curve: -0.4 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: 0.55 },
+      { type: 'curve', length: 6, curve: 0.55 },
+      { type: 'ease_out', length: 2 },
+      { type: 'ease_in', length: 2, targetCurve: -0.45 },
+      { type: 'curve', length: 5, curve: -0.45 },
+      { type: 'ease_out', length: 3 }
+    ]
+  },
+
+  // ---- JUNGLE RUN (tropical) ----
   {
     id: 'jungle_run',
     name: 'Jungle Run',
-    description: 'Race through dense tropical rainforest with exotic wildlife',
+    description: 'Dense rainforest with tight turns',
     difficulty: 3,
     laps: 3,
     themeId: 'tropical_jungle',
-    estimatedLapTime: 60,
+    estimatedLapTime: 36,
     npcCount: 5,
     sections: [
-      // Start at jungle outpost
-      { type: 'straight', length: 15 },
-      // Curve around massive banyan tree
-      { type: 'ease_in', length: 5, targetCurve: 0.45 },
-      { type: 'curve', length: 15, curve: 0.45 },
-      { type: 'ease_out', length: 5 },
-      // Through vine-covered passage
-      { type: 'straight', length: 12 },
-      // Sharp turn at waterfall
-      { type: 'ease_in', length: 4, targetCurve: -0.6 },
-      { type: 'curve', length: 10, curve: -0.6 },
-      { type: 'ease_out', length: 4 },
-      // S-curve through fern valley
-      { type: 'ease_in', length: 4, targetCurve: 0.4 },
-      { type: 'curve', length: 10, curve: 0.4 },
-      { type: 'ease_in', length: 4, targetCurve: -0.4 },
-      { type: 'curve', length: 10, curve: -0.4 },
-      { type: 'ease_out', length: 4 },
-      // Final dash back to outpost
-      { type: 'straight', length: 18 }
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 6, curve: 0.5 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.55 },
+      { type: 'curve', length: 5, curve: -0.55 },
+      { type: 'ease_out', length: 2 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 4, curve: 0.4 },
+      { type: 'ease_out', length: 2 }
     ]
   },
 
-  // ---- SUGAR RUSH (candy land) ----
+  // ---- HAUNTED HOLLOW (horror) ----
   {
-    id: 'sugar_rush',
-    name: 'Sugar Rush',
-    description: 'Sweet racing through a land made entirely of candy!',
-    difficulty: 2,
+    id: 'haunted_hollow',
+    name: 'Haunted Hollow',
+    description: 'Spooky cemetery with sharp turns',
+    difficulty: 4,
     laps: 3,
-    themeId: 'candy_land',
-    estimatedLapTime: 50,
-    npcCount: 4,
+    themeId: 'haunted_hollow',
+    estimatedLapTime: 44,
+    npcCount: 3,
     sections: [
-      // Start at Gingerbread Village
-      { type: 'straight', length: 12 },
-      // Around the giant lollipop
-      { type: 'ease_in', length: 4, targetCurve: 0.35 },
-      { type: 'curve', length: 12, curve: 0.35 },
-      { type: 'ease_out', length: 4 },
-      // Through candy cane forest
-      { type: 'straight', length: 10 },
-      // Spiral around gumdrop mountain
-      { type: 'ease_in', length: 5, targetCurve: -0.5 },
-      { type: 'curve', length: 14, curve: -0.5 },
-      { type: 'ease_out', length: 5 },
-      // Chocolate river crossing
-      { type: 'straight', length: 8 },
-      // S-curves through cotton candy clouds
-      { type: 'ease_in', length: 3, targetCurve: 0.3 },
-      { type: 'curve', length: 8, curve: 0.3 },
-      { type: 'ease_in', length: 3, targetCurve: -0.3 },
-      { type: 'curve', length: 8, curve: -0.3 },
-      { type: 'ease_out', length: 3 },
-      // Back to the village
-      { type: 'straight', length: 10 }
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: -0.5 },
+      { type: 'curve', length: 5, curve: -0.5 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 3 },
+      { type: 'ease_in', length: 2, targetCurve: 0.7 },
+      { type: 'curve', length: 6, curve: 0.7 },
+      { type: 'ease_out', length: 2 },
+      { type: 'ease_in', length: 2, targetCurve: -0.6 },
+      { type: 'curve', length: 4, curve: -0.6 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 4, curve: 0.5 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 3 }
     ]
   },
 
-  // ---- CELESTIAL CIRCUIT (rainbow road) ----
+  // ---- FORTRESS RALLY (castle) ----
+  {
+    id: 'fortress_rally',
+    name: 'Fortress Rally',
+    description: 'Medieval castle walls and courtyards',
+    difficulty: 4,
+    laps: 3,
+    themeId: 'dark_castle',
+    estimatedLapTime: 45,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.45 },
+      { type: 'curve', length: 6, curve: 0.45 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.7 },
+      { type: 'curve', length: 5, curve: -0.7 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 3 },
+      { type: 'ease_in', length: 2, targetCurve: 0.5 },
+      { type: 'curve', length: 5, curve: 0.5 },
+      { type: 'ease_in', length: 2, targetCurve: -0.45 },
+      { type: 'curve', length: 5, curve: -0.45 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- PHARAOH'S TOMB (ruins) ----
+  {
+    id: 'pharaohs_tomb',
+    name: "Pharaoh's Tomb",
+    description: 'Ancient pyramid mysteries',
+    difficulty: 3,
+    laps: 3,
+    themeId: 'ancient_ruins',
+    estimatedLapTime: 40,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.45 },
+      { type: 'curve', length: 6, curve: 0.45 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.55 },
+      { type: 'curve', length: 5, curve: -0.55 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 4, curve: 0.4 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- INFERNO SPEEDWAY (volcano) ----
+  {
+    id: 'inferno_speedway',
+    name: 'Inferno Speedway',
+    description: 'Volcanic villain lair at your peril',
+    difficulty: 5,
+    laps: 3,
+    themeId: 'villains_lair',
+    estimatedLapTime: 48,
+    npcCount: 6,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.6 },
+      { type: 'curve', length: 7, curve: 0.6 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.7 },
+      { type: 'curve', length: 6, curve: -0.7 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 3 },
+      { type: 'ease_in', length: 2, targetCurve: 0.55 },
+      { type: 'curve', length: 5, curve: 0.55 },
+      { type: 'ease_in', length: 2, targetCurve: -0.5 },
+      { type: 'curve', length: 5, curve: -0.5 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- KAIJU RAMPAGE (monster city) ----
+  {
+    id: 'kaiju_rampage',
+    name: 'Kaiju Rampage',
+    description: 'Flee the monster through a crumbling city!',
+    difficulty: 5,
+    laps: 3,
+    themeId: 'kaiju_rampage',
+    estimatedLapTime: 50,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 2, targetCurve: 0.75 },
+      { type: 'curve', length: 5, curve: 0.75 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.6 },
+      { type: 'curve', length: 4, curve: -0.6 },
+      { type: 'ease_in', length: 2, targetCurve: 0.55 },
+      { type: 'curve', length: 4, curve: 0.55 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: -0.65 },
+      { type: 'curve', length: 6, curve: -0.65 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 }
+    ]
+  },
+
+  // ============================================================
+  // ENDURANCE TRACKS (~3:00-4:00 total race time, 60-80 seg laps)
+  // ============================================================
+
+  // ---- CELESTIAL CIRCUIT (longest rainbow road) ----
   {
     id: 'celestial_circuit',
     name: 'Celestial Circuit',
-    description: 'Cosmic racing through the stars on a rainbow of light',
+    description: 'Epic cosmic journey through the stars',
     difficulty: 4,
     laps: 3,
     themeId: 'rainbow_road',
     estimatedLapTime: 70,
-    npcCount: 6,
-    sections: [
-      // Launch from space station
-      { type: 'straight', length: 20 },
-      // Around the moon
-      { type: 'ease_in', length: 6, targetCurve: 0.55 },
-      { type: 'curve', length: 18, curve: 0.55 },
-      { type: 'ease_out', length: 6 },
-      // Through asteroid field
-      { type: 'straight', length: 15 },
-      // Sharp turn past nebula
-      { type: 'ease_in', length: 4, targetCurve: -0.65 },
-      { type: 'curve', length: 12, curve: -0.65 },
-      { type: 'ease_out', length: 4 },
-      // Brief straight past comet
-      { type: 'straight', length: 10 },
-      // Double helix around binary stars
-      { type: 'ease_in', length: 5, targetCurve: 0.5 },
-      { type: 'curve', length: 14, curve: 0.5 },
-      { type: 'ease_in', length: 5, targetCurve: -0.5 },
-      { type: 'curve', length: 14, curve: -0.5 },
-      { type: 'ease_out', length: 5 },
-      // Return to station
-      { type: 'straight', length: 18 }
-    ]
-  },
-
-  // ---- FORTRESS RALLY (dark castle) ----
-  {
-    id: 'fortress_rally',
-    name: 'Fortress Rally',
-    description: 'Navigate the twisting roads of a medieval fortress',
-    difficulty: 4,
-    laps: 3,
-    themeId: 'dark_castle',
-    estimatedLapTime: 65,
-    npcCount: 5,
-    sections: [
-      // Through the main gate
-      { type: 'straight', length: 14 },
-      // Around the outer wall
-      { type: 'ease_in', length: 5, targetCurve: 0.4 },
-      { type: 'curve', length: 16, curve: 0.4 },
-      { type: 'ease_out', length: 5 },
-      // Into the courtyard
-      { type: 'straight', length: 10 },
-      // Sharp hairpin at the tower
-      { type: 'ease_in', length: 4, targetCurve: -0.7 },
-      { type: 'curve', length: 10, curve: -0.7 },
-      { type: 'ease_out', length: 4 },
-      // Through the armory
-      { type: 'straight', length: 8 },
-      // S-curve in the dungeon depths
-      { type: 'ease_in', length: 4, targetCurve: 0.45 },
-      { type: 'curve', length: 12, curve: 0.45 },
-      { type: 'ease_in', length: 4, targetCurve: -0.45 },
-      { type: 'curve', length: 12, curve: -0.45 },
-      { type: 'ease_out', length: 4 },
-      // Back across drawbridge
-      { type: 'straight', length: 16 }
-    ]
-  },
-
-  // ---- INFERNO SPEEDWAY (villain's lair) ----
-  {
-    id: 'inferno_speedway',
-    name: 'Inferno Speedway',
-    description: 'Blaze through a volcanic villain hideout at your peril',
-    difficulty: 5,
-    laps: 3,
-    themeId: 'villains_lair',
-    estimatedLapTime: 80,
     npcCount: 7,
     sections: [
-      // Exit from skull cave
-      { type: 'straight', length: 16 },
-      // Around the lava lake
-      { type: 'ease_in', length: 6, targetCurve: 0.6 },
-      { type: 'curve', length: 20, curve: 0.6 },
-      { type: 'ease_out', length: 6 },
-      // Through fire pit gauntlet
-      { type: 'straight', length: 14 },
-      // Deadly hairpin at molten core
-      { type: 'ease_in', length: 5, targetCurve: -0.75 },
-      { type: 'curve', length: 14, curve: -0.75 },
-      { type: 'ease_out', length: 5 },
-      // Brief respite
+      // Launch sequence
       { type: 'straight', length: 8 },
-      // Treacherous S-curves over lava flows
-      { type: 'ease_in', length: 5, targetCurve: 0.55 },
-      { type: 'curve', length: 15, curve: 0.55 },
-      { type: 'ease_in', length: 5, targetCurve: -0.55 },
-      { type: 'curve', length: 15, curve: -0.55 },
-      { type: 'ease_out', length: 5 },
-      // Back to skull cave
-      { type: 'straight', length: 20 }
+      // Around the moon
+      { type: 'ease_in', length: 3, targetCurve: 0.5 },
+      { type: 'curve', length: 10, curve: 0.5 },
+      { type: 'ease_out', length: 3 },
+      // Asteroid field straight
+      { type: 'straight', length: 6 },
+      // Nebula hairpin
+      { type: 'ease_in', length: 2, targetCurve: -0.65 },
+      { type: 'curve', length: 6, curve: -0.65 },
+      { type: 'ease_out', length: 2 },
+      // Comet chase
+      { type: 'straight', length: 5 },
+      // Binary star helix
+      { type: 'ease_in', length: 2, targetCurve: 0.55 },
+      { type: 'curve', length: 6, curve: 0.55 },
+      { type: 'ease_in', length: 2, targetCurve: -0.55 },
+      { type: 'curve', length: 6, curve: -0.55 },
+      { type: 'ease_out', length: 2 },
+      // Return warp
+      { type: 'straight', length: 7 }
     ]
   },
 
-  // ---- PHARAOH'S TOMB (ancient ruins) ----
-  {
-    id: 'pharaohs_tomb',
-    name: "Pharaoh's Tomb",
-    description: 'Unearth ancient secrets racing through pyramid ruins',
-    difficulty: 3,
-    laps: 3,
-    themeId: 'ancient_ruins',
-    estimatedLapTime: 58,
-    npcCount: 5,
-    sections: [
-      // Start at pyramid entrance
-      { type: 'straight', length: 14 },
-      // Around the sphinx
-      { type: 'ease_in', length: 5, targetCurve: 0.4 },
-      { type: 'curve', length: 14, curve: 0.4 },
-      { type: 'ease_out', length: 5 },
-      // Through column avenue
-      { type: 'straight', length: 12 },
-      // Turn at the obelisk
-      { type: 'ease_in', length: 4, targetCurve: -0.5 },
-      { type: 'curve', length: 12, curve: -0.5 },
-      { type: 'ease_out', length: 4 },
-      // Past hieroglyph walls
-      { type: 'straight', length: 10 },
-      // S-curve through burial chambers
-      { type: 'ease_in', length: 4, targetCurve: 0.35 },
-      { type: 'curve', length: 10, curve: 0.35 },
-      { type: 'ease_in', length: 4, targetCurve: -0.35 },
-      { type: 'curve', length: 10, curve: -0.35 },
-      { type: 'ease_out', length: 4 },
-      // Back to daylight
-      { type: 'straight', length: 16 }
-    ]
-  },
-
-  // ---- THUNDER STADIUM (dirt track stadium) ----
-  {
-    id: 'thunder_stadium',
-    name: 'Thunder Stadium',
-    description: 'Race on packed dirt under stadium lights with roaring crowds',
-    difficulty: 2,
-    laps: 4,
-    themeId: 'thunder_stadium',
-    estimatedLapTime: 42,
-    npcCount: 6,
-    sections: [
-      // Start/finish straight past main grandstand
-      { type: 'straight', length: 18 },
-      // Turn 1 - wide sweeper past pit lane
-      { type: 'ease_in', length: 5, targetCurve: 0.45 },
-      { type: 'curve', length: 16, curve: 0.45 },
-      { type: 'ease_out', length: 5 },
-      // Back straight past scoreboard
-      { type: 'straight', length: 14 },
-      // Turn 2 - tighter hairpin
-      { type: 'ease_in', length: 4, targetCurve: 0.65 },
-      { type: 'curve', length: 12, curve: 0.65 },
-      { type: 'ease_out', length: 4 },
-      // Short chute
-      { type: 'straight', length: 8 },
-      // Turn 3 - carousel
-      { type: 'ease_in', length: 5, targetCurve: -0.5 },
-      { type: 'curve', length: 18, curve: -0.5 },
-      { type: 'ease_out', length: 5 },
-      // Infield straight past fans
-      { type: 'straight', length: 12 },
-      // Turn 4 - back to main straight
-      { type: 'ease_in', length: 4, targetCurve: -0.55 },
-      { type: 'curve', length: 14, curve: -0.55 },
-      { type: 'ease_out', length: 4 },
-      // Final approach
-      { type: 'straight', length: 10 }
-    ]
-  },
-
-  // ---- GLITCH CIRCUIT (corrupted reality) ----
+  // ---- GLITCH CIRCUIT (longest corrupted reality) ----
   {
     id: 'glitch_circuit',
     name: 'Glitch Circuit',
-    description: 'Reality is corrupted. The simulation is breaking down.',
-    difficulty: 4,
+    description: 'Reality is corrupted. The simulation breaks.',
+    difficulty: 5,
     laps: 3,
     themeId: 'glitch_circuit',
-    estimatedLapTime: 55,
+    estimatedLapTime: 75,
     npcCount: 6,
     sections: [
-      // Start in stable zone
-      { type: 'straight', length: 12 },
-      // Reality starts warping - chaotic curves
-      { type: 'ease_in', length: 3, targetCurve: 0.6 },
-      { type: 'curve', length: 8, curve: 0.6 },
+      // Stable zone
+      { type: 'straight', length: 6 },
+      // Reality warps
+      { type: 'ease_in', length: 2, targetCurve: 0.6 },
+      { type: 'curve', length: 5, curve: 0.6 },
       { type: 'ease_in', length: 2, targetCurve: -0.7 },
-      { type: 'curve', length: 10, curve: -0.7 },
-      { type: 'ease_out', length: 3 },
+      { type: 'curve', length: 6, curve: -0.7 },
+      { type: 'ease_out', length: 2 },
       // Brief stability
-      { type: 'straight', length: 8 },
-      // Glitch zone - rapid direction changes
+      { type: 'straight', length: 4 },
+      // Rapid glitches
+      { type: 'ease_in', length: 2, targetCurve: 0.55 },
+      { type: 'curve', length: 4, curve: 0.55 },
+      { type: 'ease_in', length: 2, targetCurve: -0.5 },
+      { type: 'curve', length: 4, curve: -0.5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.45 },
+      { type: 'curve', length: 4, curve: 0.45 },
+      { type: 'ease_out', length: 2 },
+      // System recovery
+      { type: 'straight', length: 6 },
+      // Major corruption
+      { type: 'ease_in', length: 3, targetCurve: -0.6 },
+      { type: 'curve', length: 10, curve: -0.6 },
+      { type: 'ease_out', length: 3 },
+      // Stabilizing
+      { type: 'straight', length: 6 }
+    ]
+  },
+
+  // ============================================================
+  // TEST TRACKS (for development)
+  // ============================================================
+
+  {
+    id: 'test_oval',
+    name: 'Test Oval',
+    description: 'Simple oval for testing',
+    difficulty: 1,
+    laps: 2,
+    themeId: 'synthwave',
+    estimatedLapTime: 20,
+    npcCount: 3,
+    sections: [
+      { type: 'straight', length: 5 },
       { type: 'ease_in', length: 2, targetCurve: 0.5 },
       { type: 'curve', length: 6, curve: 0.5 },
-      { type: 'ease_in', length: 2, targetCurve: -0.5 },
-      { type: 'curve', length: 6, curve: -0.5 },
-      { type: 'ease_in', length: 2, targetCurve: 0.45 },
-      { type: 'curve', length: 6, curve: 0.45 },
-      { type: 'ease_out', length: 3 },
-      // System attempting recovery
-      { type: 'straight', length: 14 },
-      // Major corruption event - long sweeper
-      { type: 'ease_in', length: 4, targetCurve: -0.55 },
-      { type: 'curve', length: 20, curve: -0.55 },
-      { type: 'ease_out', length: 4 },
-      // Reality stabilizing for finish
-      { type: 'straight', length: 16 },
-      // One last glitch
-      { type: 'ease_in', length: 3, targetCurve: 0.4 },
-      { type: 'curve', length: 10, curve: 0.4 },
-      { type: 'ease_out', length: 3 },
-      // Return to start
-      { type: 'straight', length: 10 }
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 5 }
+    ]
+  },
+
+  {
+    id: 'quick_test',
+    name: 'Quick Test',
+    description: 'Ultra-short for quick tests',
+    difficulty: 1,
+    laps: 2,
+    themeId: 'synthwave',
+    estimatedLapTime: 12,
+    npcCount: 2,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 4, curve: 0.4 },
+      { type: 'ease_out', length: 2 }
     ]
   }
 ];

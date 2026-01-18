@@ -92,6 +92,10 @@ var RainbowRoadTheme = {
         ],
         spacing: 45,
         density: 1.0
+    },
+    road: {
+        rainbow: true,
+        hideEdgeMarkers: true
     }
 };
 registerTheme(RainbowRoadTheme);

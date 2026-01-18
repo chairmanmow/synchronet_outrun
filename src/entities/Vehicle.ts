@@ -57,6 +57,9 @@ interface IVehicle extends IEntity {
   /** Is this an NPC (commuter/AI) vehicle? */
   isNPC: boolean;
   
+  /** Is this a competitive racer (vs commuter traffic)? */
+  isRacer: boolean;
+  
   /** NPC vehicle type for sprite selection */
   npcType: string;
   
@@ -112,6 +115,7 @@ class Vehicle extends Entity implements IVehicle {
   crashTimer: number;
   flashTimer: number;
   isNPC: boolean;
+  isRacer: boolean;
   npcType: string;
   npcColorIndex: number;
 
@@ -133,6 +137,7 @@ class Vehicle extends Entity implements IVehicle {
     this.crashTimer = 0;
     this.flashTimer = 0;
     this.isNPC = false;
+    this.isRacer = false;
     this.npcType = 'sedan';
     this.npcColorIndex = 0;
   }

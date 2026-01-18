@@ -543,8 +543,19 @@ function neutralIntent() {
 var HumanDriver = (function () {
     function HumanDriver(controls) {
         this.controls = controls;
+        this.canMove = true;
     }
+    HumanDriver.prototype.setCanMove = function (canMove) {
+        this.canMove = canMove;
+    };
     HumanDriver.prototype.update = function (_vehicle, _track, _dt) {
+        if (!this.canMove) {
+            return {
+                accelerate: 0,
+                steer: 0,
+                useItem: false
+            };
+        }
         return {
             accelerate: this.controls.getAcceleration(),
             steer: this.controls.getSteering(),
@@ -630,6 +641,93 @@ var CommuterDriver = (function () {
     return CommuterDriver;
 }());
 "use strict";
+var RacerDriver = (function () {
+    function RacerDriver(skill, name) {
+        this.skill = clamp(skill, 0.3, 1.0);
+        this.name = name || this.generateName();
+        this.targetSpeed = 0.35 + (this.skill * 0.30);
+        this._aggression = 0.3 + (this.skill * 0.5);
+        this._reactionDelay = 0.3 - (this.skill * 0.25);
+        this.preferredLine = (Math.random() - 0.5) * 0.6;
+        this.steerAmount = 0;
+        this.variationTimer = 0;
+        this.speedVariation = 0;
+        this.canMove = false;
+    }
+    RacerDriver.prototype.setCanMove = function (canMove) {
+        this.canMove = canMove;
+    };
+    RacerDriver.prototype.generateName = function () {
+        var firstNames = [
+            'Max', 'Alex', 'Sam', 'Jordan', 'Casey', 'Morgan', 'Taylor', 'Riley',
+            'Ace', 'Blaze', 'Storm', 'Flash', 'Turbo', 'Nitro', 'Dash', 'Spike'
+        ];
+        var lastNames = [
+            'Speed', 'Racer', 'Driver', 'Storm', 'Thunder', 'Blitz', 'Volt', 'Dash',
+            'Rocket', 'Jet', 'Zoom', 'Rush', 'Gear', 'Torque', 'Drift', 'Burn'
+        ];
+        var firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        var lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        return firstName + ' ' + lastName;
+    };
+    RacerDriver.prototype.update = function (vehicle, _track, dt) {
+        if (!this.canMove) {
+            return {
+                accelerate: 0,
+                steer: 0,
+                useItem: false
+            };
+        }
+        this.variationTimer += dt;
+        if (this.variationTimer > 2 + Math.random() * 2) {
+            this.variationTimer = 0;
+            this.speedVariation = (Math.random() - 0.5) * 0.1 * (1 - this.skill);
+        }
+        var maxSpeedForAI = (this.targetSpeed + this.speedVariation) * VEHICLE_PHYSICS.MAX_SPEED;
+        var accelerate;
+        if (vehicle.speed < maxSpeedForAI * 0.95) {
+            accelerate = 1;
+        }
+        else if (vehicle.speed > maxSpeedForAI * 1.05) {
+            accelerate = -0.3;
+        }
+        else {
+            accelerate = 0;
+        }
+        if (vehicle.isCrashed) {
+            accelerate = 0.3;
+        }
+        var currentX = vehicle.playerX || 0;
+        var targetX = this.preferredLine;
+        var lineDiff = targetX - currentX;
+        this.steerAmount = lineDiff * (0.5 + this.skill * 0.5);
+        this.steerAmount = clamp(this.steerAmount, -0.8, 0.8);
+        var wobble = (Math.random() - 0.5) * 0.1 * (1 - this.skill);
+        this.steerAmount += wobble;
+        if (currentX < -0.8) {
+            this.steerAmount = 0.5;
+        }
+        else if (currentX > 0.8) {
+            this.steerAmount = -0.5;
+        }
+        return {
+            accelerate: clamp(accelerate, 0, 1),
+            steer: this.steerAmount,
+            useItem: false
+        };
+    };
+    RacerDriver.prototype.getSkill = function () {
+        return this.skill;
+    };
+    RacerDriver.prototype.getAggression = function () {
+        return this._aggression;
+    };
+    RacerDriver.prototype.getReactionDelay = function () {
+        return this._reactionDelay;
+    };
+    return RacerDriver;
+}());
+"use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = function (d, b) {
         extendStatics = Object.setPrototypeOf ||
@@ -678,6 +776,7 @@ var Vehicle = (function (_super) {
         _this.crashTimer = 0;
         _this.flashTimer = 0;
         _this.isNPC = false;
+        _this.isRacer = false;
         _this.npcType = 'sedan';
         _this.npcColorIndex = 0;
         return _this;
@@ -1321,446 +1420,445 @@ var TRACK_THEMES = {
             color: { fg: GREEN, bg: BG_BLACK },
             highlightColor: { fg: LIGHTGREEN, bg: BG_BLACK }
         }
+    },
+    'kaiju_rampage': {
+        id: 'kaiju_rampage',
+        name: 'Kaiju Rampage',
+        sky: {
+            top: { fg: DARKGRAY, bg: BG_BLACK },
+            horizon: { fg: RED, bg: BG_BLACK },
+            gridColor: { fg: BROWN, bg: BG_BLACK }
+        },
+        sun: {
+            color: { fg: LIGHTRED, bg: BG_RED },
+            glowColor: { fg: YELLOW, bg: BG_BLACK },
+            position: 0.3
+        },
+        road: {
+            surface: { fg: DARKGRAY, bg: BG_BLACK },
+            stripe: { fg: YELLOW, bg: BG_BLACK },
+            edge: { fg: LIGHTRED, bg: BG_BLACK },
+            grid: { fg: BROWN, bg: BG_BLACK }
+        },
+        offroad: {
+            groundColor: { fg: BROWN, bg: BG_BLACK },
+            sceneryTypes: ['rubble', 'wrecked_car', 'fire', 'monster_footprint', 'fallen_building', 'tank'],
+            sceneryDensity: 0.35
+        },
+        background: {
+            type: 'destroyed_city',
+            color: { fg: DARKGRAY, bg: BG_BLACK },
+            highlightColor: { fg: LIGHTRED, bg: BG_BLACK }
+        }
     }
 };
 var TRACK_CATALOG = [
     {
-        id: 'test_oval',
-        name: 'Test Oval',
-        description: 'Short oval for testing (30 sec lap)',
-        difficulty: 1,
-        laps: 2,
-        themeId: 'synthwave',
-        estimatedLapTime: 30,
-        npcCount: 3,
-        sections: [
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 5, targetCurve: 0.5 },
-            { type: 'curve', length: 15, curve: 0.5 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 5, targetCurve: 0.5 },
-            { type: 'curve', length: 15, curve: 0.5 },
-            { type: 'ease_out', length: 5 }
-        ]
-    },
-    {
-        id: 'neon_coast',
-        name: 'Neon Coast',
-        description: 'Synthwave sunset drive along the coast',
-        difficulty: 2,
-        laps: 3,
-        themeId: 'synthwave',
-        estimatedLapTime: 90,
-        npcCount: 6,
-        sections: [
-            { type: 'straight', length: 30 },
-            { type: 'ease_in', length: 10, targetCurve: 0.4 },
-            { type: 'curve', length: 30, curve: 0.4 },
-            { type: 'ease_out', length: 10 },
-            { type: 'straight', length: 40 },
-            { type: 'ease_in', length: 8, targetCurve: -0.6 },
-            { type: 'curve', length: 25, curve: -0.6 },
-            { type: 'ease_out', length: 8 },
-            { type: 'straight', length: 25 },
-            { type: 's_curve', length: 54 },
-            { type: 'straight', length: 35 }
-        ]
-    },
-    {
-        id: 'downtown_dash',
-        name: 'Downtown Dash',
-        description: 'Race through the neon-lit city streets',
-        difficulty: 3,
-        laps: 3,
-        themeId: 'midnight_city',
-        estimatedLapTime: 75,
-        npcCount: 8,
-        sections: [
-            { type: 'straight', length: 20 },
-            { type: 'ease_in', length: 5, targetCurve: 0.7 },
-            { type: 'curve', length: 12, curve: 0.7 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 4, targetCurve: -0.8 },
-            { type: 'curve', length: 10, curve: -0.8 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 20 },
-            { type: 's_curve', length: 30 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 6, targetCurve: 0.5 },
-            { type: 'curve', length: 20, curve: 0.5 },
-            { type: 'ease_out', length: 6 }
-        ]
-    },
-    {
         id: 'sunset_beach',
         name: 'Sunset Beach',
-        description: 'Cruise along the beautiful coastline',
+        description: 'Gentle coastal cruise - perfect for beginners',
         difficulty: 1,
         laps: 3,
         themeId: 'beach_paradise',
-        estimatedLapTime: 60,
+        estimatedLapTime: 25,
         npcCount: 4,
         sections: [
-            { type: 'straight', length: 25 },
-            { type: 'ease_in', length: 8, targetCurve: 0.3 },
-            { type: 'curve', length: 20, curve: 0.3 },
-            { type: 'ease_out', length: 8 },
-            { type: 'straight', length: 30 },
-            { type: 'ease_in', length: 8, targetCurve: -0.3 },
-            { type: 'curve', length: 20, curve: -0.3 },
-            { type: 'ease_out', length: 8 },
-            { type: 'straight', length: 20 }
-        ]
-    },
-    {
-        id: 'haunted_hollow',
-        name: 'Haunted Hollow',
-        description: 'Race through the cemetery under a blood moon',
-        difficulty: 4,
-        laps: 3,
-        themeId: 'haunted_hollow',
-        estimatedLapTime: 70,
-        npcCount: 3,
-        sections: [
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 5, targetCurve: -0.4 },
-            { type: 'curve', length: 12, curve: -0.4 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 4, targetCurve: 0.7 },
-            { type: 'curve', length: 15, curve: 0.7 },
-            { type: 'ease_out', length: 4 },
-            { type: 'ease_in', length: 3, targetCurve: -0.5 },
-            { type: 'curve', length: 10, curve: -0.5 },
-            { type: 'ease_in', length: 3, targetCurve: 0.5 },
-            { type: 'curve', length: 10, curve: 0.5 },
-            { type: 'ease_out', length: 3 },
-            { type: 'ease_in', length: 3, targetCurve: -0.8 },
-            { type: 'curve', length: 8, curve: -0.8 },
-            { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 12 }
-        ]
-    },
-    {
-        id: 'winter_wonderland',
-        name: 'Winter Wonderland',
-        description: 'Magical snowy race through a frosty forest',
-        difficulty: 2,
-        laps: 3,
-        themeId: 'winter_wonderland',
-        estimatedLapTime: 65,
-        npcCount: 4,
-        sections: [
-            { type: 'straight', length: 20 },
-            { type: 'ease_in', length: 6, targetCurve: 0.3 },
-            { type: 'curve', length: 18, curve: 0.3 },
-            { type: 'ease_out', length: 6 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 5, targetCurve: -0.4 },
-            { type: 'curve', length: 15, curve: -0.4 },
-            { type: 'ease_out', length: 5 },
-            { type: 'ease_in', length: 4, targetCurve: 0.35 },
-            { type: 'curve', length: 10, curve: 0.35 },
-            { type: 'ease_in', length: 4, targetCurve: -0.35 },
-            { type: 'curve', length: 10, curve: -0.35 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 18 }
-        ]
-    },
-    {
-        id: 'cactus_canyon',
-        name: 'Cactus Canyon',
-        description: 'Blazing desert race through the Southwest canyons',
-        difficulty: 3,
-        laps: 3,
-        themeId: 'cactus_canyon',
-        estimatedLapTime: 75,
-        npcCount: 5,
-        sections: [
-            { type: 'straight', length: 18 },
-            { type: 'ease_in', length: 5, targetCurve: 0.45 },
-            { type: 'curve', length: 20, curve: 0.45 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 4, targetCurve: -0.7 },
-            { type: 'curve', length: 12, curve: -0.7 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 4, targetCurve: 0.5 },
-            { type: 'curve', length: 12, curve: 0.5 },
-            { type: 'ease_in', length: 4, targetCurve: -0.5 },
-            { type: 'curve', length: 12, curve: -0.5 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 20 }
-        ]
-    },
-    {
-        id: 'quick_test',
-        name: 'Quick Test',
-        description: 'Ultra-short track for quick testing',
-        difficulty: 1,
-        laps: 2,
-        themeId: 'synthwave',
-        estimatedLapTime: 15,
-        npcCount: 2,
-        sections: [
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 3, targetCurve: 0.4 },
-            { type: 'curve', length: 8, curve: 0.4 },
-            { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 6 }
-        ]
-    },
-    {
-        id: 'twilight_grove',
-        name: 'Twilight Grove',
-        description: 'Winding forest road under dual moons and dancing fireflies',
-        difficulty: 3,
-        laps: 3,
-        themeId: 'forest_night',
-        estimatedLapTime: 55,
-        sections: [
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 5, targetCurve: -0.3 },
-            { type: 'curve', length: 10, curve: -0.3 },
-            { type: 'ease_out', length: 4 },
             { type: 'straight', length: 8 },
-            { type: 'ease_in', length: 4, targetCurve: 0.6 },
-            { type: 'curve', length: 12, curve: 0.6 },
-            { type: 'ease_out', length: 4 },
-            { type: 'ease_in', length: 3, targetCurve: -0.4 },
-            { type: 'curve', length: 8, curve: -0.4 },
-            { type: 'ease_in', length: 3, targetCurve: 0.4 },
-            { type: 'curve', length: 8, curve: 0.4 },
+            { type: 'ease_in', length: 3, targetCurve: 0.3 },
+            { type: 'curve', length: 6, curve: 0.3 },
             { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 10 }
-        ]
-    },
-    {
-        id: 'jungle_run',
-        name: 'Jungle Run',
-        description: 'Race through dense tropical rainforest with exotic wildlife',
-        difficulty: 3,
-        laps: 3,
-        themeId: 'tropical_jungle',
-        estimatedLapTime: 60,
-        npcCount: 5,
-        sections: [
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 5, targetCurve: 0.45 },
-            { type: 'curve', length: 15, curve: 0.45 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 4, targetCurve: -0.6 },
-            { type: 'curve', length: 10, curve: -0.6 },
-            { type: 'ease_out', length: 4 },
-            { type: 'ease_in', length: 4, targetCurve: 0.4 },
-            { type: 'curve', length: 10, curve: 0.4 },
-            { type: 'ease_in', length: 4, targetCurve: -0.4 },
-            { type: 'curve', length: 10, curve: -0.4 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 18 }
+            { type: 'straight', length: 5 }
         ]
     },
     {
         id: 'sugar_rush',
         name: 'Sugar Rush',
-        description: 'Sweet racing through a land made entirely of candy!',
+        description: 'Sweet sprint through candy land!',
         difficulty: 2,
         laps: 3,
         themeId: 'candy_land',
-        estimatedLapTime: 50,
+        estimatedLapTime: 28,
         npcCount: 4,
         sections: [
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 4, targetCurve: 0.35 },
-            { type: 'curve', length: 12, curve: 0.35 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 5, targetCurve: -0.5 },
-            { type: 'curve', length: 14, curve: -0.5 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 8 },
-            { type: 'ease_in', length: 3, targetCurve: 0.3 },
-            { type: 'curve', length: 8, curve: 0.3 },
-            { type: 'ease_in', length: 3, targetCurve: -0.3 },
-            { type: 'curve', length: 8, curve: -0.3 },
-            { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 10 }
-        ]
-    },
-    {
-        id: 'celestial_circuit',
-        name: 'Celestial Circuit',
-        description: 'Cosmic racing through the stars on a rainbow of light',
-        difficulty: 4,
-        laps: 3,
-        themeId: 'rainbow_road',
-        estimatedLapTime: 70,
-        npcCount: 6,
-        sections: [
-            { type: 'straight', length: 20 },
-            { type: 'ease_in', length: 6, targetCurve: 0.55 },
-            { type: 'curve', length: 18, curve: 0.55 },
-            { type: 'ease_out', length: 6 },
-            { type: 'straight', length: 15 },
-            { type: 'ease_in', length: 4, targetCurve: -0.65 },
-            { type: 'curve', length: 12, curve: -0.65 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 5, targetCurve: 0.5 },
-            { type: 'curve', length: 14, curve: 0.5 },
-            { type: 'ease_in', length: 5, targetCurve: -0.5 },
-            { type: 'curve', length: 14, curve: -0.5 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 18 }
-        ]
-    },
-    {
-        id: 'fortress_rally',
-        name: 'Fortress Rally',
-        description: 'Navigate the twisting roads of a medieval fortress',
-        difficulty: 4,
-        laps: 3,
-        themeId: 'dark_castle',
-        estimatedLapTime: 65,
-        npcCount: 5,
-        sections: [
-            { type: 'straight', length: 14 },
-            { type: 'ease_in', length: 5, targetCurve: 0.4 },
-            { type: 'curve', length: 16, curve: 0.4 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 4, targetCurve: -0.7 },
-            { type: 'curve', length: 10, curve: -0.7 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 8 },
-            { type: 'ease_in', length: 4, targetCurve: 0.45 },
-            { type: 'curve', length: 12, curve: 0.45 },
-            { type: 'ease_in', length: 4, targetCurve: -0.45 },
-            { type: 'curve', length: 12, curve: -0.45 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 16 }
-        ]
-    },
-    {
-        id: 'inferno_speedway',
-        name: 'Inferno Speedway',
-        description: 'Blaze through a volcanic villain hideout at your peril',
-        difficulty: 5,
-        laps: 3,
-        themeId: 'villains_lair',
-        estimatedLapTime: 80,
-        npcCount: 7,
-        sections: [
-            { type: 'straight', length: 16 },
-            { type: 'ease_in', length: 6, targetCurve: 0.6 },
-            { type: 'curve', length: 20, curve: 0.6 },
-            { type: 'ease_out', length: 6 },
-            { type: 'straight', length: 14 },
-            { type: 'ease_in', length: 5, targetCurve: -0.75 },
-            { type: 'curve', length: 14, curve: -0.75 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 8 },
-            { type: 'ease_in', length: 5, targetCurve: 0.55 },
-            { type: 'curve', length: 15, curve: 0.55 },
-            { type: 'ease_in', length: 5, targetCurve: -0.55 },
-            { type: 'curve', length: 15, curve: -0.55 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 20 }
-        ]
-    },
-    {
-        id: 'pharaohs_tomb',
-        name: "Pharaoh's Tomb",
-        description: 'Unearth ancient secrets racing through pyramid ruins',
-        difficulty: 3,
-        laps: 3,
-        themeId: 'ancient_ruins',
-        estimatedLapTime: 58,
-        npcCount: 5,
-        sections: [
-            { type: 'straight', length: 14 },
-            { type: 'ease_in', length: 5, targetCurve: 0.4 },
-            { type: 'curve', length: 14, curve: 0.4 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 4, targetCurve: -0.5 },
-            { type: 'curve', length: 12, curve: -0.5 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 },
-            { type: 'ease_in', length: 4, targetCurve: 0.35 },
-            { type: 'curve', length: 10, curve: 0.35 },
-            { type: 'ease_in', length: 4, targetCurve: -0.35 },
-            { type: 'curve', length: 10, curve: -0.35 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 16 }
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 5, curve: 0.4 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.35 },
+            { type: 'curve', length: 5, curve: -0.35 },
+            { type: 'ease_out', length: 2 }
         ]
     },
     {
         id: 'thunder_stadium',
         name: 'Thunder Stadium',
-        description: 'Race on packed dirt under stadium lights with roaring crowds',
-        difficulty: 2,
+        description: 'Oval speedway under the lights',
+        difficulty: 1,
         laps: 4,
         themeId: 'thunder_stadium',
-        estimatedLapTime: 42,
+        estimatedLapTime: 22,
         npcCount: 6,
         sections: [
-            { type: 'straight', length: 18 },
-            { type: 'ease_in', length: 5, targetCurve: 0.45 },
-            { type: 'curve', length: 16, curve: 0.45 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 14 },
-            { type: 'ease_in', length: 4, targetCurve: 0.65 },
-            { type: 'curve', length: 12, curve: 0.65 },
-            { type: 'ease_out', length: 4 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 6, curve: 0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 6 }
+        ]
+    },
+    {
+        id: 'neon_coast',
+        name: 'Neon Coast',
+        description: 'Synthwave sunset along the coast',
+        difficulty: 2,
+        laps: 3,
+        themeId: 'synthwave',
+        estimatedLapTime: 38,
+        npcCount: 6,
+        sections: [
             { type: 'straight', length: 8 },
-            { type: 'ease_in', length: 5, targetCurve: -0.5 },
-            { type: 'curve', length: 18, curve: -0.5 },
-            { type: 'ease_out', length: 5 },
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 4, targetCurve: -0.55 },
-            { type: 'curve', length: 14, curve: -0.55 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 10 }
+            { type: 'ease_in', length: 3, targetCurve: 0.4 },
+            { type: 'curve', length: 8, curve: 0.4 },
+            { type: 'ease_out', length: 3 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: -0.5 },
+            { type: 'curve', length: 6, curve: -0.5 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'downtown_dash',
+        name: 'Downtown Dash',
+        description: 'Tight corners through city streets',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'midnight_city',
+        estimatedLapTime: 42,
+        npcCount: 7,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.7 },
+            { type: 'curve', length: 5, curve: 0.7 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.75 },
+            { type: 'curve', length: 5, curve: -0.75 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 6, curve: 0.5 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'winter_wonderland',
+        name: 'Winter Wonderland',
+        description: 'Icy roads through a frosty forest',
+        difficulty: 2,
+        laps: 3,
+        themeId: 'winter_wonderland',
+        estimatedLapTime: 35,
+        npcCount: 4,
+        sections: [
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 3, targetCurve: 0.35 },
+            { type: 'curve', length: 7, curve: 0.35 },
+            { type: 'ease_out', length: 3 },
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: -0.4 },
+            { type: 'curve', length: 6, curve: -0.4 },
+            { type: 'ease_out', length: 3 }
+        ]
+    },
+    {
+        id: 'cactus_canyon',
+        name: 'Cactus Canyon',
+        description: 'Blazing trails through desert canyons',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'cactus_canyon',
+        estimatedLapTime: 40,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 7, curve: 0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.65 },
+            { type: 'curve', length: 6, curve: -0.65 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 4, curve: 0.4 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'twilight_grove',
+        name: 'Twilight Grove',
+        description: 'Winding paths under dual moons',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'forest_night',
+        estimatedLapTime: 38,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: -0.4 },
+            { type: 'curve', length: 5, curve: -0.4 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: 0.55 },
+            { type: 'curve', length: 6, curve: 0.55 },
+            { type: 'ease_out', length: 2 },
+            { type: 'ease_in', length: 2, targetCurve: -0.45 },
+            { type: 'curve', length: 5, curve: -0.45 },
+            { type: 'ease_out', length: 3 }
+        ]
+    },
+    {
+        id: 'jungle_run',
+        name: 'Jungle Run',
+        description: 'Dense rainforest with tight turns',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'tropical_jungle',
+        estimatedLapTime: 36,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 6, curve: 0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.55 },
+            { type: 'curve', length: 5, curve: -0.55 },
+            { type: 'ease_out', length: 2 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 4, curve: 0.4 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'haunted_hollow',
+        name: 'Haunted Hollow',
+        description: 'Spooky cemetery with sharp turns',
+        difficulty: 4,
+        laps: 3,
+        themeId: 'haunted_hollow',
+        estimatedLapTime: 44,
+        npcCount: 3,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: -0.5 },
+            { type: 'curve', length: 5, curve: -0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 3 },
+            { type: 'ease_in', length: 2, targetCurve: 0.7 },
+            { type: 'curve', length: 6, curve: 0.7 },
+            { type: 'ease_out', length: 2 },
+            { type: 'ease_in', length: 2, targetCurve: -0.6 },
+            { type: 'curve', length: 4, curve: -0.6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 4, curve: 0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 3 }
+        ]
+    },
+    {
+        id: 'fortress_rally',
+        name: 'Fortress Rally',
+        description: 'Medieval castle walls and courtyards',
+        difficulty: 4,
+        laps: 3,
+        themeId: 'dark_castle',
+        estimatedLapTime: 45,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.45 },
+            { type: 'curve', length: 6, curve: 0.45 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.7 },
+            { type: 'curve', length: 5, curve: -0.7 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 3 },
+            { type: 'ease_in', length: 2, targetCurve: 0.5 },
+            { type: 'curve', length: 5, curve: 0.5 },
+            { type: 'ease_in', length: 2, targetCurve: -0.45 },
+            { type: 'curve', length: 5, curve: -0.45 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'pharaohs_tomb',
+        name: "Pharaoh's Tomb",
+        description: 'Ancient pyramid mysteries',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'ancient_ruins',
+        estimatedLapTime: 40,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.45 },
+            { type: 'curve', length: 6, curve: 0.45 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.55 },
+            { type: 'curve', length: 5, curve: -0.55 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 4, curve: 0.4 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'inferno_speedway',
+        name: 'Inferno Speedway',
+        description: 'Volcanic villain lair at your peril',
+        difficulty: 5,
+        laps: 3,
+        themeId: 'villains_lair',
+        estimatedLapTime: 48,
+        npcCount: 6,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.6 },
+            { type: 'curve', length: 7, curve: 0.6 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.7 },
+            { type: 'curve', length: 6, curve: -0.7 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 3 },
+            { type: 'ease_in', length: 2, targetCurve: 0.55 },
+            { type: 'curve', length: 5, curve: 0.55 },
+            { type: 'ease_in', length: 2, targetCurve: -0.5 },
+            { type: 'curve', length: 5, curve: -0.5 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'kaiju_rampage',
+        name: 'Kaiju Rampage',
+        description: 'Flee the monster through a crumbling city!',
+        difficulty: 5,
+        laps: 3,
+        themeId: 'kaiju_rampage',
+        estimatedLapTime: 50,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.75 },
+            { type: 'curve', length: 5, curve: 0.75 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.6 },
+            { type: 'curve', length: 4, curve: -0.6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.55 },
+            { type: 'curve', length: 4, curve: 0.55 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: -0.65 },
+            { type: 'curve', length: 6, curve: -0.65 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 }
+        ]
+    },
+    {
+        id: 'celestial_circuit',
+        name: 'Celestial Circuit',
+        description: 'Epic cosmic journey through the stars',
+        difficulty: 4,
+        laps: 3,
+        themeId: 'rainbow_road',
+        estimatedLapTime: 70,
+        npcCount: 7,
+        sections: [
+            { type: 'straight', length: 8 },
+            { type: 'ease_in', length: 3, targetCurve: 0.5 },
+            { type: 'curve', length: 10, curve: 0.5 },
+            { type: 'ease_out', length: 3 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: -0.65 },
+            { type: 'curve', length: 6, curve: -0.65 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.55 },
+            { type: 'curve', length: 6, curve: 0.55 },
+            { type: 'ease_in', length: 2, targetCurve: -0.55 },
+            { type: 'curve', length: 6, curve: -0.55 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 7 }
         ]
     },
     {
         id: 'glitch_circuit',
         name: 'Glitch Circuit',
-        description: 'Reality is corrupted. The simulation is breaking down.',
-        difficulty: 4,
+        description: 'Reality is corrupted. The simulation breaks.',
+        difficulty: 5,
         laps: 3,
         themeId: 'glitch_circuit',
-        estimatedLapTime: 55,
+        estimatedLapTime: 75,
         npcCount: 6,
         sections: [
-            { type: 'straight', length: 12 },
-            { type: 'ease_in', length: 3, targetCurve: 0.6 },
-            { type: 'curve', length: 8, curve: 0.6 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: 0.6 },
+            { type: 'curve', length: 5, curve: 0.6 },
             { type: 'ease_in', length: 2, targetCurve: -0.7 },
-            { type: 'curve', length: 10, curve: -0.7 },
+            { type: 'curve', length: 6, curve: -0.7 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: 0.55 },
+            { type: 'curve', length: 4, curve: 0.55 },
+            { type: 'ease_in', length: 2, targetCurve: -0.5 },
+            { type: 'curve', length: 4, curve: -0.5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.45 },
+            { type: 'curve', length: 4, curve: 0.45 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 3, targetCurve: -0.6 },
+            { type: 'curve', length: 10, curve: -0.6 },
             { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 8 },
+            { type: 'straight', length: 6 }
+        ]
+    },
+    {
+        id: 'test_oval',
+        name: 'Test Oval',
+        description: 'Simple oval for testing',
+        difficulty: 1,
+        laps: 2,
+        themeId: 'synthwave',
+        estimatedLapTime: 20,
+        npcCount: 3,
+        sections: [
+            { type: 'straight', length: 5 },
             { type: 'ease_in', length: 2, targetCurve: 0.5 },
             { type: 'curve', length: 6, curve: 0.5 },
-            { type: 'ease_in', length: 2, targetCurve: -0.5 },
-            { type: 'curve', length: 6, curve: -0.5 },
-            { type: 'ease_in', length: 2, targetCurve: 0.45 },
-            { type: 'curve', length: 6, curve: 0.45 },
-            { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 14 },
-            { type: 'ease_in', length: 4, targetCurve: -0.55 },
-            { type: 'curve', length: 20, curve: -0.55 },
-            { type: 'ease_out', length: 4 },
-            { type: 'straight', length: 16 },
-            { type: 'ease_in', length: 3, targetCurve: 0.4 },
-            { type: 'curve', length: 10, curve: 0.4 },
-            { type: 'ease_out', length: 3 },
-            { type: 'straight', length: 10 }
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 5 }
+        ]
+    },
+    {
+        id: 'quick_test',
+        name: 'Quick Test',
+        description: 'Ultra-short for quick tests',
+        difficulty: 1,
+        laps: 2,
+        themeId: 'synthwave',
+        estimatedLapTime: 12,
+        npcCount: 2,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 4, curve: 0.4 },
+            { type: 'ease_out', length: 2 }
         ]
     }
 ];
@@ -2390,14 +2488,19 @@ var Hud = (function () {
         }
         this.lapStartTime = currentTime;
     };
-    Hud.prototype.compute = function (vehicle, track, road, vehicles, currentTime) {
+    Hud.prototype.compute = function (vehicle, track, road, vehicles, currentTime, countdown, raceMode) {
         var lapProgress = 0;
         if (road.totalLength > 0) {
             lapProgress = (vehicle.trackZ % road.totalLength) / road.totalLength;
             if (lapProgress < 0)
                 lapProgress += 1.0;
         }
-        var racers = vehicles.filter(function (v) { return !v.isNPC; });
+        var racers = vehicles.filter(function (v) { return !v.isNPC || v.isRacer; });
+        var isCountdown = (countdown !== undefined && countdown > 0);
+        var lapTime = currentTime - this.lapStartTime;
+        var totalTime = currentTime - this.startTime;
+        var displayLapTime = isCountdown ? 0 : Math.max(0, lapTime);
+        var displayTotalTime = isCountdown ? 0 : Math.max(0, totalTime);
         return {
             speed: Math.round(vehicle.speed),
             speedMax: VEHICLE_PHYSICS.MAX_SPEED,
@@ -2406,11 +2509,13 @@ var Hud = (function () {
             lapProgress: lapProgress,
             position: vehicle.racePosition,
             totalRacers: racers.length,
-            lapTime: currentTime - this.lapStartTime,
+            lapTime: displayLapTime,
             bestLapTime: this.bestLapTime === Infinity ? 0 : this.bestLapTime,
-            totalTime: currentTime - this.startTime,
+            totalTime: displayTotalTime,
             heldItem: vehicle.heldItem,
-            raceFinished: vehicle.lap > track.laps
+            raceFinished: vehicle.lap > track.laps,
+            countdown: countdown || 0,
+            raceMode: raceMode !== undefined ? raceMode : RaceMode.TIME_TRIAL
         };
     };
     Hud.formatTime = function (seconds) {
@@ -2577,14 +2682,20 @@ var PositionIndicator = (function () {
     PositionIndicator.format = function (data) {
         return data.position + data.suffix + " / " + data.totalRacers;
     };
-    PositionIndicator.calculatePositions = function (vehicles) {
-        var racers = vehicles.filter(function (v) { return !v.isNPC; });
+    PositionIndicator.calculatePositions = function (vehicles, roadLength) {
+        var racers = vehicles.filter(function (v) { return !v.isNPC || v.isRacer; });
         var sorted = racers.slice().sort(function (a, b) {
             if (a.lap !== b.lap)
                 return b.lap - a.lap;
             if (a.checkpoint !== b.checkpoint)
                 return b.checkpoint - a.checkpoint;
-            return b.z - a.z;
+            var aZ = a.trackZ;
+            var bZ = b.trackZ;
+            if (roadLength && roadLength > 0) {
+                aZ = aZ % roadLength;
+                bZ = bZ % roadLength;
+            }
+            return bZ - aZ;
         });
         for (var i = 0; i < sorted.length; i++) {
             sorted[i].racePosition = i + 1;
@@ -3366,6 +3477,9 @@ var HudRenderer = (function () {
         this.renderLapProgress(hudData);
         this.renderSpeedometer(hudData);
         this.renderItemSlot(hudData);
+        if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
+            this.renderCountdown(hudData.countdown);
+        }
     };
     HudRenderer.prototype.renderTopBar = function (data) {
         var y = 0;
@@ -3481,6 +3595,63 @@ var HudRenderer = (function () {
             str = ' ' + str;
         }
         return str;
+    };
+    HudRenderer.prototype.renderCountdown = function (countdown) {
+        var countNum = Math.ceil(countdown);
+        var centerX = 40;
+        var topY = 8;
+        var frameAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+        var poleAttr = colorToAttr({ fg: BROWN, bg: BG_BLACK });
+        var redOn = countNum >= 3;
+        var yellowOn = countNum === 2;
+        var greenOn = countNum <= 1;
+        var redAttr = redOn ? colorToAttr({ fg: LIGHTRED, bg: BG_RED }) : colorToAttr({ fg: RED, bg: BG_BLACK });
+        var yellowAttr = yellowOn ? colorToAttr({ fg: YELLOW, bg: BG_BROWN }) : colorToAttr({ fg: BROWN, bg: BG_BLACK });
+        var greenAttr = greenOn ? colorToAttr({ fg: LIGHTGREEN, bg: BG_GREEN }) : colorToAttr({ fg: GREEN, bg: BG_BLACK });
+        var boxX = centerX - 3;
+        this.composer.setCell(boxX, topY, GLYPH.DBOX_TL, frameAttr);
+        for (var i = 1; i < 6; i++) {
+            this.composer.setCell(boxX + i, topY, GLYPH.DBOX_H, frameAttr);
+        }
+        this.composer.setCell(boxX + 6, topY, GLYPH.DBOX_TR, frameAttr);
+        this.composer.setCell(boxX, topY + 1, GLYPH.DBOX_V, frameAttr);
+        this.composer.writeString(boxX + 1, topY + 1, " ", frameAttr);
+        this.composer.setCell(boxX + 2, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        this.composer.setCell(boxX + 3, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        this.composer.setCell(boxX + 4, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        this.composer.writeString(boxX + 5, topY + 1, " ", frameAttr);
+        this.composer.setCell(boxX + 6, topY + 1, GLYPH.DBOX_V, frameAttr);
+        this.composer.setCell(boxX, topY + 2, GLYPH.DBOX_V, frameAttr);
+        this.composer.writeString(boxX + 1, topY + 2, "     ", frameAttr);
+        this.composer.setCell(boxX + 6, topY + 2, GLYPH.DBOX_V, frameAttr);
+        this.composer.setCell(boxX, topY + 3, GLYPH.DBOX_V, frameAttr);
+        this.composer.writeString(boxX + 1, topY + 3, " ", frameAttr);
+        this.composer.setCell(boxX + 2, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+        this.composer.setCell(boxX + 3, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+        this.composer.setCell(boxX + 4, topY + 3, GLYPH.FULL_BLOCK, yellowAttr);
+        this.composer.writeString(boxX + 5, topY + 3, " ", frameAttr);
+        this.composer.setCell(boxX + 6, topY + 3, GLYPH.DBOX_V, frameAttr);
+        this.composer.setCell(boxX, topY + 4, GLYPH.DBOX_V, frameAttr);
+        this.composer.writeString(boxX + 1, topY + 4, "     ", frameAttr);
+        this.composer.setCell(boxX + 6, topY + 4, GLYPH.DBOX_V, frameAttr);
+        this.composer.setCell(boxX, topY + 5, GLYPH.DBOX_V, frameAttr);
+        this.composer.writeString(boxX + 1, topY + 5, " ", frameAttr);
+        this.composer.setCell(boxX + 2, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+        this.composer.setCell(boxX + 3, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+        this.composer.setCell(boxX + 4, topY + 5, GLYPH.FULL_BLOCK, greenAttr);
+        this.composer.writeString(boxX + 5, topY + 5, " ", frameAttr);
+        this.composer.setCell(boxX + 6, topY + 5, GLYPH.DBOX_V, frameAttr);
+        this.composer.setCell(boxX, topY + 6, GLYPH.DBOX_BL, frameAttr);
+        for (var j = 1; j < 6; j++) {
+            this.composer.setCell(boxX + j, topY + 6, GLYPH.DBOX_H, frameAttr);
+        }
+        this.composer.setCell(boxX + 6, topY + 6, GLYPH.DBOX_BR, frameAttr);
+        this.composer.setCell(centerX, topY + 7, GLYPH.DBOX_V, poleAttr);
+        this.composer.setCell(centerX, topY + 8, GLYPH.DBOX_V, poleAttr);
+        if (greenOn && countNum <= 0) {
+            var goAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+            this.composer.writeString(centerX - 2, topY + 9, "GO!!!", goAttr);
+        }
     };
     return HudRenderer;
 }());
@@ -6526,6 +6697,355 @@ registerRoadsideSprite('flag_marshal', StadiumSprites.createFlagMarshal);
 registerRoadsideSprite('pit_crew', StadiumSprites.createPitCrew);
 registerRoadsideSprite('banner', StadiumSprites.createBanner);
 "use strict";
+var KaijuSprites = {
+    createRubble: function () {
+        var concrete = makeAttr(DARKGRAY, BG_BLACK);
+        var rebar = makeAttr(BROWN, BG_BLACK);
+        var dust = makeAttr(WHITE, BG_BLACK);
+        var U = null;
+        return {
+            name: 'rubble',
+            variants: [
+                [
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: '/', attr: rebar }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, { char: '.', attr: dust }, { char: '/', attr: rebar }, { char: '.', attr: dust }, U],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '/', attr: rebar }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, U, { char: '.', attr: dust }, { char: '_', attr: rebar }, { char: '.', attr: dust }, U, U],
+                    [U, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: '/', attr: rebar }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: rebar }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, U],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, U, U, { char: '.', attr: dust }, { char: '/', attr: rebar }, { char: '.', attr: dust }, U, U, U],
+                    [U, U, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: '/', attr: rebar }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: rebar }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, U, U],
+                    [U, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }, U],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '[', attr: rebar }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: ']', attr: rebar }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ]
+            ]
+        };
+    },
+    createFire: function () {
+        var flame1 = makeAttr(YELLOW, BG_BLACK);
+        var flame2 = makeAttr(LIGHTRED, BG_BLACK);
+        var flame3 = makeAttr(RED, BG_BLACK);
+        var U = null;
+        return {
+            name: 'fire',
+            variants: [
+                [
+                    [{ char: '^', attr: flame1 }, { char: '^', attr: flame2 }],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: flame3 }, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }]
+                ],
+                [
+                    [U, { char: '^', attr: flame1 }, U],
+                    [{ char: '(', attr: flame2 }, { char: '*', attr: flame1 }, { char: ')', attr: flame2 }],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: flame3 }, { char: GLYPH.FULL_BLOCK, attr: flame3 }, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }]
+                ],
+                [
+                    [U, { char: '^', attr: flame1 }, { char: '^', attr: flame1 }, { char: '^', attr: flame1 }, U],
+                    [{ char: '(', attr: flame2 }, { char: '*', attr: flame1 }, { char: GLYPH.FULL_BLOCK, attr: flame1 }, { char: '*', attr: flame1 }, { char: ')', attr: flame2 }],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.MEDIUM_SHADE, attr: flame2 }],
+                    [U, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }, { char: GLYPH.FULL_BLOCK, attr: flame3 }, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }, U]
+                ],
+                [
+                    [U, U, { char: '^', attr: flame1 }, { char: '^', attr: flame1 }, U, U],
+                    [U, { char: '(', attr: flame1 }, { char: '*', attr: flame1 }, { char: '*', attr: flame1 }, { char: ')', attr: flame1 }, U],
+                    [{ char: '(', attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame1 }, { char: GLYPH.FULL_BLOCK, attr: flame1 }, { char: GLYPH.FULL_BLOCK, attr: flame1 }, { char: GLYPH.FULL_BLOCK, attr: flame1 }, { char: ')', attr: flame2 }],
+                    [{ char: GLYPH.MEDIUM_SHADE, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.FULL_BLOCK, attr: flame2 }, { char: GLYPH.MEDIUM_SHADE, attr: flame2 }],
+                    [U, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }, { char: GLYPH.FULL_BLOCK, attr: flame3 }, { char: GLYPH.FULL_BLOCK, attr: flame3 }, { char: GLYPH.MEDIUM_SHADE, attr: flame3 }, U]
+                ]
+            ]
+        };
+    },
+    createWreckedCar: function () {
+        var body = makeAttr(DARKGRAY, BG_BLACK);
+        var rust = makeAttr(BROWN, BG_BLACK);
+        var glass = makeAttr(LIGHTCYAN, BG_BLACK);
+        var U = null;
+        return {
+            name: 'wrecked_car',
+            variants: [
+                [
+                    [{ char: '_', attr: body }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: '_', attr: body }],
+                    [{ char: 'o', attr: rust }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: 'o', attr: rust }]
+                ],
+                [
+                    [U, { char: ',', attr: body }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: '.', attr: body }, U],
+                    [{ char: '[', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ']', attr: body }],
+                    [{ char: 'O', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: 'O', attr: rust }]
+                ],
+                [
+                    [U, U, { char: '_', attr: body }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: GLYPH.MEDIUM_SHADE, attr: glass }, { char: '_', attr: body }, U, U],
+                    [U, { char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '|', attr: glass }, { char: '|', attr: glass }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }, U],
+                    [{ char: '[', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ']', attr: body }],
+                    [{ char: '(', attr: rust }, { char: 'O', attr: rust }, { char: ')', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '(', attr: rust }, { char: 'O', attr: rust }, { char: ')', attr: rust }]
+                ],
+                [
+                    [U, U, U, { char: '_', attr: body }, { char: '/', attr: glass }, { char: '\\', attr: glass }, { char: '_', attr: body }, U, U, U],
+                    [U, U, { char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '|', attr: glass }, { char: '|', attr: glass }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }, U, U],
+                    [U, { char: '[', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ']', attr: body }, U],
+                    [{ char: '[', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ']', attr: body }],
+                    [{ char: '(', attr: rust }, { char: 'O', attr: rust }, { char: ')', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '-', attr: rust }, { char: '(', attr: rust }, { char: 'O', attr: rust }, { char: ')', attr: rust }]
+                ]
+            ]
+        };
+    },
+    createFallenBuilding: function () {
+        var concrete = makeAttr(DARKGRAY, BG_BLACK);
+        var window = makeAttr(BLACK, BG_BLACK);
+        var rebar = makeAttr(BROWN, BG_BLACK);
+        var U = null;
+        return {
+            name: 'fallen_building',
+            variants: [
+                [
+                    [U, { char: '/', attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: '\\', attr: concrete }, U],
+                    [{ char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, U, { char: '/', attr: concrete }, { char: '_', attr: rebar }, { char: '\\', attr: concrete }, U, U],
+                    [U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U],
+                    [{ char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, U, U, { char: '/', attr: concrete }, { char: '=', attr: rebar }, { char: '\\', attr: concrete }, U, U, U],
+                    [U, U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U, U],
+                    [U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U],
+                    [{ char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ],
+                [
+                    [U, U, U, U, { char: '/', attr: concrete }, { char: '_', attr: rebar }, { char: '\\', attr: concrete }, U, U, U, U],
+                    [U, U, U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U, U, U],
+                    [U, U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U, U],
+                    [U, { char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }, U],
+                    [{ char: '/', attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.MEDIUM_SHADE, attr: window }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: '\\', attr: concrete }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }, { char: GLYPH.FULL_BLOCK, attr: concrete }]
+                ]
+            ]
+        };
+    },
+    createTank: function () {
+        var armor = makeAttr(GREEN, BG_BLACK);
+        var turret = makeAttr(LIGHTGREEN, BG_BLACK);
+        var track = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'tank',
+            variants: [
+                [
+                    [{ char: '-', attr: turret }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, U],
+                    [{ char: 'O', attr: track }, { char: GLYPH.FULL_BLOCK, attr: track }, { char: GLYPH.FULL_BLOCK, attr: track }, { char: 'O', attr: track }]
+                ],
+                [
+                    [U, { char: '-', attr: turret }, { char: '-', attr: turret }, { char: GLYPH.FULL_BLOCK, attr: armor }, U, U],
+                    [{ char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }],
+                    [{ char: 'O', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'O', attr: track }]
+                ],
+                [
+                    [U, U, { char: '=', attr: turret }, { char: '=', attr: turret }, { char: '=', attr: turret }, U, U, U],
+                    [U, { char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: turret }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }, U],
+                    [{ char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }],
+                    [{ char: 'O', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'o', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'o', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'O', attr: track }]
+                ],
+                [
+                    [U, U, U, { char: '=', attr: turret }, { char: '=', attr: turret }, { char: '=', attr: turret }, { char: '=', attr: turret }, U, U, U],
+                    [U, U, { char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: turret }, { char: GLYPH.FULL_BLOCK, attr: turret }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }, U, U],
+                    [U, { char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }, U],
+                    [{ char: '[', attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: GLYPH.FULL_BLOCK, attr: armor }, { char: ']', attr: armor }],
+                    [{ char: 'O', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'o', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'o', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'o', attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: GLYPH.MEDIUM_SHADE, attr: track }, { char: 'O', attr: track }]
+                ]
+            ]
+        };
+    },
+    createFootprint: function () {
+        var dirt = makeAttr(BROWN, BG_BLACK);
+        var crater = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'monster_footprint',
+            variants: [
+                [
+                    [{ char: '.', attr: dirt }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '.', attr: dirt }],
+                    [{ char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }]
+                ],
+                [
+                    [U, { char: '.', attr: dirt }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '.', attr: dirt }, U],
+                    [{ char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }],
+                    [U, { char: '\\', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '/', attr: crater }, U]
+                ],
+                [
+                    [U, U, { char: '.', attr: dirt }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '.', attr: dirt }, U, U],
+                    [U, { char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }, U],
+                    [{ char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }],
+                    [U, { char: '\\', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '/', attr: crater }, U]
+                ],
+                [
+                    [U, U, U, { char: '.', attr: dirt }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '.', attr: dirt }, U, U, U],
+                    [U, U, { char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }, U, U],
+                    [U, { char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }, U],
+                    [{ char: '\\', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: ' ', attr: crater }, { char: GLYPH.DARK_SHADE, attr: crater }, { char: '/', attr: crater }],
+                    [U, { char: '\\', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '_', attr: crater }, { char: '/', attr: crater }, U]
+                ]
+            ]
+        };
+    },
+    createDangerSign: function () {
+        var sign = makeAttr(YELLOW, BG_BLACK);
+        var border = makeAttr(RED, BG_BLACK);
+        var pole = makeAttr(DARKGRAY, BG_BLACK);
+        var U = null;
+        return {
+            name: 'danger_sign',
+            variants: [
+                [
+                    [{ char: '/', attr: border }, { char: '!', attr: sign }, { char: '\\', attr: border }],
+                    [U, { char: '|', attr: pole }, U]
+                ],
+                [
+                    [U, { char: '/', attr: border }, { char: '\\', attr: border }, U],
+                    [{ char: '/', attr: border }, { char: '!', attr: sign }, { char: '!', attr: sign }, { char: '\\', attr: border }],
+                    [U, { char: '|', attr: pole }, { char: '|', attr: pole }, U]
+                ],
+                [
+                    [U, U, { char: '/\\', attr: border }, U, U],
+                    [U, { char: '/', attr: border }, { char: '!', attr: sign }, { char: '\\', attr: border }, U],
+                    [{ char: '/', attr: border }, { char: '-', attr: border }, { char: '!', attr: sign }, { char: '-', attr: border }, { char: '\\', attr: border }],
+                    [U, U, { char: '|', attr: pole }, U, U]
+                ],
+                [
+                    [U, U, { char: '/', attr: border }, { char: '\\', attr: border }, U, U],
+                    [U, { char: '/', attr: border }, { char: GLYPH.FULL_BLOCK, attr: sign }, { char: GLYPH.FULL_BLOCK, attr: sign }, { char: '\\', attr: border }, U],
+                    [{ char: '/', attr: border }, { char: GLYPH.FULL_BLOCK, attr: sign }, { char: '!', attr: border }, { char: '!', attr: border }, { char: GLYPH.FULL_BLOCK, attr: sign }, { char: '\\', attr: border }],
+                    [{ char: '-', attr: border }, { char: '-', attr: border }, { char: '-', attr: border }, { char: '-', attr: border }, { char: '-', attr: border }, { char: '-', attr: border }],
+                    [U, U, { char: '|', attr: pole }, { char: '|', attr: pole }, U, U]
+                ]
+            ]
+        };
+    },
+    createFleeingPerson: function () {
+        var skin = makeAttr(YELLOW, BG_BLACK);
+        var clothes = makeAttr(CYAN, BG_BLACK);
+        var hair = makeAttr(BROWN, BG_BLACK);
+        var U = null;
+        return {
+            name: 'fleeing_person',
+            variants: [
+                [
+                    [{ char: '\\', attr: skin }, { char: 'o', attr: skin }, { char: '/', attr: skin }],
+                    [U, { char: 'A', attr: clothes }, U]
+                ],
+                [
+                    [{ char: '\\', attr: skin }, { char: 'O', attr: skin }, { char: '/', attr: skin }],
+                    [U, { char: '|', attr: clothes }, U],
+                    [{ char: '/', attr: clothes }, U, { char: '\\', attr: clothes }]
+                ],
+                [
+                    [{ char: '\\', attr: skin }, U, { char: 'O', attr: skin }, U, { char: '/', attr: skin }],
+                    [U, { char: '\\', attr: skin }, { char: '|', attr: clothes }, { char: '/', attr: skin }, U],
+                    [U, U, { char: 'Y', attr: clothes }, U, U],
+                    [U, { char: '/', attr: clothes }, U, { char: '\\', attr: clothes }, U]
+                ],
+                [
+                    [{ char: '\\', attr: skin }, U, { char: 'n', attr: hair }, U, { char: '/', attr: skin }],
+                    [U, { char: '|', attr: skin }, { char: '@', attr: skin }, { char: '|', attr: skin }, U],
+                    [U, U, { char: 'Y', attr: clothes }, U, U],
+                    [U, U, { char: '|', attr: clothes }, U, U],
+                    [U, { char: '/', attr: clothes }, U, { char: '\\', attr: clothes }, U]
+                ]
+            ]
+        };
+    },
+    createBurningBarrel: function () {
+        var barrel = makeAttr(BROWN, BG_BLACK);
+        var flame = makeAttr(YELLOW, BG_BLACK);
+        var hotFlame = makeAttr(LIGHTRED, BG_BLACK);
+        var U = null;
+        return {
+            name: 'burning_barrel',
+            variants: [
+                [
+                    [{ char: '^', attr: flame }, { char: '^', attr: hotFlame }],
+                    [{ char: '[', attr: barrel }, { char: ']', attr: barrel }]
+                ],
+                [
+                    [{ char: '^', attr: flame }, { char: '*', attr: hotFlame }, { char: '^', attr: flame }],
+                    [{ char: '(', attr: flame }, { char: GLYPH.FULL_BLOCK, attr: hotFlame }, { char: ')', attr: flame }],
+                    [{ char: '[', attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: ']', attr: barrel }]
+                ],
+                [
+                    [U, { char: '^', attr: flame }, { char: '^', attr: hotFlame }, U],
+                    [{ char: '(', attr: flame }, { char: '*', attr: hotFlame }, { char: '*', attr: hotFlame }, { char: ')', attr: flame }],
+                    [{ char: '[', attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: ']', attr: barrel }],
+                    [{ char: '[', attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: ']', attr: barrel }]
+                ],
+                [
+                    [U, { char: '^', attr: flame }, { char: '*', attr: hotFlame }, { char: '^', attr: flame }, U],
+                    [{ char: '(', attr: flame }, { char: GLYPH.FULL_BLOCK, attr: hotFlame }, { char: GLYPH.FULL_BLOCK, attr: hotFlame }, { char: GLYPH.FULL_BLOCK, attr: hotFlame }, { char: ')', attr: flame }],
+                    [{ char: '[', attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: ']', attr: barrel }],
+                    [{ char: '[', attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: ']', attr: barrel }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, { char: GLYPH.FULL_BLOCK, attr: barrel }, U]
+                ]
+            ]
+        };
+    },
+    createBrokenStreetLamp: function () {
+        var pole = makeAttr(DARKGRAY, BG_BLACK);
+        var spark = makeAttr(YELLOW, BG_BLACK);
+        var U = null;
+        return {
+            name: 'broken_streetlamp',
+            variants: [
+                [
+                    [{ char: '*', attr: spark }, U],
+                    [{ char: '/', attr: pole }, U],
+                    [{ char: '|', attr: pole }, U]
+                ],
+                [
+                    [{ char: '*', attr: spark }, { char: '_', attr: pole }, U],
+                    [U, { char: '/', attr: pole }, U],
+                    [U, { char: '|', attr: pole }, U],
+                    [U, { char: '|', attr: pole }, U]
+                ],
+                [
+                    [{ char: '*', attr: spark }, { char: '*', attr: spark }, { char: '_', attr: pole }, U],
+                    [U, U, { char: '/', attr: pole }, U],
+                    [U, U, { char: '|', attr: pole }, U],
+                    [U, U, { char: '|', attr: pole }, U],
+                    [U, { char: '=', attr: pole }, { char: '|', attr: pole }, { char: '=', attr: pole }]
+                ],
+                [
+                    [{ char: '*', attr: spark }, { char: '*', attr: spark }, { char: '_', attr: pole }, { char: '_', attr: pole }, U],
+                    [U, U, U, { char: '/', attr: pole }, U],
+                    [U, U, U, { char: '|', attr: pole }, U],
+                    [U, U, U, { char: '|', attr: pole }, U],
+                    [U, U, U, { char: '|', attr: pole }, U],
+                    [U, { char: '=', attr: pole }, { char: '=', attr: pole }, { char: '|', attr: pole }, { char: '=', attr: pole }]
+                ]
+            ]
+        };
+    }
+};
+registerRoadsideSprite('rubble', KaijuSprites.createRubble);
+registerRoadsideSprite('fire', KaijuSprites.createFire);
+registerRoadsideSprite('wrecked_car', KaijuSprites.createWreckedCar);
+registerRoadsideSprite('fallen_building', KaijuSprites.createFallenBuilding);
+registerRoadsideSprite('tank', KaijuSprites.createTank);
+registerRoadsideSprite('monster_footprint', KaijuSprites.createFootprint);
+registerRoadsideSprite('danger_sign', KaijuSprites.createDangerSign);
+registerRoadsideSprite('fleeing_person', KaijuSprites.createFleeingPerson);
+registerRoadsideSprite('burning_barrel', KaijuSprites.createBurningBarrel);
+registerRoadsideSprite('broken_streetlamp', KaijuSprites.createBrokenStreetLamp);
+"use strict";
 var NPC_VEHICLE_TYPES = ['sedan', 'truck', 'sportscar'];
 var NPC_VEHICLE_COLORS = [
     { body: RED, trim: LIGHTRED, name: 'red' },
@@ -7598,6 +8118,10 @@ var RainbowRoadTheme = {
         ],
         spacing: 45,
         density: 1.0
+    },
+    road: {
+        rainbow: true,
+        hideEdgeMarkers: true
     }
 };
 registerTheme(RainbowRoadTheme);
@@ -8269,6 +8793,118 @@ var GlitchTheme = {
 };
 registerTheme(GlitchTheme);
 "use strict";
+var KaijuRampageTheme = {
+    name: 'kaiju_rampage',
+    description: 'Destroyed city with fires, rubble, and giant monster silhouette',
+    colors: {
+        skyTop: { fg: DARKGRAY, bg: BG_BLACK },
+        skyMid: { fg: BROWN, bg: BG_BLACK },
+        skyHorizon: { fg: LIGHTRED, bg: BG_BLACK },
+        skyGrid: { fg: DARKGRAY, bg: BG_BLACK },
+        skyGridGlow: { fg: BROWN, bg: BG_BLACK },
+        celestialCore: { fg: LIGHTRED, bg: BG_BLACK },
+        celestialGlow: { fg: YELLOW, bg: BG_BLACK },
+        starBright: { fg: DARKGRAY, bg: BG_BLACK },
+        starDim: { fg: BLACK, bg: BG_BLACK },
+        sceneryPrimary: { fg: DARKGRAY, bg: BG_BLACK },
+        scenerySecondary: { fg: BROWN, bg: BG_BLACK },
+        sceneryTertiary: { fg: LIGHTRED, bg: BG_BLACK },
+        roadSurface: { fg: LIGHTGRAY, bg: BG_BLACK },
+        roadSurfaceAlt: { fg: DARKGRAY, bg: BG_BLACK },
+        roadStripe: { fg: WHITE, bg: BG_BLACK },
+        roadEdge: { fg: LIGHTRED, bg: BG_BLACK },
+        roadGrid: { fg: BROWN, bg: BG_BLACK },
+        shoulderPrimary: { fg: BROWN, bg: BG_BLACK },
+        shoulderSecondary: { fg: DARKGRAY, bg: BG_BLACK },
+        roadsideColors: {
+            'rubble': {
+                primary: { fg: BROWN, bg: BG_BLACK },
+                secondary: { fg: DARKGRAY, bg: BG_BLACK }
+            },
+            'fire': {
+                primary: { fg: LIGHTRED, bg: BG_BLACK },
+                secondary: { fg: YELLOW, bg: BG_BLACK }
+            },
+            'wrecked_car': {
+                primary: { fg: DARKGRAY, bg: BG_BLACK },
+                secondary: { fg: BROWN, bg: BG_BLACK },
+                tertiary: { fg: LIGHTRED, bg: BG_BLACK }
+            },
+            'fallen_building': {
+                primary: { fg: DARKGRAY, bg: BG_BLACK },
+                secondary: { fg: BROWN, bg: BG_BLACK }
+            },
+            'tank': {
+                primary: { fg: GREEN, bg: BG_BLACK },
+                secondary: { fg: DARKGRAY, bg: BG_BLACK }
+            },
+            'monster_footprint': {
+                primary: { fg: BROWN, bg: BG_BLACK },
+                secondary: { fg: DARKGRAY, bg: BG_BLACK }
+            },
+            'danger_sign': {
+                primary: { fg: YELLOW, bg: BG_BLACK },
+                secondary: { fg: LIGHTRED, bg: BG_BLACK }
+            }
+        }
+    },
+    sky: {
+        type: 'gradient',
+        converging: false,
+        horizontal: false
+    },
+    background: {
+        type: 'destroyed_city',
+        config: {
+            parallaxSpeed: 0.15
+        }
+    },
+    celestial: {
+        type: 'monster',
+        size: 5,
+        positionX: 0.5,
+        positionY: 0.5
+    },
+    stars: {
+        enabled: false,
+        density: 0,
+        twinkle: false
+    },
+    ground: {
+        type: 'solid',
+        primary: { fg: BROWN, bg: BG_BLACK },
+        secondary: { fg: DARKGRAY, bg: BG_BLACK },
+        pattern: {
+            gridSpacing: 20,
+            radialLines: 0
+        }
+    },
+    roadside: {
+        pool: [
+            { sprite: 'fleeing_person', weight: 4, side: 'both' },
+            { sprite: 'wrecked_car', weight: 3, side: 'both' },
+            { sprite: 'fire', weight: 2, side: 'both' },
+            { sprite: 'rubble', weight: 2, side: 'both' },
+            { sprite: 'danger_sign', weight: 1, side: 'both' }
+        ],
+        spacing: 12,
+        density: 0.9
+    }
+};
+registerTheme(KaijuRampageTheme);
+function getKaijuSprite(type) {
+    switch (type) {
+        case 'rubble': return KaijuSprites.createRubble();
+        case 'fire': return KaijuSprites.createFire();
+        case 'wrecked_car': return KaijuSprites.createWreckedCar();
+        case 'fallen_building': return KaijuSprites.createFallenBuilding();
+        case 'tank': return KaijuSprites.createTank();
+        case 'monster_footprint': return KaijuSprites.createFootprint();
+        case 'danger_sign': return KaijuSprites.createDangerSign();
+        default: return null;
+    }
+}
+"use strict";
 var FrameManager = (function () {
     function FrameManager(width, height, horizonY) {
         this.width = width;
@@ -8606,7 +9242,11 @@ var FrameRenderer = (function () {
         this.horizonY = 8;
         this._mountainScrollOffset = 0;
         this._staticElementsDirty = true;
+        this._currentRoad = null;
+        this._currentTrackPosition = 0;
+        this._currentCameraX = 0;
         this.frameManager = new FrameManager(width, height, this.horizonY);
+        this.composer = new SceneComposer(width, height);
         this.activeTheme = SynthwaveTheme;
         this.spriteCache = {};
         this.playerCarSprite = null;
@@ -8683,6 +9323,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.celestial.type === 'dual_moons') {
             this.renderDualMoons();
         }
+        else if (this.activeTheme.celestial.type === 'monster') {
+            this.renderMonsterSilhouette();
+        }
         if (this.activeTheme.background.type === 'mountains') {
             this.renderMountains();
         }
@@ -8719,6 +9362,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'stadium') {
             this.renderStadium();
         }
+        else if (this.activeTheme.background.type === 'destroyed_city') {
+            this.renderDestroyedCity();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -8745,6 +9391,9 @@ var FrameRenderer = (function () {
         }
     };
     FrameRenderer.prototype.renderRoad = function (trackPosition, cameraX, _track, road) {
+        this._currentRoad = road;
+        this._currentTrackPosition = trackPosition;
+        this._currentCameraX = cameraX;
         if (this.activeTheme.ground) {
             if (this.activeTheme.ground.type === 'grid') {
                 this.renderHolodeckFloor(trackPosition);
@@ -8865,8 +9514,16 @@ var FrameRenderer = (function () {
         var visualHorizonY = 5;
         var roadBottom = this.height - 4;
         var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
+        var curveOffset = 0;
+        if (this._currentRoad && relativeZ > 0) {
+            var npcWorldZ = this._currentTrackPosition + relativeZ;
+            var seg = this._currentRoad.getSegment(npcWorldZ);
+            if (seg) {
+                curveOffset = seg.curve * t * 15;
+            }
+        }
         var perspectiveScale = t * t;
-        var screenX = Math.round(40 + relativeX * perspectiveScale * 25);
+        var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
         var roadHeight = roadBottom - visualHorizonY;
         var screenProgress = (screenY - visualHorizonY) / roadHeight;
         var scaleIndex;
@@ -8914,6 +9571,9 @@ var FrameRenderer = (function () {
             this.applyGlitchEffects();
         }
         this.cycle();
+    };
+    FrameRenderer.prototype.getComposer = function () {
+        return this.composer;
     };
     FrameRenderer.prototype.applyGlitchEffects = function () {
         var roadFrame = this.frameManager.getRoadFrame();
@@ -9157,6 +9817,146 @@ var FrameRenderer = (function () {
         moonFrame.setData(moon2X + 1, moon2Y, GLYPH.LIGHT_SHADE, moon2GlowAttr);
         moonFrame.setData(moon2X, moon2Y - 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
         moonFrame.setData(moon2X, moon2Y + 1, GLYPH.LIGHT_SHADE, moon2GlowAttr);
+    };
+    FrameRenderer.prototype.renderMonsterSilhouette = function () {
+        var frame = this.frameManager.getSunFrame();
+        if (!frame)
+            return;
+        var baseY = this.horizonY - 1;
+        var mothraX = 24;
+        var godzillaX = 56;
+        var mothBody = makeAttr(BROWN, BG_BLACK);
+        var mothWing = makeAttr(YELLOW, BG_BLACK);
+        var mothWingLight = makeAttr(WHITE, BG_BROWN);
+        var mothEye = makeAttr(LIGHTCYAN, BG_CYAN);
+        frame.setData(mothraX - 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 3, baseY - 8, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 7, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+        frame.setData(mothraX - 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 6, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 6, GLYPH.FULL_BLOCK, mothEye);
+        for (var wx = mothraX - 12; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX - 11; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx > mothraX - 9) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX - 10; wx <= mothraX - 3; wx++) {
+            frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx > mothraX - 8) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 12; wx++) {
+            frame.setData(wx, baseY - 5, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 11; wx++) {
+            frame.setData(wx, baseY - 4, GLYPH.FULL_BLOCK, (wx < mothraX + 9) ? mothWingLight : mothWing);
+        }
+        for (var wx = mothraX + 3; wx <= mothraX + 10; wx++) {
+            frame.setData(wx, baseY - 3, GLYPH.FULL_BLOCK, (wx < mothraX + 8) ? mothWingLight : mothWing);
+        }
+        frame.setData(mothraX - 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 2, baseY - 5, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX - 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 4, GLYPH.FULL_BLOCK, mothBody);
+        for (var wx = mothraX - 8; wx <= mothraX - 2; wx++) {
+            frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX - 6; wx <= mothraX - 2; wx++) {
+            frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 2; wx <= mothraX + 8; wx++) {
+            frame.setData(wx, baseY - 2, GLYPH.FULL_BLOCK, mothWing);
+        }
+        for (var wx = mothraX + 2; wx <= mothraX + 6; wx++) {
+            frame.setData(wx, baseY - 1, GLYPH.FULL_BLOCK, mothWing);
+        }
+        frame.setData(mothraX - 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX + 1, baseY - 3, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 2, GLYPH.FULL_BLOCK, mothBody);
+        frame.setData(mothraX, baseY - 1, GLYPH.FULL_BLOCK, mothBody);
+        var godzBody = makeAttr(GREEN, BG_BLACK);
+        var godzLight = makeAttr(LIGHTGREEN, BG_BLACK);
+        var godzEye = makeAttr(LIGHTRED, BG_RED);
+        var godzSpine = makeAttr(LIGHTCYAN, BG_CYAN);
+        var godzBreath = makeAttr(LIGHTCYAN, BG_BLACK);
+        frame.setData(godzillaX + 1, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 2, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 3, baseY - 10, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX + 4, baseY - 9, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX - 3, baseY - 9, GLYPH.UPPER_HALF, godzLight);
+        frame.setData(godzillaX - 2, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 9, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 9, GLYPH.UPPER_HALF, godzBody);
+        frame.setData(godzillaX - 4, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 8, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 8, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 4, baseY - 7, GLYPH.FULL_BLOCK, godzEye);
+        frame.setData(godzillaX - 3, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 7, GLYPH.FULL_BLOCK, godzEye);
+        frame.setData(godzillaX - 1, baseY - 7, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 7, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 7, baseY - 6, GLYPH.LEFT_HALF, godzBody);
+        frame.setData(godzillaX - 6, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 4, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 3, baseY - 6, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 2, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 1, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX, baseY - 6, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 8, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+        frame.setData(godzillaX - 9, baseY - 6, GLYPH.FULL_BLOCK, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 6, GLYPH.FULL_BLOCK, godzSpine);
+        frame.setData(godzillaX - 11, baseY - 6, GLYPH.MEDIUM_SHADE, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 5, GLYPH.LIGHT_SHADE, godzBreath);
+        frame.setData(godzillaX - 10, baseY - 7, GLYPH.LIGHT_SHADE, godzBreath);
+        frame.setData(godzillaX - 3, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 5, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 5, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 4, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 4, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 3, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 6, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 5, baseY - 4, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 1, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX, baseY - 3, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 1, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 3, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX - 3, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX - 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 2, GLYPH.FULL_BLOCK, godzLight);
+        frame.setData(godzillaX + 2, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 1, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 2, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 3, baseY - 3, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 4, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 5, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 6, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
+        frame.setData(godzillaX + 7, baseY - 1, GLYPH.RIGHT_HALF, godzBody);
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -9819,6 +10619,70 @@ var FrameRenderer = (function () {
             }
         }
     };
+    FrameRenderer.prototype.renderDestroyedCity = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var fire = makeAttr(LIGHTRED, BG_BLACK);
+        var fireGlow = makeAttr(YELLOW, BG_BLACK);
+        var heli = makeAttr(GREEN, BG_BLACK);
+        var tracer = makeAttr(YELLOW, BG_BLACK);
+        this.drawSimpleHelicopter(frame, 70, 3, heli);
+        frame.setData(67, 4, '-', tracer);
+        frame.setData(65, 4, '-', tracer);
+        frame.setData(63, 4, '-', tracer);
+        frame.setData(61, 5, '*', fire);
+        this.drawSimpleHelicopter(frame, 75, 6, heli);
+        this.drawSimpleBuilding(frame, 2, 6, 3, true);
+        this.drawSimpleBuilding(frame, 7, 8, 3, false);
+        this.drawSimpleBuilding(frame, 12, 5, 3, true);
+        this.drawSimpleBuilding(frame, 62, 7, 3, true);
+        this.drawSimpleBuilding(frame, 68, 9, 4, true);
+        frame.setData(70, this.horizonY - 10, '^', fireGlow);
+        frame.setData(70, this.horizonY - 11, '*', fire);
+        this.drawSimpleBuilding(frame, 74, 6, 3, false);
+        frame.setData(5, this.horizonY - 1, '^', fireGlow);
+        frame.setData(5, this.horizonY - 2, '*', fire);
+        frame.setData(72, this.horizonY - 1, '^', fireGlow);
+        frame.setData(72, this.horizonY - 2, '*', fire);
+    };
+    FrameRenderer.prototype.drawSimpleHelicopter = function (frame, x, y, attr) {
+        frame.setData(x - 1, y - 1, '-', attr);
+        frame.setData(x, y - 1, '+', attr);
+        frame.setData(x + 1, y - 1, '-', attr);
+        frame.setData(x - 1, y, '<', attr);
+        frame.setData(x, y, GLYPH.FULL_BLOCK, attr);
+        frame.setData(x + 1, y, GLYPH.FULL_BLOCK, attr);
+        frame.setData(x + 2, y, '-', attr);
+        frame.setData(x + 3, y, '>', attr);
+    };
+    FrameRenderer.prototype.drawSimpleBuilding = function (frame, x, height, width, damaged) {
+        var building = makeAttr(DARKGRAY, BG_BLACK);
+        var window = makeAttr(BLACK, BG_BLACK);
+        var baseY = this.horizonY - 1;
+        for (var h = 0; h < height; h++) {
+            var y = baseY - h;
+            if (y < 0)
+                continue;
+            if (damaged && h >= height - 1) {
+                for (var w = 0; w < width; w++) {
+                    if ((x + w) % 2 === 0) {
+                        frame.setData(x + w, y, GLYPH.DARK_SHADE, building);
+                    }
+                }
+            }
+            else {
+                for (var w = 0; w < width; w++) {
+                    if (h % 2 === 1 && w > 0 && w < width - 1) {
+                        frame.setData(x + w, y, GLYPH.MEDIUM_SHADE, window);
+                    }
+                    else {
+                        frame.setData(x + w, y, GLYPH.FULL_BLOCK, building);
+                    }
+                }
+            }
+        }
+    };
     FrameRenderer.prototype.drawMountainToFrame = function (frame, baseX, baseY, height, width, attr, highlightAttr) {
         var peakX = baseX + Math.floor(width / 2);
         for (var h = 0; h < height; h++) {
@@ -10271,10 +11135,10 @@ var FrameRenderer = (function () {
             if (wrappedZ < 0)
                 wrappedZ += roadLength;
             var isFinishLine = (wrappedZ < 200) || (wrappedZ > roadLength - 200);
-            this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, accumulatedCurve);
+            this.renderRoadScanline(frame, screenY, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, accumulatedCurve, worldZ);
         }
     };
-    FrameRenderer.prototype.renderRoadScanline = function (frame, y, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, curve) {
+    FrameRenderer.prototype.renderRoadScanline = function (frame, y, centerX, leftEdge, rightEdge, distance, stripePhase, isFinishLine, curve, worldZ) {
         var colors = this.activeTheme.colors;
         var baseSurfaceFg = distance < 10 ? colors.roadSurfaceAlt.fg : colors.roadSurface.fg;
         var baseSurfaceBg = distance < 10 ? colors.roadSurfaceAlt.bg : colors.roadSurface.bg;
@@ -10286,6 +11150,23 @@ var FrameRenderer = (function () {
         var baseStripeBg = colors.roadStripe.bg;
         var baseShoulderFg = colors.shoulderPrimary.fg;
         var baseShoulderBg = colors.shoulderPrimary.bg;
+        var isRainbowRoad = this.activeTheme.road && this.activeTheme.road.rainbow;
+        if (isRainbowRoad) {
+            var rainbowColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+            var trackPos = worldZ || 0;
+            var colorIndex = Math.floor(trackPos * 0.02) % rainbowColors.length;
+            var nextColorIndex = (colorIndex + 1) % rainbowColors.length;
+            baseSurfaceFg = rainbowColors[colorIndex];
+            baseSurfaceBg = BG_BLACK;
+            baseGridFg = rainbowColors[nextColorIndex];
+            baseGridBg = BG_BLACK;
+            baseEdgeFg = rainbowColors[colorIndex];
+            baseEdgeBg = BG_BLACK;
+            baseStripeFg = WHITE;
+            baseStripeBg = BG_BLACK;
+            baseShoulderFg = rainbowColors[(colorIndex + 2) % rainbowColors.length];
+            baseShoulderBg = BG_BLACK;
+        }
         if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined' && GlitchState.roadColorGlitch !== 0) {
             var surfaceGlitch = GlitchState.getGlitchedRoadColor(baseSurfaceFg, baseSurfaceBg, distance);
             baseSurfaceFg = surfaceGlitch.fg;
@@ -10308,12 +11189,13 @@ var FrameRenderer = (function () {
         var edgeAttr = makeAttr(baseEdgeFg, baseEdgeBg);
         var stripeAttr = makeAttr(baseStripeFg, baseStripeBg);
         var shoulderAttr = makeAttr(baseShoulderFg, baseShoulderBg);
+        var hideEdgeMarkers = this.activeTheme.road && this.activeTheme.road.hideEdgeMarkers;
         for (var x = 0; x < this.width; x++) {
             if (x >= leftEdge && x <= rightEdge) {
                 if (isFinishLine) {
                     this.renderFinishCell(frame, x, y, centerX, leftEdge, rightEdge, distance);
                 }
-                else if (x === leftEdge || x === rightEdge) {
+                else if ((x === leftEdge || x === rightEdge) && !hideEdgeMarkers) {
                     frame.setData(x, y, GLYPH.BOX_V, edgeAttr);
                 }
                 else if (Math.abs(x - centerX) < 1 && stripePhase === 0) {
@@ -10325,7 +11207,12 @@ var FrameRenderer = (function () {
                         frame.setData(x, y, GLYPH.BOX_H, gridAttr);
                     }
                     else {
-                        frame.setData(x, y, ' ', roadAttr);
+                        if (isRainbowRoad) {
+                            frame.setData(x, y, GLYPH.FULL_BLOCK, roadAttr);
+                        }
+                        else {
+                            frame.setData(x, y, ' ', roadAttr);
+                        }
                     }
                 }
             }
@@ -10536,6 +11423,47 @@ var FrameRenderer = (function () {
         this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
         this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
         this.renderTrackProgress(frame, hudData.lapProgress);
+        if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
+            this.renderStoplight(frame, hudData.countdown);
+        }
+    };
+    FrameRenderer.prototype.renderStoplight = function (frame, countdown) {
+        var countNum = Math.ceil(countdown);
+        var centerX = 40;
+        var topY = 3;
+        var frameAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+        var redOn = countNum >= 3;
+        var yellowOn = countNum === 2;
+        var greenOn = countNum === 1;
+        var redAttr = redOn ? colorToAttr({ fg: LIGHTRED, bg: BG_RED }) : colorToAttr({ fg: RED, bg: BG_BLACK });
+        var yellowAttr = yellowOn ? colorToAttr({ fg: YELLOW, bg: BG_BROWN }) : colorToAttr({ fg: BROWN, bg: BG_BLACK });
+        var greenAttr = greenOn ? colorToAttr({ fg: LIGHTGREEN, bg: BG_GREEN }) : colorToAttr({ fg: GREEN, bg: BG_BLACK });
+        var boxX = centerX - 7;
+        frame.setData(boxX, topY, GLYPH.DBOX_TL, frameAttr);
+        for (var i = 1; i < 14; i++) {
+            frame.setData(boxX + i, topY, GLYPH.DBOX_H, frameAttr);
+        }
+        frame.setData(boxX + 14, topY, GLYPH.DBOX_TR, frameAttr);
+        frame.setData(boxX, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 1, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 2, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 3, topY + 1, GLYPH.FULL_BLOCK, redAttr);
+        frame.setData(boxX + 4, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 5, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 6, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 7, topY + 1, GLYPH.FULL_BLOCK, yellowAttr);
+        frame.setData(boxX + 8, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX + 9, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 10, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 11, topY + 1, GLYPH.FULL_BLOCK, greenAttr);
+        frame.setData(boxX + 12, topY + 1, ' ', frameAttr);
+        frame.setData(boxX + 13, topY + 1, countNum.toString(), colorToAttr({ fg: WHITE, bg: BG_BLACK }));
+        frame.setData(boxX + 14, topY + 1, GLYPH.DBOX_V, frameAttr);
+        frame.setData(boxX, topY + 2, GLYPH.DBOX_BL, frameAttr);
+        for (var j = 1; j < 14; j++) {
+            frame.setData(boxX + j, topY + 2, GLYPH.DBOX_H, frameAttr);
+        }
+        frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
     FrameRenderer.prototype.renderTrackProgress = function (frame, progress) {
         var y = this.height - 1;
@@ -10624,6 +11552,9 @@ var Renderer = (function () {
     Renderer.prototype.beginFrame = function () {
         this.composer.clear();
     };
+    Renderer.prototype.getComposer = function () {
+        return this.composer;
+    };
     Renderer.prototype.renderSky = function (trackPosition, curvature, playerSteer, speed, dt) {
         this.skylineRenderer.render(trackPosition, curvature, playerSteer, speed, dt);
     };
@@ -10692,7 +11623,12 @@ var Renderer = (function () {
     return Renderer;
 }());
 "use strict";
-function createInitialState(track, road, playerVehicle) {
+var RaceMode;
+(function (RaceMode) {
+    RaceMode["TIME_TRIAL"] = "time_trial";
+    RaceMode["GRAND_PRIX"] = "grand_prix";
+})(RaceMode || (RaceMode = {}));
+function createInitialState(track, road, playerVehicle, raceMode) {
     return {
         track: track,
         road: road,
@@ -10702,7 +11638,14 @@ function createInitialState(track, road, playerVehicle) {
         time: 0,
         racing: false,
         finished: false,
-        cameraX: 0
+        cameraX: 0,
+        raceMode: raceMode || RaceMode.TIME_TRIAL,
+        lapStartTime: 0,
+        bestLapTime: -1,
+        lapTimes: [],
+        raceResults: [],
+        countdown: 3,
+        raceStarted: false
     };
 }
 "use strict";
@@ -10758,7 +11701,7 @@ var RaceSystem = (function () {
             }
             this.lastTrackZ[vehicle.id] = currentZ;
         }
-        PositionIndicator.calculatePositions(state.vehicles);
+        PositionIndicator.calculatePositions(state.vehicles, roadLength);
     };
     return RaceSystem;
 }());
@@ -10789,8 +11732,9 @@ var Game = (function () {
         this.itemSystem = new ItemSystem();
         this.state = null;
     }
-    Game.prototype.initWithTrack = function (trackDef) {
-        logInfo("Game.initWithTrack(): " + trackDef.name);
+    Game.prototype.initWithTrack = function (trackDef, raceMode) {
+        logInfo("Game.initWithTrack(): " + trackDef.name + " mode: " + (raceMode || RaceMode.GRAND_PRIX));
+        var mode = raceMode || RaceMode.GRAND_PRIX;
         this.renderer.init();
         var themeMapping = {
             'synthwave': 'synthwave',
@@ -10807,7 +11751,8 @@ var Game = (function () {
             'villains_lair': 'villains_lair',
             'ancient_ruins': 'ancient_ruins',
             'thunder_stadium': 'thunder_stadium',
-            'glitch_circuit': 'glitch_circuit'
+            'glitch_circuit': 'glitch_circuit',
+            'kaiju_rampage': 'kaiju_rampage'
         };
         var themeName = themeMapping[trackDef.themeId] || 'synthwave';
         if (this.renderer.setTheme) {
@@ -10820,27 +11765,44 @@ var Game = (function () {
         var playerVehicle = new Vehicle();
         playerVehicle.driver = new HumanDriver(this.controls);
         playerVehicle.color = YELLOW;
-        playerVehicle.trackZ = 0;
-        playerVehicle.playerX = 0;
-        this.state = createInitialState(track, road, playerVehicle);
-        var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
-        this.spawnNPCs(npcCount, road);
+        playerVehicle.isNPC = false;
+        this.state = createInitialState(track, road, playerVehicle, mode);
+        if (mode === RaceMode.GRAND_PRIX) {
+            this.spawnRacers(7, road);
+            this.positionOnStartingGrid(road);
+            for (var i = 0; i < this.state.vehicles.length; i++) {
+                var v = this.state.vehicles[i];
+                var drv = v.driver;
+                if (drv && drv.setCanMove) {
+                    drv.setCanMove(false);
+                }
+            }
+        }
+        else {
+            var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
+            this.spawnNPCs(npcCount, road);
+            playerVehicle.trackZ = 0;
+            playerVehicle.playerX = 0;
+        }
         this.physicsSystem.init(this.state);
         this.raceSystem.init(this.state);
         this.itemSystem.initFromTrack(track);
-        this.hud.init(0);
+        var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
+        this.hud.init(totalRacers);
         this.running = true;
         this.state.racing = true;
         debugLog.info("Game initialized with track: " + trackDef.name);
+        debugLog.info("  Race mode: " + mode);
         debugLog.info("  Road segments: " + road.segments.length);
         debugLog.info("  Road length: " + road.totalLength);
         debugLog.info("  Laps: " + road.laps);
+        debugLog.info("  Total racers: " + this.state.vehicles.length);
     };
     Game.prototype.init = function () {
         logInfo("Game.init()");
         var defaultTrack = getTrackDefinition('test_oval');
         if (defaultTrack) {
-            this.initWithTrack(defaultTrack);
+            this.initWithTrack(defaultTrack, RaceMode.GRAND_PRIX);
         }
         else {
             this.initWithTrack({
@@ -10878,6 +11840,11 @@ var Game = (function () {
                     debugLog.logVehicle(this.state.playerVehicle);
                     lastLogTime = this.state.time;
                 }
+                if (this.state.finished && this.state.racing === false) {
+                    debugLog.info("Race complete! Final time: " + this.state.time.toFixed(2));
+                    this.showGameOverScreen();
+                    this.running = false;
+                }
             }
             this.render();
             mswait(1);
@@ -10906,22 +11873,126 @@ var Game = (function () {
     Game.prototype.tick = function (dt) {
         if (!this.state)
             return;
+        if (!this.state.raceStarted && this.state.raceMode === RaceMode.GRAND_PRIX) {
+            this.state.countdown -= dt;
+            if (this.state.countdown <= 0) {
+                this.state.raceStarted = true;
+                this.state.countdown = 0;
+                this.state.time = 0;
+                this.state.lapStartTime = 0;
+                for (var i = 0; i < this.state.vehicles.length; i++) {
+                    var vehicle = this.state.vehicles[i];
+                    var driver = vehicle.driver;
+                    if (driver && driver.setCanMove) {
+                        driver.setCanMove(true);
+                    }
+                }
+                debugLog.info("Race started! GO!");
+            }
+            return;
+        }
         this.state.time += dt;
         this.physicsSystem.update(this.state, dt);
         this.raceSystem.update(this.state, dt);
-        this.activateDormantNPCs();
-        this.applyNPCPacing();
+        if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+            this.activateDormantNPCs();
+            this.applyNPCPacing();
+        }
         this.itemSystem.update(dt);
         this.itemSystem.checkPickups(this.state.vehicles);
         if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
             this.itemSystem.useItem(this.state.playerVehicle);
         }
         Collision.processVehicleCollisions(this.state.vehicles);
-        this.checkNPCRespawn();
+        if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+            this.checkNPCRespawn();
+        }
         this.state.cameraX = this.state.playerVehicle.x;
-        if (this.state.finished && this.state.racing === false) {
-            debugLog.info("Race complete! Exiting game loop. Final time: " + this.state.time.toFixed(2));
-            this.running = false;
+    };
+    Game.prototype.showGameOverScreen = function () {
+        if (!this.state)
+            return;
+        debugLog.info("Showing game over screen, waiting for ENTER...");
+        var player = this.state.playerVehicle;
+        var finalPosition = player.racePosition;
+        var finalTime = this.state.time;
+        var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
+        while (true) {
+            this.renderResultsScreen(finalPosition, finalTime, bestLap);
+            var key = console.inkey(K_NONE, 0);
+            if (key === '\r' || key === '\n') {
+                debugLog.info("ENTER pressed, exiting game over screen");
+                break;
+            }
+            mswait(16);
+        }
+    };
+    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap) {
+        this.renderer.beginFrame();
+        var composer = this.renderer.getComposer();
+        for (var y = 0; y < 25; y++) {
+            for (var x = 0; x < 80; x++) {
+                composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
+            }
+        }
+        var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+        var labelAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+        var valueAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+        var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+        var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+        var boxWidth = 40;
+        var boxHeight = 12;
+        var boxX = 20;
+        var topY = 6;
+        composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
+        composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
+        composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
+        composer.setCell(boxX + boxWidth - 1, topY + boxHeight - 1, GLYPH.DBOX_BR, boxAttr);
+        for (var i = 1; i < boxWidth - 1; i++) {
+            composer.setCell(boxX + i, topY, GLYPH.DBOX_H, boxAttr);
+            composer.setCell(boxX + i, topY + boxHeight - 1, GLYPH.DBOX_H, boxAttr);
+        }
+        for (var j = 1; j < boxHeight - 1; j++) {
+            composer.setCell(boxX, topY + j, GLYPH.DBOX_V, boxAttr);
+            composer.setCell(boxX + boxWidth - 1, topY + j, GLYPH.DBOX_V, boxAttr);
+        }
+        var title = "=== RACE COMPLETE ===";
+        composer.writeString(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2, title, titleAttr);
+        var posSuffix = PositionIndicator.getOrdinalSuffix(position);
+        composer.writeString(boxX + 4, topY + 4, "FINAL POSITION:", labelAttr);
+        composer.writeString(boxX + 22, topY + 4, position + posSuffix, valueAttr);
+        composer.writeString(boxX + 4, topY + 5, "TOTAL TIME:", labelAttr);
+        composer.writeString(boxX + 22, topY + 5, LapTimer.format(totalTime), valueAttr);
+        composer.writeString(boxX + 4, topY + 6, "BEST LAP:", labelAttr);
+        composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
+        composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
+        composer.writeString(boxX + 22, topY + 8, this.state.track.name, valueAttr);
+        var prompt = "Press ENTER to continue";
+        composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
+        this.flushComposerToConsole(composer);
+    };
+    Game.prototype.flushComposerToConsole = function (composer) {
+        console.home();
+        var buffer = composer.getBuffer();
+        for (var y = 0; y < buffer.length; y++) {
+            var row = buffer[y];
+            var line = '';
+            var lastAttr = -1;
+            for (var x = 0; x < row.length; x++) {
+                var cell = row[x];
+                if (cell.attr !== lastAttr) {
+                    if (line.length > 0) {
+                        console.print(line);
+                        line = '';
+                    }
+                    console.attributes = cell.attr;
+                    lastAttr = cell.attr;
+                }
+                line += cell.char;
+            }
+            if (line.length > 0) {
+                console.print(line);
+            }
         }
     };
     Game.prototype.activateDormantNPCs = function () {
@@ -10931,7 +12002,7 @@ var Game = (function () {
         var roadLength = this.state.road.totalLength;
         for (var i = 0; i < this.state.vehicles.length; i++) {
             var npc = this.state.vehicles[i];
-            if (!npc.isNPC)
+            if (!npc.isNPC || npc.isRacer)
                 continue;
             var driver = npc.driver;
             if (driver.isActive())
@@ -10953,7 +12024,7 @@ var Game = (function () {
         var respawnDistance = 100;
         var npcs = [];
         for (var i = 0; i < this.state.vehicles.length; i++) {
-            if (this.state.vehicles[i].isNPC) {
+            if (this.state.vehicles[i].isNPC && !this.state.vehicles[i].isRacer) {
                 npcs.push(this.state.vehicles[i]);
             }
         }
@@ -11028,7 +12099,7 @@ var Game = (function () {
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
         this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);
         this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes());
-        var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time);
+        var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time, this.state.countdown, this.state.raceMode);
         this.renderer.renderHud(hudData);
         this.renderer.endFrame();
     };
@@ -11039,6 +12110,72 @@ var Game = (function () {
             this.timestep.reset();
         }
         logInfo("Game " + (this.paused ? "paused" : "resumed"));
+    };
+    Game.prototype.spawnRacers = function (count, _road) {
+        if (!this.state)
+            return;
+        var racerColors = [
+            { body: LIGHTRED, highlight: WHITE },
+            { body: LIGHTBLUE, highlight: LIGHTCYAN },
+            { body: LIGHTGREEN, highlight: WHITE },
+            { body: LIGHTMAGENTA, highlight: WHITE },
+            { body: LIGHTCYAN, highlight: WHITE },
+            { body: WHITE, highlight: LIGHTGRAY },
+            { body: BROWN, highlight: YELLOW }
+        ];
+        var skillLevels = [0.82, 0.75, 0.58, 0.52, 0.42, 0.38, 0.35];
+        for (var i = 0; i < count && i < racerColors.length; i++) {
+            var racer = new Vehicle();
+            var skill = skillLevels[i] || 0.6;
+            racer.driver = new RacerDriver(skill);
+            racer.isNPC = true;
+            racer.isRacer = true;
+            var typeIndex = Math.floor(Math.random() * NPC_VEHICLE_TYPES.length);
+            racer.npcType = NPC_VEHICLE_TYPES[typeIndex];
+            var colorPalette = racerColors[i];
+            racer.color = colorPalette.body;
+            racer.npcColorIndex = i;
+            racer.trackZ = 0;
+            racer.z = 0;
+            racer.playerX = 0;
+            this.state.vehicles.push(racer);
+        }
+        debugLog.info("Spawned " + count + " CPU racers for Grand Prix");
+    };
+    Game.prototype.positionOnStartingGrid = function (_road) {
+        if (!this.state)
+            return;
+        var vehicles = this.state.vehicles;
+        var gridColSpacing = 0.4;
+        var startZ = 0;
+        var playerIdx = -1;
+        for (var p = 0; p < vehicles.length; p++) {
+            if (!vehicles[p].isNPC) {
+                playerIdx = p;
+                break;
+            }
+        }
+        var gridSlot = 0;
+        for (var v = 0; v < vehicles.length; v++) {
+            var vehicle = vehicles[v];
+            vehicle.trackZ = startZ;
+            vehicle.z = startZ;
+            if (v === playerIdx) {
+                vehicle.playerX = 0;
+            }
+            else {
+                var side = (gridSlot % 2 === 0) ? -1 : 1;
+                var offset = Math.floor(gridSlot / 2) * 0.15;
+                vehicle.playerX = side * (gridColSpacing + offset);
+                gridSlot++;
+            }
+            vehicle.speed = 0;
+            vehicle.lap = 1;
+            vehicle.checkpoint = 0;
+            vehicle.racePosition = v + 1;
+            debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+        }
+        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
     };
     Game.prototype.spawnNPCs = function (count, road) {
         if (!this.state)
@@ -11075,155 +12212,818 @@ var Game = (function () {
     return Game;
 }());
 "use strict";
+var CIRCUITS = [
+    {
+        id: 'retro_cup',
+        name: 'RETRO CUP',
+        icon: [
+            '  ____  ',
+            ' /    \\ ',
+            '|  RC  |',
+            ' \\____/ ',
+            '   ||   '
+        ],
+        color: LIGHTCYAN,
+        trackIds: ['neon_coast', 'downtown_dash', 'sunset_beach', 'twilight_grove'],
+        description: 'Classic retro vibes'
+    },
+    {
+        id: 'nature_cup',
+        name: 'NATURE CUP',
+        icon: [
+            '   /\\   ',
+            '  /  \\  ',
+            ' /    \\ ',
+            '/______\\',
+            '   NC   '
+        ],
+        color: LIGHTGREEN,
+        trackIds: ['winter_wonderland', 'cactus_canyon', 'jungle_run', 'sugar_rush'],
+        description: 'Wild natural courses'
+    },
+    {
+        id: 'dark_cup',
+        name: 'DARK CUP',
+        icon: [
+            ' _\\||/_ ',
+            '  \\||/  ',
+            '  /||\\ ',
+            ' /_||\\_',
+            '   DC   '
+        ],
+        color: LIGHTMAGENTA,
+        trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'pharaohs_tomb'],
+        description: 'Dangerous & mysterious'
+    },
+    {
+        id: 'special_cup',
+        name: 'SPECIAL CUP',
+        icon: [
+            '   **   ',
+            '  *  *  ',
+            ' * SC * ',
+            '  *  *  ',
+            '   **   '
+        ],
+        color: YELLOW,
+        trackIds: ['celestial_circuit', 'thunder_stadium', 'glitch_circuit', 'kaiju_rampage'],
+        description: 'Ultimate challenge'
+    }
+];
+var LEFT_PANEL_WIDTH = 22;
+var RIGHT_PANEL_START = 24;
+var SCREEN_WIDTH = 80;
 function showTrackSelector() {
-    var tracks = getAllTracks();
-    var selectedIndex = 0;
-    var pageSize = 5;
-    var scrollOffset = 0;
-    console.clear(LIGHTGRAY, false);
-    drawTrackSelectorScreen(tracks, selectedIndex, scrollOffset, pageSize);
+    var state = {
+        mode: 'circuit',
+        circuitIndex: 0,
+        trackIndex: 0
+    };
+    console.clear(LIGHTGRAY);
+    drawSelectorUI(state);
     while (true) {
-        var key = console.inkey(K_UPPER, 500);
+        var key = console.inkey(K_UPPER, 100);
         if (key === '')
             continue;
         var needsRedraw = false;
-        if (key === KEY_UP) {
-            selectedIndex--;
-            if (selectedIndex < 0)
-                selectedIndex = tracks.length - 1;
-            needsRedraw = true;
-        }
-        else if (key === KEY_DOWN) {
-            selectedIndex++;
-            if (selectedIndex >= tracks.length)
-                selectedIndex = 0;
-            needsRedraw = true;
-        }
-        else if (key === 'W' || key === '8') {
-            selectedIndex--;
-            if (selectedIndex < 0)
-                selectedIndex = tracks.length - 1;
-            needsRedraw = true;
-        }
-        else if (key === 'S' || key === '2') {
-            selectedIndex++;
-            if (selectedIndex >= tracks.length)
-                selectedIndex = 0;
-            needsRedraw = true;
-        }
-        else if (key === '\r' || key === '\n' || key === ' ') {
-            return {
-                selected: true,
-                track: tracks[selectedIndex]
-            };
-        }
-        else if (key >= '1' && key <= '9') {
-            var quickIndex = parseInt(key, 10) - 1;
-            if (quickIndex < tracks.length) {
-                return {
-                    selected: true,
-                    track: tracks[quickIndex]
-                };
+        if (state.mode === 'circuit') {
+            if (key === KEY_UP || key === 'W' || key === '8') {
+                state.circuitIndex = (state.circuitIndex - 1 + CIRCUITS.length) % CIRCUITS.length;
+                needsRedraw = true;
             }
-        }
-        else if (key === 'Q' || key === KEY_ESC) {
-            return {
-                selected: false,
-                track: null
-            };
-        }
-        if (needsRedraw) {
-            if (selectedIndex < scrollOffset) {
-                scrollOffset = selectedIndex;
+            else if (key === KEY_DOWN || key === 'S' || key === '2') {
+                state.circuitIndex = (state.circuitIndex + 1) % CIRCUITS.length;
+                needsRedraw = true;
             }
-            if (selectedIndex >= scrollOffset + pageSize) {
-                scrollOffset = selectedIndex - pageSize + 1;
+            else if (key === '\r' || key === '\n' || key === ' ' || key === KEY_RIGHT || key === 'D' || key === '6') {
+                state.mode = 'tracks';
+                state.trackIndex = 0;
+                needsRedraw = true;
             }
-            console.clear(LIGHTGRAY, false);
-            drawTrackSelectorScreen(tracks, selectedIndex, scrollOffset, pageSize);
-        }
-    }
-}
-function drawTrackSelectorScreen(tracks, selectedIndex, scrollOffset, pageSize) {
-    console.attributes = LIGHTMAGENTA;
-    console.print("\r\n");
-    console.print("  ========================================\r\n");
-    console.attributes = LIGHTCYAN;
-    console.print("           SELECT YOUR TRACK\r\n");
-    console.attributes = LIGHTMAGENTA;
-    console.print("  ========================================\r\n");
-    console.print("\r\n");
-    var endIndex = Math.min(scrollOffset + pageSize, tracks.length);
-    for (var i = scrollOffset; i < endIndex; i++) {
-        var track = tracks[i];
-        var isSelected = (i === selectedIndex);
-        var displayNum = i + 1;
-        if (isSelected) {
-            console.attributes = LIGHTCYAN;
-            console.print("  >> ");
+            else if (key === 'Q' || key === KEY_ESC) {
+                return { selected: false, track: null };
+            }
         }
         else {
-            console.attributes = DARKGRAY;
-            console.print("     ");
+            if (key === KEY_UP || key === 'W' || key === '8') {
+                state.trackIndex--;
+                if (state.trackIndex < 0)
+                    state.trackIndex = 4;
+                needsRedraw = true;
+            }
+            else if (key === KEY_DOWN || key === 'S' || key === '2') {
+                state.trackIndex++;
+                if (state.trackIndex > 4)
+                    state.trackIndex = 0;
+                needsRedraw = true;
+            }
+            else if (key === '\r' || key === '\n' || key === ' ') {
+                var circuit = CIRCUITS[state.circuitIndex];
+                if (state.trackIndex === 4) {
+                    var circuitTracks = getCircuitTracks(circuit);
+                    return {
+                        selected: true,
+                        track: circuitTracks[0],
+                        isCircuitMode: true,
+                        circuitTracks: circuitTracks
+                    };
+                }
+                else {
+                    var trackDef = getTrackDefinition(circuit.trackIds[state.trackIndex]);
+                    if (trackDef) {
+                        return {
+                            selected: true,
+                            track: trackDef,
+                            isCircuitMode: false,
+                            circuitTracks: null
+                        };
+                    }
+                }
+            }
+            else if (key === KEY_LEFT || key === 'A' || key === '4' || key === KEY_ESC) {
+                state.mode = 'circuit';
+                needsRedraw = true;
+            }
+            else if (key === 'Q') {
+                return { selected: false, track: null };
+            }
         }
-        console.attributes = isSelected ? WHITE : LIGHTGRAY;
-        console.print(displayNum + ". ");
-        console.attributes = isSelected ? LIGHTCYAN : CYAN;
-        console.print(padRight(track.name, 20));
-        console.attributes = isSelected ? YELLOW : BROWN;
-        console.print(" [" + renderDifficultyStars(track.difficulty) + "] ");
-        console.attributes = isSelected ? LIGHTGRAY : DARKGRAY;
-        console.print(track.laps + " laps");
-        console.print("\r\n");
-        if (isSelected) {
-            console.attributes = LIGHTGRAY;
-            console.print("        " + track.description + "\r\n");
-            console.attributes = DARKGRAY;
-            console.print("        Est. lap time: ~" + track.estimatedLapTime + "s\r\n");
+        if (needsRedraw) {
+            console.clear(LIGHTGRAY);
+            drawSelectorUI(state);
         }
     }
-    if (scrollOffset > 0) {
-        console.attributes = DARKGRAY;
-        console.print("\r\n     ^ More tracks above ^\r\n");
-    }
-    if (endIndex < tracks.length) {
-        console.attributes = DARKGRAY;
-        console.print("\r\n     v More tracks below v\r\n");
-    }
-    console.print("\r\n");
-    drawTrackPreview(tracks[selectedIndex]);
-    console.print("\r\n");
-    console.attributes = LIGHTMAGENTA;
-    console.print("  ----------------------------------------\r\n");
-    console.attributes = LIGHTGRAY;
-    console.print("  W/S or UP/DOWN = Navigate    ENTER = Select\r\n");
-    console.print("  1-9 = Quick Select           Q = Back\r\n");
-    console.attributes = LIGHTMAGENTA;
-    console.print("  ----------------------------------------\r\n");
 }
-function drawTrackPreview(track) {
-    var theme = getTrackTheme(track);
+function getCircuitTracks(circuit) {
+    var tracks = [];
+    for (var i = 0; i < circuit.trackIds.length; i++) {
+        var track = getTrackDefinition(circuit.trackIds[i]);
+        if (track)
+            tracks.push(track);
+    }
+    return tracks;
+}
+function drawSelectorUI(state) {
+    drawHeader();
+    drawLeftPanel(state);
+    drawRightPanel(state);
+    drawControls(state);
+}
+function drawHeader() {
+    console.gotoxy(1, 1);
+    console.attributes = LIGHTMAGENTA;
+    console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH));
+    console.gotoxy(1, 2);
+    console.attributes = LIGHTCYAN;
+    var title = '  SELECT YOUR RACE  ';
+    var padding = Math.floor((SCREEN_WIDTH - title.length) / 2);
+    console.print(repeatChar(' ', padding) + title);
+    console.gotoxy(1, 3);
+    console.attributes = LIGHTMAGENTA;
+    console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH));
+}
+function drawLeftPanel(state) {
+    var y = 5;
+    for (var sy = 4; sy <= 22; sy++) {
+        console.gotoxy(LEFT_PANEL_WIDTH, sy);
+        console.attributes = DARKGRAY;
+        console.print(GLYPH.BOX_V);
+    }
+    if (state.mode === 'circuit') {
+        drawCircuitSelector(state, y);
+    }
+    else {
+        drawTrackList(state, y);
+    }
+}
+function drawCircuitSelector(state, startY) {
+    console.gotoxy(2, startY);
+    console.attributes = WHITE;
+    console.print('SELECT CIRCUIT');
+    for (var i = 0; i < CIRCUITS.length; i++) {
+        var circuit = CIRCUITS[i];
+        var isSelected = (i === state.circuitIndex);
+        var baseY = startY + 2 + (i * 4);
+        console.gotoxy(1, baseY + 1);
+        if (isSelected) {
+            console.attributes = circuit.color;
+            console.print(GLYPH.TRIANGLE_RIGHT);
+        }
+        else {
+            console.print(' ');
+        }
+        console.gotoxy(3, baseY);
+        console.attributes = isSelected ? circuit.color : DARKGRAY;
+        var shortName = circuit.name.substring(0, 10);
+        console.print(shortName);
+        console.gotoxy(3, baseY + 1);
+        console.attributes = isSelected ? WHITE : DARKGRAY;
+        console.print(circuit.icon[2].substring(0, 8));
+        console.gotoxy(3, baseY + 2);
+        console.attributes = isSelected ? LIGHTGRAY : DARKGRAY;
+        console.print('4 tracks');
+    }
+}
+function drawTrackList(state, startY) {
+    var circuit = CIRCUITS[state.circuitIndex];
+    console.gotoxy(2, startY);
     console.attributes = DARKGRAY;
-    console.print("  Theme: ");
+    console.print(GLYPH.TRIANGLE_LEFT + ' ');
+    console.attributes = circuit.color;
+    console.print(circuit.name.substring(0, 14));
+    console.gotoxy(2, startY + 1);
+    console.attributes = DARKGRAY;
+    console.print(repeatChar(GLYPH.BOX_H, LEFT_PANEL_WIDTH - 4));
+    for (var i = 0; i < circuit.trackIds.length; i++) {
+        var track = getTrackDefinition(circuit.trackIds[i]);
+        if (!track)
+            continue;
+        var isSelected = (i === state.trackIndex);
+        var y = startY + 3 + (i * 3);
+        console.gotoxy(1, y);
+        if (isSelected) {
+            console.attributes = circuit.color;
+            console.print(GLYPH.TRIANGLE_RIGHT);
+        }
+        else {
+            console.print(' ');
+        }
+        console.gotoxy(3, y);
+        console.attributes = isSelected ? WHITE : LIGHTGRAY;
+        console.print((i + 1) + '.');
+        console.gotoxy(6, y);
+        console.attributes = isSelected ? circuit.color : CYAN;
+        var name = track.name.substring(0, 13);
+        console.print(name);
+        console.gotoxy(3, y + 1);
+        console.attributes = isSelected ? YELLOW : BROWN;
+        console.print(renderDifficultyStars(track.difficulty));
+    }
+    var playY = startY + 3 + (4 * 3);
+    var isPlaySelected = (state.trackIndex === 4);
+    console.gotoxy(1, playY);
+    if (isPlaySelected) {
+        console.attributes = LIGHTGREEN;
+        console.print(GLYPH.TRIANGLE_RIGHT);
+    }
+    else {
+        console.print(' ');
+    }
+    console.gotoxy(3, playY);
+    console.attributes = isPlaySelected ? LIGHTGREEN : GREEN;
+    console.print(GLYPH.TRIANGLE_RIGHT + ' PLAY CUP');
+}
+function drawRightPanel(state) {
+    var circuit = CIRCUITS[state.circuitIndex];
+    console.gotoxy(RIGHT_PANEL_START, 5);
+    console.attributes = WHITE;
+    if (state.mode === 'circuit' || (state.mode === 'tracks' && state.trackIndex === 4)) {
+        console.print('CIRCUIT INFO');
+        console.gotoxy(RIGHT_PANEL_START, 6);
+        console.attributes = DARKGRAY;
+        console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
+        drawCircuitInfo(circuit);
+    }
+    else {
+        var track = getTrackDefinition(circuit.trackIds[state.trackIndex]);
+        if (track) {
+            console.print('TRACK INFO');
+            console.gotoxy(RIGHT_PANEL_START, 6);
+            console.attributes = DARKGRAY;
+            console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
+            drawTrackInfo(track, circuit.color);
+            drawTrackRoute(track);
+        }
+    }
+}
+function drawCircuitInfo(circuit) {
+    var y = 8;
+    console.gotoxy(RIGHT_PANEL_START, y);
+    console.attributes = circuit.color;
+    console.print(circuit.name);
+    for (var iconLine = 0; iconLine < circuit.icon.length; iconLine++) {
+        console.gotoxy(RIGHT_PANEL_START + 20, y - 1 + iconLine);
+        console.attributes = circuit.color;
+        console.print(circuit.icon[iconLine]);
+    }
+    console.gotoxy(RIGHT_PANEL_START, y + 1);
     console.attributes = LIGHTGRAY;
-    console.print(theme.name + "\r\n");
-    console.print("  ");
-    console.attributes = theme.sky.top.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
-    console.attributes = theme.sky.horizon.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
-    console.attributes = theme.sun.color.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
-    console.attributes = theme.road.surface.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
+    console.print(circuit.description);
+    console.gotoxy(RIGHT_PANEL_START, y + 3);
+    console.attributes = WHITE;
+    console.print('Tracks in this circuit:');
+    var totalLaps = 0;
+    var totalTime = 0;
+    for (var i = 0; i < circuit.trackIds.length; i++) {
+        var track = getTrackDefinition(circuit.trackIds[i]);
+        if (!track)
+            continue;
+        console.gotoxy(RIGHT_PANEL_START + 2, y + 5 + i);
+        console.attributes = CYAN;
+        console.print((i + 1) + '. ' + padRight(track.name, 22));
+        console.attributes = YELLOW;
+        console.print(renderDifficultyStars(track.difficulty));
+        totalLaps += track.laps;
+        totalTime += track.estimatedLapTime * track.laps;
+    }
+    console.gotoxy(RIGHT_PANEL_START, y + 11);
+    console.attributes = DARKGRAY;
+    console.print(repeatChar(GLYPH.BOX_H, 40));
+    console.gotoxy(RIGHT_PANEL_START, y + 12);
+    console.attributes = LIGHTGRAY;
+    console.print('Total Races: ');
+    console.attributes = WHITE;
+    console.print(circuit.trackIds.length.toString());
+    console.gotoxy(RIGHT_PANEL_START + 20, y + 12);
+    console.attributes = LIGHTGRAY;
+    console.print('Total Laps: ');
+    console.attributes = WHITE;
+    console.print(totalLaps.toString());
+    console.gotoxy(RIGHT_PANEL_START, y + 13);
+    console.attributes = LIGHTGRAY;
+    console.print('Est. Time: ');
+    console.attributes = WHITE;
+    console.print(formatTime(totalTime));
+}
+function drawTrackInfo(track, _accentColor) {
+    var theme = getTrackTheme(track);
+    console.gotoxy(RIGHT_PANEL_START, 8);
     console.attributes = theme.road.edge.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
-    console.attributes = theme.offroad.groundColor.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
-    console.attributes = theme.background.color.fg;
-    console.print(String.fromCharCode(219) + String.fromCharCode(219));
+    console.print(track.name);
+    console.attributes = YELLOW;
+    console.print('  ' + renderDifficultyStars(track.difficulty));
+    console.gotoxy(RIGHT_PANEL_START, 9);
+    console.attributes = DARKGRAY;
+    console.print(track.laps + ' laps');
+    drawThemedTrackMap(track, theme);
+}
+function drawThemedTrackMap(track, theme) {
+    var mapX = RIGHT_PANEL_START;
+    var mapY = 11;
+    var mapWidth = SCREEN_WIDTH - RIGHT_PANEL_START - 1;
+    var mapHeight = 13;
+    var pixelWidth = mapWidth - 2;
+    var pixelHeight = (mapHeight - 1) * 2;
+    var points = generateTrackLoop(track, pixelWidth, pixelHeight);
+    var pixels = createPixelGrid(pixelWidth, pixelHeight);
+    rasterizeTrack(points, pixels, pixelWidth, pixelHeight);
+    markInfield(pixels, pixelWidth, pixelHeight);
+    renderHalfBlockMap(pixels, mapX + 2, mapY + 1, pixelWidth, pixelHeight, theme);
+    drawStartFinishHiRes(points, mapX + 2, mapY + 1, pixelWidth, pixelHeight, theme);
+}
+function createPixelGrid(width, height) {
+    var grid = [];
+    for (var y = 0; y < height; y++) {
+        grid[y] = [];
+        for (var x = 0; x < width; x++) {
+            grid[y][x] = 0;
+        }
+    }
+    return grid;
+}
+function markInfield(pixels, width, height) {
+    var OUTSIDE_MARKER = -1;
+    var queue = [];
+    for (var x = 0; x < width; x++) {
+        if (pixels[0][x] === 0) {
+            pixels[0][x] = OUTSIDE_MARKER;
+            queue.push({ x: x, y: 0 });
+        }
+        if (pixels[height - 1][x] === 0) {
+            pixels[height - 1][x] = OUTSIDE_MARKER;
+            queue.push({ x: x, y: height - 1 });
+        }
+    }
+    for (var y = 0; y < height; y++) {
+        if (pixels[y][0] === 0) {
+            pixels[y][0] = OUTSIDE_MARKER;
+            queue.push({ x: 0, y: y });
+        }
+        if (pixels[y][width - 1] === 0) {
+            pixels[y][width - 1] = OUTSIDE_MARKER;
+            queue.push({ x: width - 1, y: y });
+        }
+    }
+    while (queue.length > 0) {
+        var p = queue.shift();
+        if (!p)
+            break;
+        var neighbors = [
+            { x: p.x - 1, y: p.y },
+            { x: p.x + 1, y: p.y },
+            { x: p.x, y: p.y - 1 },
+            { x: p.x, y: p.y + 1 }
+        ];
+        for (var i = 0; i < neighbors.length; i++) {
+            var n = neighbors[i];
+            if (n.x >= 0 && n.x < width && n.y >= 0 && n.y < height) {
+                if (pixels[n.y][n.x] === 0) {
+                    pixels[n.y][n.x] = OUTSIDE_MARKER;
+                    queue.push(n);
+                }
+            }
+        }
+    }
+    for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+            if (pixels[y][x] === OUTSIDE_MARKER) {
+                pixels[y][x] = 0;
+            }
+            else if (pixels[y][x] === 0) {
+                pixels[y][x] = 3;
+            }
+        }
+    }
+}
+function rasterizeTrack(points, pixels, width, height) {
+    if (points.length < 2)
+        return;
+    var roadWidth = 2;
+    var edgeWidth = 1;
+    for (var i = 0; i < points.length - 1; i++) {
+        var x1 = points[i].x;
+        var y1 = points[i].y;
+        var x2 = points[i + 1].x;
+        var y2 = points[i + 1].y;
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var len = Math.sqrt(dx * dx + dy * dy);
+        if (len === 0)
+            continue;
+        var perpX = -dy / len;
+        var perpY = dx / len;
+        var steps = Math.max(Math.ceil(len), 1);
+        for (var s = 0; s <= steps; s++) {
+            var t = s / steps;
+            var cx = x1 + dx * t;
+            var cy = y1 + dy * t;
+            for (var w = -(roadWidth + edgeWidth); w <= (roadWidth + edgeWidth); w++) {
+                var px = Math.floor(cx + perpX * w);
+                var py = Math.floor(cy + perpY * w);
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                    if (Math.abs(w) <= roadWidth) {
+                        pixels[py][px] = 2;
+                    }
+                    else if (pixels[py][px] === 0) {
+                        pixels[py][px] = 1;
+                    }
+                }
+            }
+        }
+    }
+}
+function renderHalfBlockMap(pixels, screenX, screenY, width, height, theme) {
+    var charRows = Math.floor(height / 2);
+    function getPixelColor(pixelType) {
+        switch (pixelType) {
+            case 0: return theme.offroad.groundColor.fg;
+            case 1: return theme.road.edge.fg;
+            case 2: return theme.road.surface.fg;
+            case 3: return BG_BLACK;
+            default: return theme.offroad.groundColor.fg;
+        }
+    }
+    function isFilledPixel(pixelType) {
+        return pixelType === 1 || pixelType === 2;
+    }
+    for (var charRow = 0; charRow < charRows; charRow++) {
+        var topPixelY = charRow * 2;
+        var bottomPixelY = charRow * 2 + 1;
+        for (var col = 0; col < width; col++) {
+            var topPixel = (topPixelY < height) ? pixels[topPixelY][col] : 0;
+            var bottomPixel = (bottomPixelY < height) ? pixels[bottomPixelY][col] : 0;
+            console.gotoxy(screenX + col, screenY + charRow);
+            var topFilled = isFilledPixel(topPixel);
+            var bottomFilled = isFilledPixel(bottomPixel);
+            if (topFilled && bottomFilled) {
+                var pixelType = (topPixel === 2 || bottomPixel === 2) ? 2 : 1;
+                console.attributes = getPixelColor(pixelType);
+                console.print(GLYPH.FULL_BLOCK);
+            }
+            else if (topFilled) {
+                var topColor = getPixelColor(topPixel);
+                var bottomColor = getPixelColor(bottomPixel);
+                console.attributes = topColor + (bottomColor << 4);
+                console.print(GLYPH.UPPER_HALF);
+            }
+            else if (bottomFilled) {
+                var topColor = getPixelColor(topPixel);
+                var bottomColor = getPixelColor(bottomPixel);
+                console.attributes = bottomColor + (topColor << 4);
+                console.print(GLYPH.LOWER_HALF);
+            }
+            else {
+                if (topPixel === 3 || bottomPixel === 3) {
+                    console.attributes = BLACK;
+                    console.print(' ');
+                }
+                else {
+                    console.attributes = theme.offroad.groundColor.fg;
+                    console.print(GLYPH.LIGHT_SHADE);
+                }
+            }
+        }
+    }
+}
+function generateTrackLoop(track, width, height) {
+    var sections = track.sections;
+    var difficulty = track.difficulty || 3;
+    var trackId = track.id || '';
+    var totalLength = 0;
+    var totalCurve = 0;
+    var hasSCurves = false;
+    var sharpestCurve = 0;
+    if (sections && sections.length > 0) {
+        for (var i = 0; i < sections.length; i++) {
+            var section = sections[i];
+            totalLength += section.length || 0;
+            if (section.type === 'curve') {
+                totalCurve += Math.abs(section.curve || 0) * (section.length || 1);
+                if (Math.abs(section.curve || 0) > sharpestCurve) {
+                    sharpestCurve = Math.abs(section.curve || 0);
+                }
+            }
+            if (section.type === 's_curve')
+                hasSCurves = true;
+        }
+    }
+    var points = [];
+    var cx = width / 2;
+    var cy = height / 2;
+    var rx = (width - 8) / 2;
+    var ry = (height - 6) / 2;
+    var numPoints = 80;
+    var complexity = Math.min(difficulty, 5);
+    var wobbleFreq = 2 + complexity;
+    var wobbleAmp = 0.05 + (sharpestCurve * 0.15);
+    if (trackId.indexOf('figure') >= 0 || (hasSCurves && difficulty >= 4)) {
+        for (var i = 0; i <= numPoints; i++) {
+            var t = (i / numPoints) * Math.PI * 2;
+            var fx = Math.sin(t);
+            var fy = Math.sin(t) * Math.cos(t);
+            points.push({
+                x: cx + fx * rx,
+                y: cy + fy * ry * 1.5
+            });
+        }
+    }
+    else {
+        for (var i = 0; i <= numPoints; i++) {
+            var angle = (i / numPoints) * Math.PI * 2;
+            var wobble = Math.sin(angle * wobbleFreq) * wobbleAmp;
+            var wobble2 = Math.cos(angle * (wobbleFreq + 1)) * wobbleAmp * 0.5;
+            points.push({
+                x: cx + Math.cos(angle) * rx * (1 + wobble),
+                y: cy + Math.sin(angle) * ry * (1 + wobble2)
+            });
+        }
+    }
+    return points;
+}
+function generatePathFromSections(sections) {
+    var totalIntendedCurve = 0;
+    for (var i = 0; i < sections.length; i++) {
+        var section = sections[i];
+        var segmentCount = section.length || 10;
+        switch (section.type) {
+            case 'curve':
+                totalIntendedCurve += (section.curve || 0) * segmentCount;
+                break;
+            case 'ease_in':
+                totalIntendedCurve += (section.targetCurve || 0.5) * segmentCount * 0.5;
+                break;
+            case 'ease_out':
+                totalIntendedCurve += (section.targetCurve || 0.5) * segmentCount * 0.5;
+                break;
+            case 's_curve':
+                break;
+        }
+    }
+    var curveScale = 0.1;
+    if (Math.abs(totalIntendedCurve) > 0.1) {
+        curveScale = (Math.PI * 2) / Math.abs(totalIntendedCurve);
+    }
+    var direction = totalIntendedCurve >= 0 ? 1 : -1;
+    curveScale = Math.abs(curveScale) * direction;
+    var points = [];
+    var x = 0;
+    var y = 0;
+    var heading = 0;
+    var currentCurve = 0;
+    var stepSize = 1.0;
+    points.push({ x: x, y: y });
+    for (var i = 0; i < sections.length; i++) {
+        var section = sections[i];
+        var segmentCount = section.length || 10;
+        switch (section.type) {
+            case 'straight':
+                for (var s = 0; s < segmentCount; s++) {
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                currentCurve = 0;
+                break;
+            case 'curve':
+                var curvature = (section.curve || 0) * curveScale;
+                for (var s = 0; s < segmentCount; s++) {
+                    heading += curvature;
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                currentCurve = section.curve || 0;
+                break;
+            case 'ease_in':
+                var targetCurve = (section.targetCurve || 0.5) * curveScale;
+                for (var s = 0; s < segmentCount; s++) {
+                    var t = s / segmentCount;
+                    var easedCurve = currentCurve * curveScale + (targetCurve - currentCurve * curveScale) * t;
+                    heading += easedCurve;
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                currentCurve = section.targetCurve || 0.5;
+                break;
+            case 'ease_out':
+                var startCurve = currentCurve * curveScale;
+                for (var s = 0; s < segmentCount; s++) {
+                    var t = s / segmentCount;
+                    var easedCurve = startCurve * (1 - t);
+                    heading += easedCurve;
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                currentCurve = 0;
+                break;
+            case 's_curve':
+                var halfLen = Math.floor(segmentCount / 2);
+                var sCurve = 0.06 * curveScale;
+                for (var s = 0; s < halfLen; s++) {
+                    heading += sCurve;
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                for (var s = 0; s < halfLen; s++) {
+                    heading -= sCurve;
+                    x += Math.cos(heading) * stepSize;
+                    y += Math.sin(heading) * stepSize;
+                    points.push({ x: x, y: y });
+                }
+                break;
+        }
+    }
+    var startX = points[0].x;
+    var startY = points[0].y;
+    var endX = points[points.length - 1].x;
+    var endY = points[points.length - 1].y;
+    var closeSteps = 15;
+    for (var s = 1; s <= closeSteps; s++) {
+        var t = s / closeSteps;
+        var smoothT = t * t * (3 - 2 * t);
+        points.push({
+            x: endX + (startX - endX) * smoothT,
+            y: endY + (startY - endY) * smoothT
+        });
+    }
+    return points;
+}
+function normalizeAndCenterPath(points, width, height) {
+    if (points.length === 0)
+        return points;
+    var minX = points[0].x, maxX = points[0].x;
+    var minY = points[0].y, maxY = points[0].y;
+    for (var i = 1; i < points.length; i++) {
+        if (points[i].x < minX)
+            minX = points[i].x;
+        if (points[i].x > maxX)
+            maxX = points[i].x;
+        if (points[i].y < minY)
+            minY = points[i].y;
+        if (points[i].y > maxY)
+            maxY = points[i].y;
+    }
+    var pathWidth = maxX - minX;
+    var pathHeight = maxY - minY;
+    var padding = 3;
+    var availWidth = width - padding * 2;
+    var availHeight = height - padding * 2;
+    var scaleX = pathWidth > 0 ? availWidth / pathWidth : 1;
+    var scaleY = pathHeight > 0 ? availHeight / pathHeight : 1;
+    var scale = Math.min(scaleX, scaleY);
+    var scaledWidth = pathWidth * scale;
+    var scaledHeight = pathHeight * scale;
+    var offsetX = padding + (availWidth - scaledWidth) / 2;
+    var offsetY = padding + (availHeight - scaledHeight) / 2;
+    var result = [];
+    for (var i = 0; i < points.length; i++) {
+        result.push({
+            x: (points[i].x - minX) * scale + offsetX,
+            y: (points[i].y - minY) * scale + offsetY
+        });
+    }
+    return result;
+}
+function generateOvalTrack(width, height) {
+    var points = [];
+    var cx = width / 2;
+    var cy = height / 2;
+    var rx = (width - 8) / 2;
+    var ry = (height - 4) / 2;
+    var numPoints = 60;
+    for (var i = 0; i <= numPoints; i++) {
+        var angle = (i / numPoints) * Math.PI * 2;
+        points.push({
+            x: cx + Math.cos(angle) * rx,
+            y: cy + Math.sin(angle) * ry
+        });
+    }
+    return points;
+}
+function drawTrackSurface(_points, _x, _y, _width, _height, _theme) {
+}
+function drawStartFinishHiRes(points, screenX, screenY, _pixelWidth, pixelHeight, theme) {
+    if (points.length < 2)
+        return;
+    var startPixelX = Math.floor(points[0].x);
+    var startPixelY = Math.floor(points[0].y);
+    var charX = startPixelX;
+    var charY = Math.floor(startPixelY / 2);
+    var maxCharY = Math.floor(pixelHeight / 2) - 1;
+    charY = Math.max(0, Math.min(maxCharY, charY));
+    console.gotoxy(screenX + charX, screenY + charY);
+    console.attributes = WHITE;
+    console.print(GLYPH.CHECKER);
+    console.gotoxy(screenX + charX + 1, screenY + charY);
+    console.attributes = theme.sun.color.fg;
+    console.print('S');
+}
+function drawStartFinish(_points, _x, _y, _width, _height, _theme) {
+}
+function drawTrackRoute(_track) {
+}
+function drawControls(state) {
+    console.gotoxy(1, 23);
+    console.attributes = LIGHTMAGENTA;
+    console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH));
+    console.gotoxy(1, 24);
     console.attributes = LIGHTGRAY;
-    console.print("\r\n");
+    if (state.mode === 'circuit') {
+        console.print('  W/S or ');
+        console.attributes = WHITE;
+        console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
+        console.attributes = LIGHTGRAY;
+        console.print(' Select Circuit   ');
+        console.attributes = WHITE;
+        console.print('ENTER');
+        console.attributes = LIGHTGRAY;
+        console.print(' Open   ');
+        console.attributes = WHITE;
+        console.print('Q');
+        console.attributes = LIGHTGRAY;
+        console.print(' Quit');
+    }
+    else {
+        console.print('  W/S or ');
+        console.attributes = WHITE;
+        console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
+        console.attributes = LIGHTGRAY;
+        console.print(' Select Track   ');
+        console.attributes = WHITE;
+        console.print('ENTER');
+        console.attributes = LIGHTGRAY;
+        console.print(' Race!   ');
+        console.attributes = WHITE;
+        console.print(String.fromCharCode(27));
+        console.attributes = LIGHTGRAY;
+        console.print('/');
+        console.attributes = WHITE;
+        console.print('A');
+        console.attributes = LIGHTGRAY;
+        console.print(' Back   ');
+        console.attributes = WHITE;
+        console.print('Q');
+        console.attributes = LIGHTGRAY;
+        console.print(' Quit');
+    }
+    console.gotoxy(1, 25);
+    console.attributes = LIGHTMAGENTA;
+    console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH));
+}
+function repeatChar(char, count) {
+    var result = '';
+    for (var i = 0; i < count; i++) {
+        result += char;
+    }
+    return result;
+}
+function formatTime(seconds) {
+    var mins = Math.floor(seconds / 60);
+    var secs = Math.floor(seconds % 60);
+    return mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 function padRight(str, len) {
     while (str.length < len) {

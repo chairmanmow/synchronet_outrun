@@ -64,9 +64,14 @@ class Game {
 
   /**
    * Initialize the game with a track definition.
+   * @param trackDef - Track definition
+   * @param raceMode - Race mode (defaults to GRAND_PRIX)
    */
-  initWithTrack(trackDef: TrackDefinition): void {
-    logInfo("Game.initWithTrack(): " + trackDef.name);
+  initWithTrack(trackDef: TrackDefinition, raceMode?: RaceMode): void {
+    logInfo("Game.initWithTrack(): " + trackDef.name + " mode: " + (raceMode || RaceMode.GRAND_PRIX));
+
+    // Default to Grand Prix mode (racing against opponents)
+    var mode = raceMode || RaceMode.GRAND_PRIX;
 
     // Initialize renderer
     this.renderer.init();
@@ -87,7 +92,8 @@ class Game {
       'villains_lair': 'villains_lair',
       'ancient_ruins': 'ancient_ruins',
       'thunder_stadium': 'thunder_stadium',
-      'glitch_circuit': 'glitch_circuit'
+      'glitch_circuit': 'glitch_circuit',
+      'kaiju_rampage': 'kaiju_rampage'
     };
     var themeName = themeMapping[trackDef.themeId] || 'synthwave';
     if (this.renderer.setTheme) {
@@ -106,31 +112,53 @@ class Game {
     var playerVehicle = new Vehicle();
     playerVehicle.driver = new HumanDriver(this.controls);
     playerVehicle.color = YELLOW;
-    playerVehicle.trackZ = 0;  // Start at beginning
-    playerVehicle.playerX = 0; // Centered on road
+    playerVehicle.isNPC = false;  // Ensure player is not marked as NPC
 
-    // Create game state with road
-    this.state = createInitialState(track, road, playerVehicle);
+    // Create game state with road and race mode
+    this.state = createInitialState(track, road, playerVehicle, mode);
 
-    // Spawn NPC commuters (traffic)
-    var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
-    this.spawnNPCs(npcCount, road);
+    // Spawn vehicles based on race mode
+    if (mode === RaceMode.GRAND_PRIX) {
+      // Grand Prix: spawn 7 CPU racers on starting grid, no commuters
+      this.spawnRacers(7, road);
+      // Position all vehicles on starting grid
+      this.positionOnStartingGrid(road);
+      
+      // Block ALL drivers from moving during countdown
+      for (var i = 0; i < this.state.vehicles.length; i++) {
+        var v = this.state.vehicles[i];
+        var drv = v.driver as any;
+        if (drv && drv.setCanMove) {
+          drv.setCanMove(false);
+        }
+      }
+    } else {
+      // Time Trial: spawn some commuter traffic for obstacles
+      var npcCount = trackDef.npcCount !== undefined ? trackDef.npcCount : 5;
+      this.spawnNPCs(npcCount, road);
+      // Player starts at beginning
+      playerVehicle.trackZ = 0;
+      playerVehicle.playerX = 0;
+    }
 
     // Initialize systems
     this.physicsSystem.init(this.state);
     this.raceSystem.init(this.state);
     this.itemSystem.initFromTrack(track);
 
-    // Initialize HUD
-    this.hud.init(0);
+    // Initialize HUD with total racers
+    var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
+    this.hud.init(totalRacers);
 
     this.running = true;
     this.state.racing = true;
 
     debugLog.info("Game initialized with track: " + trackDef.name);
+    debugLog.info("  Race mode: " + mode);
     debugLog.info("  Road segments: " + road.segments.length);
     debugLog.info("  Road length: " + road.totalLength);
     debugLog.info("  Laps: " + road.laps);
+    debugLog.info("  Total racers: " + this.state.vehicles.length);
   }
 
   /**
@@ -141,7 +169,7 @@ class Game {
     // Use the default test track for backwards compatibility
     var defaultTrack = getTrackDefinition('test_oval');
     if (defaultTrack) {
-      this.initWithTrack(defaultTrack);
+      this.initWithTrack(defaultTrack, RaceMode.GRAND_PRIX);
     } else {
       // Fallback to hardcoded if catalog fails
       this.initWithTrack({
@@ -192,6 +220,13 @@ class Game {
           debugLog.logVehicle(this.state.playerVehicle);
           lastLogTime = this.state.time;
         }
+        
+        // Check for race finish - show game over screen
+        if (this.state.finished && this.state.racing === false) {
+          debugLog.info("Race complete! Final time: " + this.state.time.toFixed(2));
+          this.showGameOverScreen();
+          this.running = false;
+        }
       }
 
       // 4. Render
@@ -240,7 +275,32 @@ class Game {
   private tick(dt: number): void {
     if (!this.state) return;
 
-    // Update game time
+    // Handle countdown before race starts
+    if (!this.state.raceStarted && this.state.raceMode === RaceMode.GRAND_PRIX) {
+      this.state.countdown -= dt;
+      
+      if (this.state.countdown <= 0) {
+        this.state.raceStarted = true;
+        this.state.countdown = 0;
+        // Reset time to 0 when race actually starts
+        this.state.time = 0;
+        this.state.lapStartTime = 0;
+        
+        // Enable ALL drivers to move
+        for (var i = 0; i < this.state.vehicles.length; i++) {
+          var vehicle = this.state.vehicles[i];
+          var driver = vehicle.driver as any;
+          if (driver && driver.setCanMove) {
+            driver.setCanMove(true);
+          }
+        }
+        debugLog.info("Race started! GO!");
+      }
+      // During countdown, don't update physics - just render
+      return;
+    }
+
+    // Update game time (only after race starts)
     this.state.time += dt;
 
     // Update physics
@@ -249,11 +309,12 @@ class Game {
     // Update race progress
     this.raceSystem.update(this.state, dt);
 
-    // Activate dormant NPCs when player approaches
-    this.activateDormantNPCs();
-
-    // Apply NPC pacing - commuters drive faster when far, slower when close
-    this.applyNPCPacing();
+    // Activate dormant NPCs when player approaches (not for racers)
+    if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+      this.activateDormantNPCs();
+      // Apply NPC pacing - commuters drive faster when far, slower when close
+      this.applyNPCPacing();
+    }
 
     // Update items
     this.itemSystem.update(dt);
@@ -267,17 +328,147 @@ class Game {
     // Process vehicle-to-vehicle collisions
     Collision.processVehicleCollisions(this.state.vehicles);
 
-    // Respawn NPCs that have fallen behind the player
-    this.checkNPCRespawn();
+    // Respawn NPCs that have fallen behind the player (not in race mode)
+    if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
+      this.checkNPCRespawn();
+    }
 
     // Update camera to follow player
     this.state.cameraX = this.state.playerVehicle.x;
 
-    // Check for race finish
-    if (this.state.finished && this.state.racing === false) {
-      // Race is complete - exit the game loop
-      debugLog.info("Race complete! Exiting game loop. Final time: " + this.state.time.toFixed(2));
-      this.running = false;
+    // Check for race finish - now handled by game over screen
+    // Don't exit immediately, let the render loop show results
+  }
+
+  /**
+   * Wait for the user to press ENTER to dismiss game over screen.
+   */
+  private showGameOverScreen(): void {
+    if (!this.state) return;
+    
+    debugLog.info("Showing game over screen, waiting for ENTER...");
+    
+    // Calculate final results
+    var player = this.state.playerVehicle;
+    var finalPosition = player.racePosition;
+    var finalTime = this.state.time;
+    var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
+    
+    // Keep rendering results until user presses ENTER
+    while (true) {
+      // Render dedicated results screen (not the game view)
+      this.renderResultsScreen(finalPosition, finalTime, bestLap);
+      
+      // Check for ENTER specifically
+      var key = console.inkey(K_NONE, 0);
+      if (key === '\r' || key === '\n') {
+        debugLog.info("ENTER pressed, exiting game over screen");
+        break;
+      }
+      
+      // Yield to prevent busy-wait
+      mswait(16);
+    }
+  }
+  
+  /**
+   * Render a dedicated results screen (no game view, just results).
+   */
+  private renderResultsScreen(position: number, totalTime: number, bestLap: number): void {
+    this.renderer.beginFrame();
+    
+    // Clear to black background
+    var composer = this.renderer.getComposer();
+    for (var y = 0; y < 25; y++) {
+      for (var x = 0; x < 80; x++) {
+        composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
+      }
+    }
+    
+    // Colors
+    var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+    var labelAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+    var valueAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+    var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+    
+    // Box dimensions
+    var boxWidth = 40;
+    var boxHeight = 12;
+    var boxX = 20;
+    var topY = 6;
+    
+    // Draw box border
+    composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
+    composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
+    composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
+    composer.setCell(boxX + boxWidth - 1, topY + boxHeight - 1, GLYPH.DBOX_BR, boxAttr);
+    
+    for (var i = 1; i < boxWidth - 1; i++) {
+      composer.setCell(boxX + i, topY, GLYPH.DBOX_H, boxAttr);
+      composer.setCell(boxX + i, topY + boxHeight - 1, GLYPH.DBOX_H, boxAttr);
+    }
+    for (var j = 1; j < boxHeight - 1; j++) {
+      composer.setCell(boxX, topY + j, GLYPH.DBOX_V, boxAttr);
+      composer.setCell(boxX + boxWidth - 1, topY + j, GLYPH.DBOX_V, boxAttr);
+    }
+    
+    // Title
+    var title = "=== RACE COMPLETE ===";
+    composer.writeString(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2, title, titleAttr);
+    
+    // Position
+    var posSuffix = PositionIndicator.getOrdinalSuffix(position);
+    composer.writeString(boxX + 4, topY + 4, "FINAL POSITION:", labelAttr);
+    composer.writeString(boxX + 22, topY + 4, position + posSuffix, valueAttr);
+    
+    // Total time
+    composer.writeString(boxX + 4, topY + 5, "TOTAL TIME:", labelAttr);
+    composer.writeString(boxX + 22, topY + 5, LapTimer.format(totalTime), valueAttr);
+    
+    // Best lap
+    composer.writeString(boxX + 4, topY + 6, "BEST LAP:", labelAttr);
+    composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
+    
+    // Track name
+    composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
+    composer.writeString(boxX + 22, topY + 8, this.state!.track.name, valueAttr);
+    
+    // Prompt
+    var prompt = "Press ENTER to continue";
+    composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
+    
+    // Flush the composer buffer directly to console
+    this.flushComposerToConsole(composer);
+  }
+  
+  /**
+   * Flush SceneComposer buffer directly to console.
+   */
+  private flushComposerToConsole(composer: SceneComposer): void {
+    console.home();
+    var buffer = composer.getBuffer();
+    for (var y = 0; y < buffer.length; y++) {
+      var row = buffer[y];
+      var line = '';
+      var lastAttr = -1;
+      for (var x = 0; x < row.length; x++) {
+        var cell = row[x];
+        // When attr changes, need to output accumulated text and change color
+        if (cell.attr !== lastAttr) {
+          if (line.length > 0) {
+            console.print(line);
+            line = '';
+          }
+          console.attributes = cell.attr;
+          lastAttr = cell.attr;
+        }
+        line += cell.char;
+      }
+      // Output remaining text on this row
+      if (line.length > 0) {
+        console.print(line);
+      }
     }
   }
 
@@ -293,7 +484,7 @@ class Game {
     
     for (var i = 0; i < this.state.vehicles.length; i++) {
       var npc = this.state.vehicles[i];
-      if (!npc.isNPC) continue;
+      if (!npc.isNPC || npc.isRacer) continue;  // Skip non-NPCs and racers
       
       var driver = npc.driver as CommuterDriver;
       if (driver.isActive()) continue;  // Already active
@@ -321,10 +512,10 @@ class Game {
     var roadLength = this.state.road.totalLength;
     var respawnDistance = 100;  // Respawn if this far behind player
     
-    // Get all NPCs
+    // Get all commuter NPCs (not racers)
     var npcs: IVehicle[] = [];
     for (var i = 0; i < this.state.vehicles.length; i++) {
-      if (this.state.vehicles[i].isNPC) {
+      if (this.state.vehicles[i].isNPC && !this.state.vehicles[i].isRacer) {
         npcs.push(this.state.vehicles[i]);
       }
     }
@@ -441,7 +632,9 @@ class Game {
       this.state.track,
       this.state.road,
       this.state.vehicles,
-      this.state.time
+      this.state.time,
+      this.state.countdown,
+      this.state.raceMode
     );
     this.renderer.renderHud(hudData);
 
@@ -458,6 +651,115 @@ class Game {
       this.timestep.reset();
     }
     logInfo("Game " + (this.paused ? "paused" : "resumed"));
+  }
+
+  /**
+   * Spawn CPU racer vehicles for Grand Prix mode.
+   * Creates skilled AI opponents that actually race.
+   */
+  private spawnRacers(count: number, _road: Road): void {
+    if (!this.state) return;
+    
+    // Racer colors - distinct from player's yellow
+    var racerColors = [
+      { body: LIGHTRED, highlight: WHITE },
+      { body: LIGHTBLUE, highlight: LIGHTCYAN },
+      { body: LIGHTGREEN, highlight: WHITE },
+      { body: LIGHTMAGENTA, highlight: WHITE },
+      { body: LIGHTCYAN, highlight: WHITE },
+      { body: WHITE, highlight: LIGHTGRAY },
+      { body: BROWN, highlight: YELLOW }
+    ];
+    
+    // Skill levels for 7 opponents - Road Rash style mix
+    // 2 front-runners, 2 mid-pack, 3 back-markers for testability
+    var skillLevels = [0.82, 0.75, 0.58, 0.52, 0.42, 0.38, 0.35];
+    
+    for (var i = 0; i < count && i < racerColors.length; i++) {
+      var racer = new Vehicle();
+      
+      // Use RacerDriver for competitive AI
+      var skill = skillLevels[i] || 0.6;
+      racer.driver = new RacerDriver(skill);
+      racer.isNPC = true;   // AI-controlled vehicle
+      racer.isRacer = true; // Mark as racer for position calculation
+      
+      // Randomize vehicle type
+      var typeIndex = Math.floor(Math.random() * NPC_VEHICLE_TYPES.length);
+      racer.npcType = NPC_VEHICLE_TYPES[typeIndex];
+      
+      // Assign distinct color
+      var colorPalette = racerColors[i];
+      racer.color = colorPalette.body;
+      racer.npcColorIndex = i;
+      
+      // Position will be set by positionOnStartingGrid()
+      racer.trackZ = 0;
+      racer.z = 0;
+      racer.playerX = 0;
+      
+      this.state.vehicles.push(racer);
+    }
+    
+    debugLog.info("Spawned " + count + " CPU racers for Grand Prix");
+  }
+
+  /**
+   * Position all vehicles on a starting grid.
+   * Creates a 2-wide grid formation AT the start line.
+   */
+  private positionOnStartingGrid(_road: Road): void {
+    if (!this.state) return;
+    
+    var vehicles = this.state.vehicles;
+    
+    // Grid configuration - all start at Z=0 (the start/finish line)
+    var gridColSpacing = 0.4;   // Lateral spacing (X direction)
+    var startZ = 0;             // Everyone starts at the line!
+    
+    // Player always starts at the back of the grid for fair racing
+    // Find player and put them last
+    var playerIdx = -1;
+    for (var p = 0; p < vehicles.length; p++) {
+      if (!vehicles[p].isNPC) {
+        playerIdx = p;
+        break;
+      }
+    }
+    
+    // Assign grid positions to vehicles
+    // Racers get randomized positions, player starts at back
+    var gridSlot = 0;
+    for (var v = 0; v < vehicles.length; v++) {
+      var vehicle = vehicles[v];
+      
+      // All vehicles start at Z=0 (the start line)
+      vehicle.trackZ = startZ;
+      vehicle.z = startZ;
+      
+      // Spread out laterally so they're not all stacked
+      // Alternate left/right based on grid slot
+      if (v === playerIdx) {
+        // Player in center-back
+        vehicle.playerX = 0;
+      } else {
+        // Racers spread left/right
+        var side = (gridSlot % 2 === 0) ? -1 : 1;
+        var offset = Math.floor(gridSlot / 2) * 0.15;
+        vehicle.playerX = side * (gridColSpacing + offset);
+        gridSlot++;
+      }
+      
+      // Reset vehicle state
+      vehicle.speed = 0;
+      vehicle.lap = 1;
+      vehicle.checkpoint = 0;
+      vehicle.racePosition = v + 1;
+      
+      debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+    }
+    
+    debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
   }
 
   /**
