@@ -42,8 +42,10 @@
 /// <reference path="render/Renderer.ts" />
 /// <reference path="game/GameState.ts" />
 /// <reference path="game/Systems.ts" />
+/// <reference path="game/Cup.ts" />
 /// <reference path="game/Game.ts" />
 /// <reference path="ui/TrackSelector.ts" />
+/// <reference path="ui/CupStandings.ts" />
 
 /**
  * OutRun ANSI - Main Entry Point
@@ -253,6 +255,9 @@ function main(): void {
   
   // Initialize high score manager
   var highScoreManager = new HighScoreManager();
+  
+  // Initialize cup manager for cup races
+  var cupManager = new CupManager();
 
   try {
     // Main application loop - keeps running until user quits from splash
@@ -282,23 +287,14 @@ function main(): void {
 
       debugLog.info("Selected track: " + trackSelection.track.name);
 
-      // Create and initialize game with selected track
-      debugLog.separator("GAME INIT");
-      var game = new Game(undefined, highScoreManager);
-      game.initWithTrack(trackSelection.track);
-
-      // Run game loop
-      debugLog.separator("GAME LOOP");
-      debugLog.info("Entering game loop");
-      game.run();
-
-      // Shutdown game instance
-      debugLog.separator("GAME END");
-      debugLog.info("Game loop ended");
-      game.shutdown();
-
-      // Show race results briefly
-      showRaceEndScreen();
+      // Check if this is a cup (circuit) race
+      if (trackSelection.isCircuitMode && trackSelection.circuitTracks) {
+        // Cup mode - run multiple races
+        runCupMode(trackSelection.circuitTracks, cupManager, highScoreManager);
+      } else {
+        // Single race mode
+        runSingleRace(trackSelection.track, highScoreManager);
+      }
       
       // Loop continues - back to splash screen
       debugLog.info("Returning to splash screen");
@@ -327,6 +323,162 @@ function main(): void {
     // debugLog.separator("LOG END");
     // debugLog.close();
   }
+}
+
+/**
+ * Run a single race (non-cup mode).
+ */
+function runSingleRace(track: TrackDefinition, highScoreManager: HighScoreManager): void {
+  // Create and initialize game with selected track
+  debugLog.separator("GAME INIT");
+  var game = new Game(undefined, highScoreManager);
+  game.initWithTrack(track);
+
+  // Run game loop
+  debugLog.separator("GAME LOOP");
+  debugLog.info("Entering game loop");
+  game.run();
+
+  // Shutdown game instance
+  debugLog.separator("GAME END");
+  debugLog.info("Game loop ended");
+  game.shutdown();
+
+  // Show race results briefly
+  showRaceEndScreen();
+}
+
+/**
+ * Run a cup (circuit) with multiple races.
+ */
+function runCupMode(
+  tracks: TrackDefinition[],
+  cupManager: CupManager,
+  highScoreManager: HighScoreManager
+): void {
+  debugLog.separator("CUP MODE START");
+  debugLog.info("Starting cup with " + tracks.length + " tracks");
+  
+  // Generate AI racer names
+  var aiNames = ['MAX', 'LUNA', 'BLAZE', 'NOVA', 'TURBO', 'DASH', 'FLASH'];
+  
+  // Create a custom cup definition from the selected tracks
+  var cupDef: CupDefinition = {
+    id: 'custom_cup',
+    name: 'Circuit Cup',
+    trackIds: [],
+    description: 'Custom circuit'
+  };
+  for (var t = 0; t < tracks.length; t++) {
+    cupDef.trackIds.push(tracks[t].id);
+  }
+  
+  // Start the cup
+  cupManager.startCup(cupDef, aiNames);
+  
+  // Show pre-race standings (Race 1 intro)
+  showCupStandings(cupManager, true);
+  
+  // Race each track in sequence
+  while (!cupManager.isCupComplete()) {
+    var trackId = cupManager.getCurrentTrackId();
+    if (!trackId) break;
+    
+    // Get track definition
+    var track = getTrackDefinitionForCup(tracks, trackId);
+    if (!track) {
+      debugLog.error("Track not found in cup: " + trackId);
+      break;
+    }
+    
+    debugLog.info("Cup race " + cupManager.getCurrentRaceNumber() + ": " + track.name);
+    
+    // Create and run game for this race
+    var game = new Game(undefined, highScoreManager);
+    game.initWithTrack(track);
+    game.run();
+    
+    // Get race results before shutdown
+    var raceResults = game.getFinalRaceResults();
+    game.shutdown();
+    
+    // Record results in cup manager
+    if (raceResults) {
+      cupManager.recordRaceResult(
+        track.id,
+        track.name,
+        raceResults.positions,
+        raceResults.playerTime,
+        raceResults.playerBestLap
+      );
+    }
+    
+    // Show standings after each race
+    if (!cupManager.isCupComplete()) {
+      showCupStandings(cupManager, true);  // Pre-race for next race
+    }
+  }
+  
+  // Cup complete - show final standings then winner's circle
+  showCupStandings(cupManager, false);  // Final standings
+  showWinnersCircle(cupManager);
+  
+  // Handle cup high score (circuit time)
+  var cupState = cupManager.getState();
+  if (cupState && highScoreManager) {
+    var position = highScoreManager.checkQualification(
+      HighScoreType.CIRCUIT_TIME,
+      cupDef.id,
+      cupState.totalTime
+    );
+    
+    if (position > 0) {
+      var playerName = "Player";
+      try {
+        if (typeof user !== 'undefined' && user && user.alias) {
+          playerName = user.alias;
+        }
+      } catch (e) {
+        // user not available
+      }
+      
+      highScoreManager.submitScore(
+        HighScoreType.CIRCUIT_TIME,
+        cupDef.id,
+        playerName,
+        cupState.totalTime,
+        undefined,
+        cupDef.name
+      );
+      
+      // Show circuit high scores with player highlighted
+      showHighScoreList(
+        HighScoreType.CIRCUIT_TIME,
+        cupDef.id,
+        "=== CIRCUIT HIGH SCORES ===",
+        cupDef.name,
+        highScoreManager,
+        position
+      );
+    }
+  }
+  
+  // Clear cup state
+  cupManager.clear();
+  
+  debugLog.separator("CUP MODE END");
+}
+
+/**
+ * Find a track definition from a list by ID.
+ */
+function getTrackDefinitionForCup(tracks: TrackDefinition[], trackId: string): TrackDefinition | null {
+  for (var i = 0; i < tracks.length; i++) {
+    if (tracks[i].id === trackId) {
+      return tracks[i];
+    }
+  }
+  return null;
 }
 
 // Run the game

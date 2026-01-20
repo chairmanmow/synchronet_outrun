@@ -3415,7 +3415,7 @@ var HighScoreManager = (function () {
     return HighScoreManager;
 }());
 "use strict";
-function displayHighScores(scores, title, trackOrCircuitName) {
+function displayHighScores(scores, title, trackOrCircuitName, playerPosition) {
     console.clear();
     var screenWidth = console.screen_columns;
     var screenHeight = console.screen_rows;
@@ -3426,6 +3426,9 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     var dateAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var highlightNameAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLUE });
+    var highlightTimeAttr = colorToAttr({ fg: WHITE, bg: BG_BLUE });
+    var highlightDateAttr = colorToAttr({ fg: LIGHTGRAY, bg: BG_BLUE });
     var boxWidth = Math.min(70, screenWidth - 4);
     var boxHeight = 18;
     var boxX = Math.floor((screenWidth - boxWidth) / 2);
@@ -3461,12 +3464,13 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     var startY = topY + 6;
     for (var i = 0; i < 10; i++) {
         console.gotoxy(boxX + 3, startY + i);
+        var isHighlighted = (playerPosition !== undefined && playerPosition === i + 1);
         if (i < scores.length) {
             var score = scores[i];
             var rank = (i + 1) + ".";
             if (i < 9)
                 rank = " " + rank;
-            console.attributes = nameAttr;
+            console.attributes = isHighlighted ? highlightNameAttr : nameAttr;
             console.print(rank + "   ");
             var name = score.playerName;
             if (name.length > 18) {
@@ -3476,7 +3480,7 @@ function displayHighScores(scores, title, trackOrCircuitName) {
                 name += " ";
             }
             console.print(name + "  ");
-            console.attributes = timeAttr;
+            console.attributes = isHighlighted ? highlightTimeAttr : timeAttr;
             var timeStr = LapTimer.format(score.time);
             console.print(timeStr);
             while (timeStr.length < 10) {
@@ -3484,10 +3488,14 @@ function displayHighScores(scores, title, trackOrCircuitName) {
                 console.print(" ");
             }
             console.print("  ");
-            console.attributes = dateAttr;
+            console.attributes = isHighlighted ? highlightDateAttr : dateAttr;
             var date = new Date(score.date);
             var dateStr = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
             console.print(dateStr);
+            if (isHighlighted) {
+                console.attributes = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+                console.print(" <-- YOU!");
+            }
         }
         else {
             console.attributes = emptyAttr;
@@ -3501,9 +3509,9 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     console.attributes = headerAttr;
     console.print("Press any key to continue");
 }
-function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager) {
+function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager, playerPosition) {
     var scores = highScoreManager.getScores(type, identifier);
-    displayHighScores(scores, title, trackOrCircuitName);
+    displayHighScores(scores, title, trackOrCircuitName, playerPosition);
     console.inkey(K_NONE);
 }
 function displayTopScoreLine(label, score, x, y, labelAttr, valueAttr) {
@@ -12860,6 +12868,168 @@ var RaceSystem = (function () {
     return RaceSystem;
 }());
 "use strict";
+var CUP_POINTS = [15, 12, 10, 8, 6, 5, 4, 3, 2, 1];
+function getPointsForPosition(position) {
+    if (position < 1 || position > CUP_POINTS.length)
+        return 0;
+    return CUP_POINTS[position - 1];
+}
+var CupManager = (function () {
+    function CupManager() {
+        this.state = null;
+    }
+    CupManager.prototype.startCup = function (cupDef, racerNames) {
+        var standings = [];
+        standings.push({
+            id: 1,
+            name: 'YOU',
+            isPlayer: true,
+            points: 0,
+            raceResults: []
+        });
+        for (var i = 0; i < racerNames.length; i++) {
+            standings.push({
+                id: i + 2,
+                name: racerNames[i],
+                isPlayer: false,
+                points: 0,
+                raceResults: []
+            });
+        }
+        this.state = {
+            definition: cupDef,
+            currentRaceIndex: 0,
+            standings: standings,
+            raceResults: [],
+            totalTime: 0,
+            totalBestLaps: 0,
+            isComplete: false
+        };
+    };
+    CupManager.prototype.getState = function () {
+        return this.state;
+    };
+    CupManager.prototype.getCurrentTrackId = function () {
+        if (!this.state)
+            return null;
+        if (this.state.currentRaceIndex >= this.state.definition.trackIds.length)
+            return null;
+        return this.state.definition.trackIds[this.state.currentRaceIndex];
+    };
+    CupManager.prototype.getCurrentRaceNumber = function () {
+        if (!this.state)
+            return 0;
+        return this.state.currentRaceIndex + 1;
+    };
+    CupManager.prototype.getTotalRaces = function () {
+        if (!this.state)
+            return 0;
+        return this.state.definition.trackIds.length;
+    };
+    CupManager.prototype.recordRaceResult = function (trackId, trackName, racerPositions, playerTime, playerBestLap) {
+        if (!this.state)
+            return;
+        var positions = {};
+        for (var i = 0; i < racerPositions.length; i++) {
+            var rp = racerPositions[i];
+            positions[rp.id] = rp.position;
+        }
+        var result = {
+            trackId: trackId,
+            trackName: trackName,
+            positions: positions,
+            playerTime: playerTime,
+            playerBestLap: playerBestLap
+        };
+        this.state.raceResults.push(result);
+        for (var j = 0; j < this.state.standings.length; j++) {
+            var standing = this.state.standings[j];
+            var position = positions[standing.id] || 8;
+            standing.raceResults.push(position);
+            standing.points += getPointsForPosition(position);
+        }
+        this.state.totalTime += playerTime;
+        this.state.totalBestLaps += playerBestLap;
+        this.state.standings.sort(function (a, b) {
+            return b.points - a.points;
+        });
+        this.state.currentRaceIndex++;
+        if (this.state.currentRaceIndex >= this.state.definition.trackIds.length) {
+            this.state.isComplete = true;
+        }
+    };
+    CupManager.prototype.getStandings = function () {
+        if (!this.state)
+            return [];
+        return this.state.standings.slice();
+    };
+    CupManager.prototype.getPlayerCupPosition = function () {
+        if (!this.state)
+            return 0;
+        for (var i = 0; i < this.state.standings.length; i++) {
+            if (this.state.standings[i].isPlayer) {
+                return i + 1;
+            }
+        }
+        return 0;
+    };
+    CupManager.prototype.isCupComplete = function () {
+        return this.state ? this.state.isComplete : false;
+    };
+    CupManager.prototype.didPlayerWin = function () {
+        if (!this.state || !this.state.isComplete)
+            return false;
+        return this.state.standings[0].isPlayer;
+    };
+    CupManager.prototype.getPlayerPoints = function () {
+        if (!this.state)
+            return 0;
+        for (var i = 0; i < this.state.standings.length; i++) {
+            if (this.state.standings[i].isPlayer) {
+                return this.state.standings[i].points;
+            }
+        }
+        return 0;
+    };
+    CupManager.prototype.clear = function () {
+        this.state = null;
+    };
+    CupManager.CUPS = [
+        {
+            id: 'neon_cup',
+            name: 'Neon Cup',
+            trackIds: ['neon_coast', 'twilight_forest', 'sunset_beach'],
+            description: 'A tour through the neon-lit night'
+        },
+        {
+            id: 'nature_cup',
+            name: 'Nature Cup',
+            trackIds: ['twilight_forest', 'sunset_beach', 'cactus_canyon', 'tropical_jungle'],
+            description: 'Race through nature\'s finest'
+        },
+        {
+            id: 'spooky_cup',
+            name: 'Spooky Cup',
+            trackIds: ['haunted_hollow', 'dark_castle', 'ancient_ruins'],
+            description: 'Face your fears on the track'
+        },
+        {
+            id: 'fantasy_cup',
+            name: 'Fantasy Cup',
+            trackIds: ['candy_land', 'rainbow_road', 'dark_castle', 'kaiju_rampage'],
+            description: 'A journey through imagination'
+        },
+        {
+            id: 'grand_prix',
+            name: 'Grand Prix',
+            trackIds: ['neon_coast', 'sunset_beach', 'twilight_forest', 'haunted_hollow',
+                'cactus_canyon', 'tropical_jungle', 'rainbow_road', 'thunder_stadium'],
+            description: 'The ultimate challenge - 8 tracks!'
+        }
+    ];
+    return CupManager;
+}());
+"use strict";
 var DEFAULT_CONFIG = {
     screenWidth: 80,
     screenHeight: 24,
@@ -13420,6 +13590,30 @@ var Game = (function () {
     };
     Game.prototype.isRunning = function () {
         return this.running;
+    };
+    Game.prototype.getFinalRaceResults = function () {
+        if (!this.state || !this.state.finished)
+            return null;
+        var positions = [];
+        positions.push({
+            id: 1,
+            position: this.state.playerVehicle.racePosition
+        });
+        var aiId = 2;
+        for (var i = 0; i < this.state.vehicles.length; i++) {
+            var v = this.state.vehicles[i];
+            if (v !== this.state.playerVehicle && v.isRacer) {
+                positions.push({
+                    id: aiId++,
+                    position: v.racePosition
+                });
+            }
+        }
+        return {
+            positions: positions,
+            playerTime: this.state.time,
+            playerBestLap: this.state.bestLapTime > 0 ? this.state.bestLapTime : this.state.time / this.state.track.laps
+        };
     };
     Game.prototype.shutdown = function () {
         logInfo("Game.shutdown()");
@@ -14276,6 +14470,253 @@ function padRight(str, len) {
     return str.substring(0, len);
 }
 "use strict";
+function showCupStandings(cupManager, isPreRace) {
+    var state = cupManager.getState();
+    if (!state)
+        return;
+    var screenWidth = console.screen_columns;
+    var screenHeight = console.screen_rows;
+    console.clear(BG_BLACK);
+    console.attributes = WHITE | BG_BLACK;
+    var title = "=== " + state.definition.name.toUpperCase() + " ===";
+    console.gotoxy(Math.floor((screenWidth - title.length) / 2), 2);
+    console.attributes = YELLOW | BG_BLACK;
+    console.print(title);
+    var raceInfo;
+    if (isPreRace) {
+        if (cupManager.getCurrentRaceNumber() === 1) {
+            raceInfo = "Race " + cupManager.getCurrentRaceNumber() + " of " + cupManager.getTotalRaces();
+        }
+        else {
+            raceInfo = "Next: Race " + cupManager.getCurrentRaceNumber() + " of " + cupManager.getTotalRaces();
+        }
+    }
+    else {
+        if (state.isComplete) {
+            raceInfo = "FINAL STANDINGS";
+        }
+        else {
+            raceInfo = "After Race " + (cupManager.getCurrentRaceNumber() - 1) + " of " + cupManager.getTotalRaces();
+        }
+    }
+    console.gotoxy(Math.floor((screenWidth - raceInfo.length) / 2), 4);
+    console.attributes = LIGHTCYAN | BG_BLACK;
+    console.print(raceInfo);
+    if (isPreRace) {
+        var trackId = cupManager.getCurrentTrackId();
+        if (trackId) {
+            var trackName = getTrackDisplayName(trackId);
+            console.gotoxy(Math.floor((screenWidth - trackName.length) / 2), 5);
+            console.attributes = WHITE | BG_BLACK;
+            console.print(trackName);
+        }
+    }
+    var standings = cupManager.getStandings();
+    var tableTop = 7;
+    var tableWidth = 50;
+    var tableLeft = Math.floor((screenWidth - tableWidth) / 2);
+    console.gotoxy(tableLeft, tableTop);
+    console.attributes = LIGHTGRAY | BG_BLACK;
+    console.print("POS  RACER                    POINTS");
+    console.gotoxy(tableLeft, tableTop + 1);
+    console.print("------------------------------------");
+    for (var i = 0; i < standings.length; i++) {
+        var s = standings[i];
+        var row = tableTop + 2 + i;
+        console.gotoxy(tableLeft, row);
+        var posStr = PositionIndicator.getOrdinalSuffix(i + 1);
+        posStr = (i + 1) + posStr;
+        while (posStr.length < 4)
+            posStr += ' ';
+        if (s.isPlayer) {
+            if (i === 0) {
+                console.attributes = LIGHTGREEN | BG_BLACK;
+            }
+            else if (i < 3) {
+                console.attributes = YELLOW | BG_BLACK;
+            }
+            else {
+                console.attributes = LIGHTCYAN | BG_BLACK;
+            }
+        }
+        else {
+            if (i === 0) {
+                console.attributes = WHITE | BG_BLACK;
+            }
+            else {
+                console.attributes = LIGHTGRAY | BG_BLACK;
+            }
+        }
+        console.print(posStr + " ");
+        var name = s.isPlayer ? "YOU" : s.name;
+        while (name.length < 24)
+            name += ' ';
+        console.print(name);
+        var pointsStr = s.points.toString();
+        while (pointsStr.length < 4)
+            pointsStr = ' ' + pointsStr;
+        console.print(pointsStr);
+        if (s.raceResults.length > 0) {
+            console.attributes = DARKGRAY | BG_BLACK;
+            console.print("  [");
+            for (var r = 0; r < s.raceResults.length; r++) {
+                if (r > 0)
+                    console.print(",");
+                var racePos = s.raceResults[r];
+                if (racePos <= 3) {
+                    console.attributes = LIGHTGREEN | BG_BLACK;
+                }
+                else if (racePos <= 5) {
+                    console.attributes = YELLOW | BG_BLACK;
+                }
+                else {
+                    console.attributes = LIGHTGRAY | BG_BLACK;
+                }
+                console.print(racePos.toString());
+            }
+            console.attributes = DARKGRAY | BG_BLACK;
+            console.print("]");
+        }
+    }
+    var refRow = tableTop + 2 + standings.length + 2;
+    console.gotoxy(tableLeft, refRow);
+    console.attributes = DARKGRAY | BG_BLACK;
+    console.print("Points: 1st=15 2nd=12 3rd=10 4th=8 5th=6...");
+    var prompt = isPreRace ? "Press ENTER to start race" : "Press ENTER to continue";
+    if (state.isComplete) {
+        prompt = "Press ENTER to see results";
+    }
+    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), screenHeight - 3);
+    console.attributes = LIGHTMAGENTA | BG_BLACK;
+    console.print(prompt);
+    waitForEnter();
+}
+function getTrackDisplayName(trackId) {
+    var parts = trackId.split('_');
+    var name = '';
+    for (var i = 0; i < parts.length; i++) {
+        if (i > 0)
+            name += ' ';
+        var part = parts[i];
+        name += part.charAt(0).toUpperCase() + part.slice(1);
+    }
+    return name;
+}
+function waitForEnter() {
+    while (true) {
+        var key = console.inkey(K_NONE, 100);
+        if (key === '\r' || key === '\n')
+            break;
+        if (key === 'q' || key === 'Q')
+            break;
+    }
+}
+function showWinnersCircle(cupManager) {
+    var state = cupManager.getState();
+    if (!state)
+        return;
+    var screenWidth = console.screen_columns;
+    var screenHeight = console.screen_rows;
+    var playerWon = cupManager.didPlayerWin();
+    var playerPos = cupManager.getPlayerCupPosition();
+    console.clear(BG_BLACK);
+    if (playerWon) {
+        console.attributes = YELLOW | BG_BLACK;
+        var trophy = [
+            "    ___________",
+            "   '._==_==_=_.'",
+            "   .-\\:      /-.",
+            "  | (|:.     |) |",
+            "   '-|:.     |-'",
+            "     \\::.    /",
+            "      '::. .'",
+            "        ) (",
+            "      _.' '._",
+            "     '-------'"
+        ];
+        var trophyTop = 3;
+        for (var t = 0; t < trophy.length; t++) {
+            console.gotoxy(Math.floor((screenWidth - trophy[t].length) / 2), trophyTop + t);
+            console.print(trophy[t]);
+        }
+        var winTitle = "=== CHAMPION! ===";
+        console.gotoxy(Math.floor((screenWidth - winTitle.length) / 2), trophyTop + trophy.length + 2);
+        console.attributes = LIGHTGREEN | BG_BLACK;
+        console.print(winTitle);
+        var cupName = state.definition.name + " Winner!";
+        console.gotoxy(Math.floor((screenWidth - cupName.length) / 2), trophyTop + trophy.length + 4);
+        console.attributes = WHITE | BG_BLACK;
+        console.print(cupName);
+    }
+    else {
+        var posStr = playerPos + PositionIndicator.getOrdinalSuffix(playerPos);
+        var resultTitle = "=== " + posStr + " PLACE ===";
+        console.gotoxy(Math.floor((screenWidth - resultTitle.length) / 2), 5);
+        if (playerPos <= 3) {
+            console.attributes = YELLOW | BG_BLACK;
+        }
+        else {
+            console.attributes = LIGHTGRAY | BG_BLACK;
+        }
+        console.print(resultTitle);
+        var cupName2 = state.definition.name + " Complete";
+        console.gotoxy(Math.floor((screenWidth - cupName2.length) / 2), 7);
+        console.attributes = WHITE | BG_BLACK;
+        console.print(cupName2);
+        if (playerPos <= 3) {
+            var podiumMsg = "You made the podium!";
+            console.gotoxy(Math.floor((screenWidth - podiumMsg.length) / 2), 9);
+            console.attributes = LIGHTCYAN | BG_BLACK;
+            console.print(podiumMsg);
+        }
+        else {
+            var tryAgain = "Better luck next time!";
+            console.gotoxy(Math.floor((screenWidth - tryAgain.length) / 2), 9);
+            console.attributes = LIGHTGRAY | BG_BLACK;
+            console.print(tryAgain);
+        }
+    }
+    var statsTop = 14;
+    console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop);
+    console.attributes = LIGHTGRAY | BG_BLACK;
+    console.print("Total Points: " + cupManager.getPlayerPoints());
+    console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop + 1);
+    console.print("Circuit Time: " + formatCupTime(state.totalTime));
+    console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop + 2);
+    console.print("Best Laps Sum: " + formatCupTime(state.totalBestLaps));
+    var standings = cupManager.getStandings();
+    var standingsTop = statsTop + 5;
+    console.gotoxy(Math.floor((screenWidth - 20) / 2), standingsTop);
+    console.attributes = WHITE | BG_BLACK;
+    console.print("Final Standings:");
+    for (var i = 0; i < Math.min(3, standings.length); i++) {
+        var s = standings[i];
+        console.gotoxy(Math.floor((screenWidth - 30) / 2), standingsTop + 2 + i);
+        if (s.isPlayer) {
+            console.attributes = LIGHTCYAN | BG_BLACK;
+        }
+        else {
+            console.attributes = LIGHTGRAY | BG_BLACK;
+        }
+        var line = (i + 1) + ". " + (s.isPlayer ? "YOU" : s.name) + " - " + s.points + " pts";
+        console.print(line);
+    }
+    var prompt = "Press ENTER to continue";
+    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), screenHeight - 3);
+    console.attributes = LIGHTMAGENTA | BG_BLACK;
+    console.print(prompt);
+    waitForEnter();
+}
+function formatCupTime(seconds) {
+    var mins = Math.floor(seconds / 60);
+    var secs = seconds % 60;
+    var minsStr = mins.toString();
+    var secsStr = secs.toFixed(2);
+    if (secs < 10)
+        secsStr = '0' + secsStr;
+    return minsStr + ':' + secsStr;
+}
+"use strict";
 if (typeof console === 'undefined' || console === null) {
     print("ERROR: OutRun ANSI must be run from a Synchronet BBS terminal session.");
     print("This game cannot run directly with jsexec.");
@@ -14393,6 +14834,7 @@ function main() {
     debugLog.info("Entering main()");
     load('json-db.js');
     var highScoreManager = new HighScoreManager();
+    var cupManager = new CupManager();
     try {
         var keepPlaying = true;
         while (keepPlaying) {
@@ -14410,16 +14852,12 @@ function main() {
                 continue;
             }
             debugLog.info("Selected track: " + trackSelection.track.name);
-            debugLog.separator("GAME INIT");
-            var game = new Game(undefined, highScoreManager);
-            game.initWithTrack(trackSelection.track);
-            debugLog.separator("GAME LOOP");
-            debugLog.info("Entering game loop");
-            game.run();
-            debugLog.separator("GAME END");
-            debugLog.info("Game loop ended");
-            game.shutdown();
-            showRaceEndScreen();
+            if (trackSelection.isCircuitMode && trackSelection.circuitTracks) {
+                runCupMode(trackSelection.circuitTracks, cupManager, highScoreManager);
+            }
+            else {
+                runSingleRace(trackSelection.track, highScoreManager);
+            }
             debugLog.info("Returning to splash screen");
         }
         console.clear();
@@ -14440,5 +14878,83 @@ function main() {
     finally {
         console.attributes = LIGHTGRAY;
     }
+}
+function runSingleRace(track, highScoreManager) {
+    debugLog.separator("GAME INIT");
+    var game = new Game(undefined, highScoreManager);
+    game.initWithTrack(track);
+    debugLog.separator("GAME LOOP");
+    debugLog.info("Entering game loop");
+    game.run();
+    debugLog.separator("GAME END");
+    debugLog.info("Game loop ended");
+    game.shutdown();
+    showRaceEndScreen();
+}
+function runCupMode(tracks, cupManager, highScoreManager) {
+    debugLog.separator("CUP MODE START");
+    debugLog.info("Starting cup with " + tracks.length + " tracks");
+    var aiNames = ['MAX', 'LUNA', 'BLAZE', 'NOVA', 'TURBO', 'DASH', 'FLASH'];
+    var cupDef = {
+        id: 'custom_cup',
+        name: 'Circuit Cup',
+        trackIds: [],
+        description: 'Custom circuit'
+    };
+    for (var t = 0; t < tracks.length; t++) {
+        cupDef.trackIds.push(tracks[t].id);
+    }
+    cupManager.startCup(cupDef, aiNames);
+    showCupStandings(cupManager, true);
+    while (!cupManager.isCupComplete()) {
+        var trackId = cupManager.getCurrentTrackId();
+        if (!trackId)
+            break;
+        var track = getTrackDefinitionForCup(tracks, trackId);
+        if (!track) {
+            debugLog.error("Track not found in cup: " + trackId);
+            break;
+        }
+        debugLog.info("Cup race " + cupManager.getCurrentRaceNumber() + ": " + track.name);
+        var game = new Game(undefined, highScoreManager);
+        game.initWithTrack(track);
+        game.run();
+        var raceResults = game.getFinalRaceResults();
+        game.shutdown();
+        if (raceResults) {
+            cupManager.recordRaceResult(track.id, track.name, raceResults.positions, raceResults.playerTime, raceResults.playerBestLap);
+        }
+        if (!cupManager.isCupComplete()) {
+            showCupStandings(cupManager, true);
+        }
+    }
+    showCupStandings(cupManager, false);
+    showWinnersCircle(cupManager);
+    var cupState = cupManager.getState();
+    if (cupState && highScoreManager) {
+        var position = highScoreManager.checkQualification(HighScoreType.CIRCUIT_TIME, cupDef.id, cupState.totalTime);
+        if (position > 0) {
+            var playerName = "Player";
+            try {
+                if (typeof user !== 'undefined' && user && user.alias) {
+                    playerName = user.alias;
+                }
+            }
+            catch (e) {
+            }
+            highScoreManager.submitScore(HighScoreType.CIRCUIT_TIME, cupDef.id, playerName, cupState.totalTime, undefined, cupDef.name);
+            showHighScoreList(HighScoreType.CIRCUIT_TIME, cupDef.id, "=== CIRCUIT HIGH SCORES ===", cupDef.name, highScoreManager, position);
+        }
+    }
+    cupManager.clear();
+    debugLog.separator("CUP MODE END");
+}
+function getTrackDefinitionForCup(tracks, trackId) {
+    for (var i = 0; i < tracks.length; i++) {
+        if (tracks[i].id === trackId) {
+            return tracks[i];
+        }
+    }
+    return null;
 }
 main();

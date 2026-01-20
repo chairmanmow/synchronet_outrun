@@ -560,6 +560,30 @@ var Game = (function () {
     Game.prototype.isRunning = function () {
         return this.running;
     };
+    Game.prototype.getFinalRaceResults = function () {
+        if (!this.state || !this.state.finished)
+            return null;
+        var positions = [];
+        positions.push({
+            id: 1,
+            position: this.state.playerVehicle.racePosition
+        });
+        var aiId = 2;
+        for (var i = 0; i < this.state.vehicles.length; i++) {
+            var v = this.state.vehicles[i];
+            if (v !== this.state.playerVehicle && v.isRacer) {
+                positions.push({
+                    id: aiId++,
+                    position: v.racePosition
+                });
+            }
+        }
+        return {
+            positions: positions,
+            playerTime: this.state.time,
+            playerBestLap: this.state.bestLapTime > 0 ? this.state.bestLapTime : this.state.time / this.state.track.laps
+        };
+    };
     Game.prototype.shutdown = function () {
         logInfo("Game.shutdown()");
         this.renderer.shutdown();

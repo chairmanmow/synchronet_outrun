@@ -937,6 +937,41 @@ class Game {
   }
 
   /**
+   * Get final race results for cup tracking.
+   * Returns null if race not finished.
+   */
+  getFinalRaceResults(): { positions: { id: number; position: number }[]; playerTime: number; playerBestLap: number } | null {
+    if (!this.state || !this.state.finished) return null;
+    
+    // Build positions array for all vehicles
+    var positions: { id: number; position: number }[] = [];
+    
+    // Player is always ID 1
+    positions.push({
+      id: 1,
+      position: this.state.playerVehicle.racePosition
+    });
+    
+    // AI racers (IDs 2-8)
+    var aiId = 2;
+    for (var i = 0; i < this.state.vehicles.length; i++) {
+      var v = this.state.vehicles[i];
+      if (v !== this.state.playerVehicle && v.isRacer) {
+        positions.push({
+          id: aiId++,
+          position: v.racePosition
+        });
+      }
+    }
+    
+    return {
+      positions: positions,
+      playerTime: this.state.time,
+      playerBestLap: this.state.bestLapTime > 0 ? this.state.bestLapTime : this.state.time / this.state.track.laps
+    };
+  }
+
+  /**
    * Shutdown the game.
    */
   shutdown(): void {

@@ -1,5 +1,5 @@
 "use strict";
-function displayHighScores(scores, title, trackOrCircuitName) {
+function displayHighScores(scores, title, trackOrCircuitName, playerPosition) {
     console.clear();
     var screenWidth = console.screen_columns;
     var screenHeight = console.screen_rows;
@@ -10,6 +10,9 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     var dateAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var highlightNameAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLUE });
+    var highlightTimeAttr = colorToAttr({ fg: WHITE, bg: BG_BLUE });
+    var highlightDateAttr = colorToAttr({ fg: LIGHTGRAY, bg: BG_BLUE });
     var boxWidth = Math.min(70, screenWidth - 4);
     var boxHeight = 18;
     var boxX = Math.floor((screenWidth - boxWidth) / 2);
@@ -45,12 +48,13 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     var startY = topY + 6;
     for (var i = 0; i < 10; i++) {
         console.gotoxy(boxX + 3, startY + i);
+        var isHighlighted = (playerPosition !== undefined && playerPosition === i + 1);
         if (i < scores.length) {
             var score = scores[i];
             var rank = (i + 1) + ".";
             if (i < 9)
                 rank = " " + rank;
-            console.attributes = nameAttr;
+            console.attributes = isHighlighted ? highlightNameAttr : nameAttr;
             console.print(rank + "   ");
             var name = score.playerName;
             if (name.length > 18) {
@@ -60,7 +64,7 @@ function displayHighScores(scores, title, trackOrCircuitName) {
                 name += " ";
             }
             console.print(name + "  ");
-            console.attributes = timeAttr;
+            console.attributes = isHighlighted ? highlightTimeAttr : timeAttr;
             var timeStr = LapTimer.format(score.time);
             console.print(timeStr);
             while (timeStr.length < 10) {
@@ -68,10 +72,14 @@ function displayHighScores(scores, title, trackOrCircuitName) {
                 console.print(" ");
             }
             console.print("  ");
-            console.attributes = dateAttr;
+            console.attributes = isHighlighted ? highlightDateAttr : dateAttr;
             var date = new Date(score.date);
             var dateStr = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
             console.print(dateStr);
+            if (isHighlighted) {
+                console.attributes = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+                console.print(" <-- YOU!");
+            }
         }
         else {
             console.attributes = emptyAttr;
@@ -85,9 +93,9 @@ function displayHighScores(scores, title, trackOrCircuitName) {
     console.attributes = headerAttr;
     console.print("Press any key to continue");
 }
-function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager) {
+function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager, playerPosition) {
     var scores = highScoreManager.getScores(type, identifier);
-    displayHighScores(scores, title, trackOrCircuitName);
+    displayHighScores(scores, title, trackOrCircuitName, playerPosition);
     console.inkey(K_NONE);
 }
 function displayTopScoreLine(label, score, x, y, labelAttr, valueAttr) {

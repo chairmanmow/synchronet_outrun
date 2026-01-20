@@ -3,12 +3,17 @@
  */
 
 /**
- * Display high scores in a formatted box
+ * Display high scores in a formatted box.
+ * @param scores - Array of high score entries
+ * @param title - Title of the display
+ * @param trackOrCircuitName - Track or circuit name
+ * @param playerPosition - Optional: 1-based position of player's newly set score to highlight
  */
 function displayHighScores(
   scores: IHighScoreEntry[],
   title: string,
-  trackOrCircuitName: string
+  trackOrCircuitName: string,
+  playerPosition?: number
 ): void {
   console.clear();
   
@@ -23,6 +28,9 @@ function displayHighScores(
   var dateAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
   var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
   var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+  var highlightNameAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLUE });
+  var highlightTimeAttr = colorToAttr({ fg: WHITE, bg: BG_BLUE });
+  var highlightDateAttr = colorToAttr({ fg: LIGHTGRAY, bg: BG_BLUE });
   
   // Box dimensions
   var boxWidth = Math.min(70, screenWidth - 4);
@@ -73,13 +81,16 @@ function displayHighScores(
   for (var i = 0; i < 10; i++) {
     console.gotoxy(boxX + 3, startY + i);
     
+    // Check if this is the player's highlighted position
+    var isHighlighted = (playerPosition !== undefined && playerPosition === i + 1);
+    
     if (i < scores.length) {
       var score = scores[i];
       var rank = (i + 1) + ".";
       if (i < 9) rank = " " + rank;  // Pad single digits
       
       // Rank
-      console.attributes = nameAttr;
+      console.attributes = isHighlighted ? highlightNameAttr : nameAttr;
       console.print(rank + "   ");
       
       // Player name (truncate if needed)
@@ -93,7 +104,7 @@ function displayHighScores(
       console.print(name + "  ");
       
       // Time
-      console.attributes = timeAttr;
+      console.attributes = isHighlighted ? highlightTimeAttr : timeAttr;
       var timeStr = LapTimer.format(score.time);
       console.print(timeStr);
       while (timeStr.length < 10) {
@@ -103,10 +114,16 @@ function displayHighScores(
       console.print("  ");
       
       // Date
-      console.attributes = dateAttr;
+      console.attributes = isHighlighted ? highlightDateAttr : dateAttr;
       var date = new Date(score.date);
       var dateStr = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
       console.print(dateStr);
+      
+      // Add indicator for player's new score
+      if (isHighlighted) {
+        console.attributes = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+        console.print(" <-- YOU!");
+      }
     } else {
       // Empty slot
       console.attributes = emptyAttr;
@@ -123,17 +140,24 @@ function displayHighScores(
 }
 
 /**
- * Display high scores and wait for key press
+ * Display high scores and wait for key press.
+ * @param type - Type of high score (track time, lap time, circuit time)
+ * @param identifier - Track or circuit identifier
+ * @param title - Display title
+ * @param trackOrCircuitName - Display name for track or circuit
+ * @param highScoreManager - HighScoreManager instance
+ * @param playerPosition - Optional: 1-based position of player's newly set score to highlight
  */
 function showHighScoreList(
   type: HighScoreType,
   identifier: string,
   title: string,
   trackOrCircuitName: string,
-  highScoreManager: HighScoreManager
+  highScoreManager: HighScoreManager,
+  playerPosition?: number
 ): void {
   var scores = highScoreManager.getScores(type, identifier);
-  displayHighScores(scores, title, trackOrCircuitName);
+  displayHighScores(scores, title, trackOrCircuitName, playerPosition);
   console.inkey(K_NONE);
 }
 
