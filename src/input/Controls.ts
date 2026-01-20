@@ -150,6 +150,18 @@ class Controls {
   }
 
   /**
+   * Consume a just-pressed action (prevents processing multiple times per frame).
+   * Returns true if the action was just pressed and is now consumed.
+   */
+  consumeJustPressed(action: GameAction): boolean {
+    if (this.justPressedActions[action] === true) {
+      this.justPressedActions[action] = false;
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Clear per-frame state (call at end of frame).
    */
   endFrame(): void {

@@ -82,6 +82,13 @@ var Controls = (function () {
     Controls.prototype.wasJustPressed = function (action) {
         return this.justPressedActions[action] === true;
     };
+    Controls.prototype.consumeJustPressed = function (action) {
+        if (this.justPressedActions[action] === true) {
+            this.justPressedActions[action] = false;
+            return true;
+        }
+        return false;
+    };
     Controls.prototype.endFrame = function () {
         this.justPressedActions = {};
     };

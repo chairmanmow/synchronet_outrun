@@ -287,8 +287,8 @@ const line = lineBuffer.join('');
 
 ### 7.1 Use Synchronet File Object
 ```typescript
-// Reading JSON
-const f = new File(js.exec_dir + "data/tracks/neon_coast_01.json");
+// Reading JSON from data subdirectory
+const f = new File("data/tracks/neon_coast_01.json");
 if (f.open("r")) {
   const content = f.read();
   f.close();
@@ -296,10 +296,13 @@ if (f.open("r")) {
 }
 ```
 
-### 7.2 Paths Are Relative to js.exec_dir
-- `js.exec_dir` is the directory containing the running script
-- Always construct paths from this base
-- Never assume current working directory
+### 7.2 File Path Best Practices
+- **DO**: Use relative paths assuming files are in subdirectories of the script directory
+  - Example: `"data/tracks/track.json"` (NOT `js.exec_dir + "data/..."`)
+- **DO**: For per-user data, use `system.data_dir + "user/####.extension"` or `"user/####/filename"`
+  - Example: `system.data_dir + "user/" + user.number + ".dat"`
+- **DON'T**: Concatenate `js.exec_dir` with file paths (Synchronet handles this automatically)
+- **DON'T**: Assume current working directory - always use proper relative paths
 
 ### 7.3 Handle Missing Files Gracefully
 ```typescript

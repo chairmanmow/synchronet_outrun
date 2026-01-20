@@ -13,7 +13,7 @@ interface IRenderer {
   beginFrame(): void;
   renderSky(trackPosition: number, curvature?: number, playerSteer?: number, speed?: number, dt?: number): void;
   renderRoad(trackPosition: number, cameraX: number, track: ITrack, road: Road): void;
-  renderEntities(playerVehicle: IVehicle, vehicles: IVehicle[], items: Item[]): void;
+  renderEntities(playerVehicle: IVehicle, vehicles: IVehicle[], items: Item[], projectiles?: IProjectile[]): void;
   renderHud(hudData: HudData): void;
   endFrame(): void;
   shutdown(): void;

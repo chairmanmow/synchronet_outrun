@@ -86,6 +86,10 @@ class Collision {
         // Skip if both are NPCs (let them overlap, player doesn't care)
         if (a.isNPC && b.isNPC) continue;
         
+        // Check for invincibility (Star or Bullet effects)
+        var aInvincible = this.isInvincible(a);
+        var bInvincible = this.isInvincible(b);
+        
         // Check collision using playerX and trackZ (road-relative coordinates)
         // Collision box sized to match visual representation
         var latDist = Math.abs(a.playerX - b.playerX);
@@ -96,10 +100,49 @@ class Collision {
         var collisionLong = 10;    // Longitudinal collision threshold
         
         if (latDist < collisionLat && longDist < collisionLong) {
-          this.resolveVehicleCollision(a, b);
+          // Handle invincibility
+          if (aInvincible && !bInvincible) {
+            // A plows through B - B takes full hit, A unaffected
+            this.applyCollisionDamage(b, a);
+          } else if (bInvincible && !aInvincible) {
+            // B plows through A - A takes full hit, B unaffected
+            this.applyCollisionDamage(a, b);
+          } else if (!aInvincible && !bInvincible) {
+            // Normal collision - both affected
+            this.resolveVehicleCollision(a, b);
+          }
+          // If both invincible, no collision effect
         }
       }
     }
+  }
+  
+  /**
+   * Check if vehicle has invincibility (Star or Bullet effect).
+   */
+  static isInvincible(vehicle: IVehicle): boolean {
+    var v = vehicle as Vehicle;
+    if (!v.hasEffect) return false;
+    return v.hasEffect(ItemType.STAR) || v.hasEffect(ItemType.BULLET);
+  }
+  
+  /**
+   * Apply collision damage to a vehicle hit by an invincible vehicle.
+   * Same dramatic effect as hitting a shell or banana - knocked to road edge at 0 mph.
+   */
+  static applyCollisionDamage(victim: IVehicle, _hitter: IVehicle): void {
+    // Full stop - dramatic impact like hitting a shell
+    victim.speed = 0;
+    
+    // Knock to side of road (but stay ON the road, not off it)
+    // playerX range: -1.0 to +1.0 is on-road, so knock to ±0.7 to ±0.9
+    var knockDirection = victim.playerX >= 0 ? 1 : -1;  // Knock in direction already moving
+    victim.playerX = knockDirection * (0.7 + Math.random() * 0.2);  // 0.7 to 0.9
+    
+    // Longer flash for dramatic visual feedback
+    victim.flashTimer = 1.5;
+    
+    logInfo("Invincible collision! Vehicle " + victim.id + " knocked to edge at playerX=" + victim.playerX.toFixed(2) + ", speed=0!");
   }
 
   /**

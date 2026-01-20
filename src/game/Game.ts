@@ -34,11 +34,12 @@ class Game {
   private physicsSystem: PhysicsSystem;
   private raceSystem: RaceSystem;
   private itemSystem: ItemSystem;
+  private highScoreManager: HighScoreManager | null;
 
   // State
   private state: GameState | null;
 
-  constructor(config?: GameConfig) {
+  constructor(config?: GameConfig, highScoreManager?: HighScoreManager) {
     this.config = config || DEFAULT_CONFIG;
     this.running = false;
     this.paused = false;
@@ -58,6 +59,7 @@ class Game {
     this.physicsSystem = new PhysicsSystem();
     this.raceSystem = new RaceSystem();
     this.itemSystem = new ItemSystem();
+    this.highScoreManager = highScoreManager || null;
 
     this.state = null;
   }
@@ -115,7 +117,7 @@ class Game {
     playerVehicle.isNPC = false;  // Ensure player is not marked as NPC
 
     // Create game state with road and race mode
-    this.state = createInitialState(track, road, playerVehicle, mode);
+    this.state = createInitialState(track, trackDef, road, playerVehicle, mode);
 
     // Spawn vehicles based on race mode
     if (mode === RaceMode.GRAND_PRIX) {
@@ -144,14 +146,14 @@ class Game {
     // Initialize systems
     this.physicsSystem.init(this.state);
     this.raceSystem.init(this.state);
-    this.itemSystem.initFromTrack(track);
+    this.itemSystem.initFromTrack(track, road);
 
-    // Initialize HUD with total racers
-    var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
-    this.hud.init(totalRacers);
+    // Initialize HUD with race start time (will be reset to 0 when countdown finishes)
+    this.hud.init(this.state.time);
 
     this.running = true;
-    this.state.racing = true;
+    // Don't set racing=true yet - wait for countdown to finish
+    this.state.racing = false;
 
     debugLog.info("Game initialized with track: " + trackDef.name);
     debugLog.info("  Race mode: " + mode);
@@ -215,6 +217,9 @@ class Game {
           this.tick(this.timestep.getDt());
         }
         
+        // Clear just-pressed flags after tick processing
+        this.controls.endFrame();
+        
         // Log vehicle state every second
         if (this.state.time - lastLogTime >= 1.0) {
           debugLog.logVehicle(this.state.playerVehicle);
@@ -264,9 +269,8 @@ class Game {
       this.controls.endFrame();  // Clear just-pressed flags
       return;
     }
-
-    // Clear just-pressed flags for next frame
-    this.controls.endFrame();
+    // NOTE: endFrame() is now called after tick() in the main loop
+    // so that USE_ITEM and other actions can be detected in tick()
   }
 
   /**
@@ -281,10 +285,13 @@ class Game {
       
       if (this.state.countdown <= 0) {
         this.state.raceStarted = true;
+        this.state.racing = true;  // Now the race is actually racing
         this.state.countdown = 0;
         // Reset time to 0 when race actually starts
         this.state.time = 0;
         this.state.lapStartTime = 0;
+        // Reinitialize HUD times now that race is starting for real
+        this.hud.init(0);
         
         // Enable ALL drivers to move
         for (var i = 0; i < this.state.vehicles.length; i++) {
@@ -316,13 +323,28 @@ class Game {
       this.applyNPCPacing();
     }
 
-    // Update items
-    this.itemSystem.update(dt);
+    // Update items (including shell projectiles)
+    this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
     this.itemSystem.checkPickups(this.state.vehicles);
 
-    // Use item if requested
-    if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
-      this.itemSystem.useItem(this.state.playerVehicle);
+    // Use item if requested (consume to prevent multi-tick triggering)
+    if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
+      this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles);
+    }
+    
+    // Process AI item usage (racers only, not commuters)
+    for (var i = 0; i < this.state.vehicles.length; i++) {
+      var vehicle = this.state.vehicles[i];
+      if (vehicle === this.state.playerVehicle) continue;  // Skip player
+      if (!vehicle.isRacer) continue;  // Only racers use items
+      if (!vehicle.driver) continue;
+      
+      // Get AI intent (already generated in PhysicsSystem, but we need it here)
+      // Check if this vehicle wants to use an item
+      var intent = vehicle.driver.update(vehicle, this.state.track, dt);
+      if (intent.useItem && vehicle.heldItem !== null) {
+        this.itemSystem.useItem(vehicle, this.state.vehicles);
+      }
     }
 
     // Process vehicle-to-vehicle collisions
@@ -354,33 +376,118 @@ class Game {
     var finalTime = this.state.time;
     var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
     
-    // Keep rendering results until user presses ENTER
-    while (true) {
-      // Render dedicated results screen (not the game view)
-      this.renderResultsScreen(finalPosition, finalTime, bestLap);
+    // Check if player qualified for high scores
+    var trackTimePosition = 0;
+    var lapTimePosition = 0;
+    
+    if (this.highScoreManager && this.state.trackDefinition) {
+      var trackId = this.state.trackDefinition.id;
       
-      // Check for ENTER specifically
-      var key = console.inkey(K_NONE, 0);
+      // Check track time qualification
+      trackTimePosition = this.highScoreManager.checkQualification(
+        HighScoreType.TRACK_TIME,
+        trackId,
+        finalTime
+      );
+      
+      // Check best lap time qualification
+      if (bestLap > 0) {
+        lapTimePosition = this.highScoreManager.checkQualification(
+          HighScoreType.LAP_TIME,
+          trackId,
+          bestLap
+        );
+      }
+      
+      // Submit scores if qualified
+      var playerName = "Player";
+      try {
+        if (typeof user !== 'undefined' && user && user.alias) {
+          playerName = user.alias;
+        }
+      } catch (e) {
+        // user not available, keep default
+      }
+      
+      if (trackTimePosition > 0) {
+        this.highScoreManager.submitScore(
+          HighScoreType.TRACK_TIME,
+          trackId,
+          playerName,
+          finalTime,
+          this.state.track.name
+        );
+        logInfo("NEW HIGH SCORE! Track time #" + trackTimePosition + ": " + finalTime.toFixed(2));
+      }
+      
+      if (lapTimePosition > 0) {
+        this.highScoreManager.submitScore(
+          HighScoreType.LAP_TIME,
+          trackId,
+          playerName,
+          bestLap,
+          this.state.track.name
+        );
+        logInfo("NEW HIGH SCORE! Lap time #" + lapTimePosition + ": " + bestLap.toFixed(2));
+      }
+    }
+    
+    // Render results screen once
+    this.renderResultsScreen(finalPosition, finalTime, bestLap, trackTimePosition, lapTimePosition);
+    
+    // Wait for ENTER key
+    while (true) {
+      var key = console.inkey(K_NONE, 100);
       if (key === '\r' || key === '\n') {
         debugLog.info("ENTER pressed, exiting game over screen");
         break;
       }
+    }
+    
+    // Show high scores if player made the list
+    if (this.highScoreManager && this.state.trackDefinition && (trackTimePosition > 0 || lapTimePosition > 0)) {
+      var trackId = this.state.trackDefinition.id;
       
-      // Yield to prevent busy-wait
-      mswait(16);
+      if (trackTimePosition > 0) {
+        showHighScoreList(
+          HighScoreType.TRACK_TIME,
+          trackId,
+          "=== TRACK TIME HIGH SCORES ===",
+          this.state.track.name,
+          this.highScoreManager
+        );
+      }
+      
+      if (lapTimePosition > 0) {
+        showHighScoreList(
+          HighScoreType.LAP_TIME,
+          trackId,
+          "=== LAP TIME HIGH SCORES ===",
+          this.state.track.name,
+          this.highScoreManager
+        );
+      }
     }
   }
   
   /**
    * Render a dedicated results screen (no game view, just results).
    */
-  private renderResultsScreen(position: number, totalTime: number, bestLap: number): void {
+  private renderResultsScreen(
+    position: number,
+    totalTime: number,
+    bestLap: number,
+    trackTimePosition?: number,
+    lapTimePosition?: number
+  ): void {
     this.renderer.beginFrame();
     
     // Clear to black background
-    var composer = this.renderer.getComposer();
-    for (var y = 0; y < 25; y++) {
-      for (var x = 0; x < 80; x++) {
+    var screenWidth = console.screen_columns;
+    var screenHeight = console.screen_rows;
+    var composer = new SceneComposer(screenWidth, screenHeight);
+    for (var y = 0; y < screenHeight; y++) {
+      for (var x = 0; x < screenWidth; x++) {
         composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
       }
     }
@@ -392,11 +499,11 @@ class Game {
     var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
     var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
     
-    // Box dimensions
+    // Box dimensions - centered based on actual screen size
     var boxWidth = 40;
     var boxHeight = 12;
-    var boxX = 20;
-    var topY = 6;
+    var boxX = Math.floor((screenWidth - boxWidth) / 2);
+    var topY = Math.floor((screenHeight - boxHeight) / 2);
     
     // Draw box border
     composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
@@ -433,6 +540,17 @@ class Game {
     // Track name
     composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
     composer.writeString(boxX + 22, topY + 8, this.state!.track.name, valueAttr);
+    
+    // High score notifications
+    var highScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+    if (trackTimePosition && trackTimePosition > 0) {
+      var msg = "NEW HIGH SCORE! #" + trackTimePosition + " Track Time";
+      composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 4, msg, highScoreAttr);
+    }
+    if (lapTimePosition && lapTimePosition > 0) {
+      var msg = "NEW HIGH SCORE! #" + lapTimePosition + " Lap Time";
+      composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 3, msg, highScoreAttr);
+    }
     
     // Prompt
     var prompt = "Press ENTER to continue";
@@ -623,7 +741,8 @@ class Game {
     this.renderer.renderEntities(
       this.state.playerVehicle,
       this.state.vehicles,
-      this.itemSystem.getItemBoxes()
+      this.itemSystem.getItemBoxes(),
+      this.itemSystem.getProjectiles()
     );
 
     // Compute and render HUD
@@ -706,19 +825,16 @@ class Game {
 
   /**
    * Position all vehicles on a starting grid.
-   * Creates a 2-wide grid formation AT the start line.
+   * Player starts at front, AI racers in 2-wide rows behind.
    */
   private positionOnStartingGrid(_road: Road): void {
     if (!this.state) return;
     
     var vehicles = this.state.vehicles;
+    var gridRowSpacing = 20;    // Z spacing between rows
+    var gridColSpacing = 0.5;   // X spacing for 2-wide formation
     
-    // Grid configuration - all start at Z=0 (the start/finish line)
-    var gridColSpacing = 0.4;   // Lateral spacing (X direction)
-    var startZ = 0;             // Everyone starts at the line!
-    
-    // Player always starts at the back of the grid for fair racing
-    // Find player and put them last
+    // Find player vehicle
     var playerIdx = -1;
     for (var p = 0; p < vehicles.length; p++) {
       if (!vehicles[p].isNPC) {
@@ -727,39 +843,44 @@ class Game {
       }
     }
     
-    // Assign grid positions to vehicles
-    // Racers get randomized positions, player starts at back
-    var gridSlot = 0;
+    // Calculate total grid length (7 AI cars = 4 rows: 1 solo + 3 pairs = 4 rows)
+    // Player goes at the front, ahead of all AI cars
+    var numAICars = vehicles.length - 1;
+    var totalGridLength = Math.ceil(numAICars / 2) * gridRowSpacing;
+    
+    // Position vehicles from back to front
+    // Player gets highest trackZ (furthest ahead)
+    var aiSlot = 0;
     for (var v = 0; v < vehicles.length; v++) {
       var vehicle = vehicles[v];
       
-      // All vehicles start at Z=0 (the start line)
-      vehicle.trackZ = startZ;
-      vehicle.z = startZ;
-      
-      // Spread out laterally so they're not all stacked
-      // Alternate left/right based on grid slot
       if (v === playerIdx) {
-        // Player in center-back
-        vehicle.playerX = 0;
+        // Player at very front (highest Z)
+        vehicle.trackZ = totalGridLength + gridRowSpacing;
+        vehicle.z = vehicle.trackZ;
+        vehicle.playerX = 0;  // Center
       } else {
-        // Racers spread left/right
-        var side = (gridSlot % 2 === 0) ? -1 : 1;
-        var offset = Math.floor(gridSlot / 2) * 0.15;
-        vehicle.playerX = side * (gridColSpacing + offset);
-        gridSlot++;
+        // AI cars in 2-wide rows behind player
+        var row = Math.floor(aiSlot / 2);
+        var col = aiSlot % 2;
+        
+        vehicle.trackZ = totalGridLength - (row * gridRowSpacing);
+        vehicle.z = vehicle.trackZ;
+        vehicle.playerX = (col === 0) ? -gridColSpacing : gridColSpacing;
+        
+        aiSlot++;
       }
       
       // Reset vehicle state
       vehicle.speed = 0;
       vehicle.lap = 1;
       vehicle.checkpoint = 0;
-      vehicle.racePosition = v + 1;
+      vehicle.racePosition = 1;  // Will be calculated properly first frame
       
-      debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+      debugLog.info("Grid slot " + v + " (NPC=" + vehicle.isNPC + "): trackZ=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
     }
     
-    debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
+    debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid (player at front)");
   }
 
   /**

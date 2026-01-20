@@ -399,12 +399,246 @@ class FrameRenderer implements IRenderer {
   /**
    * Render entities (IRenderer interface).
    */
-  renderEntities(playerVehicle: IVehicle, vehicles: IVehicle[], _items: Item[]): void {
+  renderEntities(playerVehicle: IVehicle, vehicles: IVehicle[], items: Item[], projectiles?: IProjectile[]): void {
+    // Render item boxes (behind vehicles)
+    this.renderItemBoxes(playerVehicle, items);
+    
+    // Render shell projectiles
+    if (projectiles && projectiles.length > 0) {
+      this.renderProjectiles(playerVehicle, projectiles);
+    }
+    
     // Render NPC vehicles (sorted by distance, far to near)
     this.renderNPCVehicles(playerVehicle, vehicles);
     
-    // Render player vehicle with flash effect (always on top)
-    this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0);
+    // Render player vehicle with visual effects
+    var v = playerVehicle as Vehicle;
+    this.renderPlayerVehicle(
+      playerVehicle.playerX, 
+      playerVehicle.flashTimer > 0, 
+      playerVehicle.boostTimer > 0,
+      v.hasEffect ? v.hasEffect(ItemType.STAR) : false,
+      v.hasEffect ? v.hasEffect(ItemType.BULLET) : false,
+      v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false
+    );
+  }
+  
+  /**
+   * Render shell projectiles on the track.
+   * Uses multi-character sprites with scaling like vehicles.
+   */
+  private renderProjectiles(playerVehicle: IVehicle, projectiles: IProjectile[]): void {
+    var frame = this.frameManager.getRoadFrame();
+    if (!frame) return;
+    
+    var visualHorizonY = 5;
+    var roadBottom = this.height - 4;
+    var roadHeight = roadBottom - visualHorizonY;
+    
+    // Shell sprites at different scales (from tiny to close)
+    // Scale 0: dot (far away)
+    // Scale 1: small circle
+    // Scale 2: medium shell
+    // Scale 3: large shell (close)
+    var greenSprites = [
+      ['.'],                    // Scale 0: dot
+      ['o'],                    // Scale 1: small
+      ['(O)'],                  // Scale 2: medium
+      ['_/O\\_', ' \\O/']       // Scale 3: large (2 lines)
+    ];
+    var redSprites = [
+      ['.'],
+      ['o'],
+      ['(O)'],
+      ['_/O\\_', ' \\O/']
+    ];
+    var blueSprites = [
+      ['*'],
+      ['@'],
+      ['<@>'],
+      ['~/~@~\\~', ' ~\\@/~']   // Blue shell is spiky
+    ];
+    
+    // Banana sprites (yellow peels)
+    var bananaSprites = [
+      ['.'],                    // Scale 0: dot
+      ['o'],                    // Scale 1: small
+      ['(o)'],                  // Scale 2: medium
+      [' /\\\\ ', '(__)']         // Scale 3: large (banana peel shape)
+    ];
+    
+    for (var i = 0; i < projectiles.length; i++) {
+      var projectile = projectiles[i];
+      if (projectile.isDestroyed) continue;
+      
+      // Check if it's a banana (speed = 0) or shell
+      var isBanana = projectile.speed === 0;
+      
+      // Calculate distance from player
+      var distZ = projectile.trackZ - playerVehicle.trackZ;
+      
+      // Render if ahead and within view, or slightly behind (just passed)
+      if (distZ < -5 || distZ > 600) continue;
+      
+      // Use same perspective system as vehicles
+      var maxViewDist = 500;
+      var normalizedDist = Math.max(0.01, distZ / maxViewDist);
+      var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+      
+      // Screen Y position
+      var screenY = Math.round(visualHorizonY + t * roadHeight);
+      
+      // Calculate curve offset for road alignment
+      var curveOffset = 0;
+      if (this._currentRoad && distZ > 0) {
+        var projWorldZ = this._currentTrackPosition + distZ;
+        var seg = this._currentRoad.getSegment(projWorldZ);
+        if (seg) {
+          curveOffset = seg.curve * t * 15;
+        }
+      }
+      
+      // Lateral position with perspective
+      var perspectiveScale = t * t;
+      var relativeX = projectile.playerX - playerVehicle.playerX;
+      var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
+      
+      // Determine scale based on screen position (like vehicles)
+      var screenProgress = (screenY - visualHorizonY) / roadHeight;
+      var scaleIndex: number;
+      if (screenProgress < 0.08) {
+        scaleIndex = 0;  // Dot - right at horizon
+      } else if (screenProgress < 0.20) {
+        scaleIndex = 1;  // Small
+      } else if (screenProgress < 0.40) {
+        scaleIndex = 2;  // Medium
+      } else {
+        scaleIndex = 3;  // Large - close
+      }
+      
+      // Select sprite set and color based on projectile type
+      var sprites: string[][];
+      var attr: number;
+      if (isBanana) {
+        sprites = bananaSprites;
+        attr = makeAttr(YELLOW, BG_BLACK);
+      } else {
+        // Shell
+        var shell = projectile as Shell;
+        if (shell.shellType === ShellType.GREEN) {
+          sprites = greenSprites;
+          attr = makeAttr(LIGHTGREEN, BG_BLACK);
+        } else if (shell.shellType === ShellType.RED) {
+          sprites = redSprites;
+          attr = makeAttr(LIGHTRED, BG_BLACK);
+        } else {
+          sprites = blueSprites;
+          attr = makeAttr(LIGHTBLUE, BG_BLACK);
+        }
+      }
+      
+      // Get sprite lines for this scale
+      var spriteLines = sprites[scaleIndex];
+      var spriteWidth = spriteLines[0].length;
+      var spriteHeight = spriteLines.length;
+      
+      // Center the sprite horizontally
+      var startX = screenX - Math.floor(spriteWidth / 2);
+      var startY = screenY - (spriteHeight - 1);  // Bottom of sprite at screenY
+      
+      // Render sprite lines
+      for (var ly = 0; ly < spriteHeight; ly++) {
+        var line = spriteLines[ly];
+        var drawY = startY + ly;
+        if (drawY < visualHorizonY || drawY >= roadBottom) continue;
+        
+        for (var lx = 0; lx < line.length; lx++) {
+          var ch = line.charAt(lx);
+          if (ch === ' ') continue;  // Skip spaces
+          var drawX = startX + lx;
+          if (drawX < 0 || drawX >= 80) continue;
+          frame.setData(drawX, drawY, ch, attr);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Render item boxes on the track.
+   */
+  private renderItemBoxes(playerVehicle: IVehicle, items: Item[]): void {
+    var frame = this.frameManager.getRoadFrame();
+    if (!frame) return;
+    
+    // Get road colors from theme for item box styling
+    var roadColor = this.activeTheme.colors.roadSurface;
+    // Item boxes use a contrasting bright color on road background
+    var itemBoxFg = YELLOW;  // Bright yellow "?" for contrast
+    var itemBoxBg = roadColor.bg;  // Match road background
+    
+    var visualHorizonY = 5;
+    var roadBottom = this.height - 4;
+    
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item.isAvailable()) continue;  // Skip picked-up items
+      
+      // Calculate relative position to player
+      var relativeZ = item.z - playerVehicle.trackZ;
+      var relativeX = item.x - (playerVehicle.playerX * 20);  // Scale to match world coords
+      
+      // Only render items ahead of player and within view distance
+      if (relativeZ < 5 || relativeZ > 300) continue;
+      
+      // Perspective calculation (same as NPC vehicles)
+      var maxViewDist = 300;
+      var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
+      var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+      
+      // Screen Y position
+      var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
+      
+      // Calculate curve offset for proper road alignment
+      var curveOffset = 0;
+      if (this._currentRoad && relativeZ > 0) {
+        var itemWorldZ = this._currentTrackPosition + relativeZ;
+        var seg = this._currentRoad.getSegment(itemWorldZ);
+        if (seg) {
+          curveOffset = seg.curve * t * 15;
+        }
+      }
+      
+      // Screen X position with curve offset
+      var perspectiveScale = t * t;
+      var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 0.1 - this._currentCameraX * 0.5);
+      
+      // Bounds check
+      if (screenY < visualHorizonY || screenY >= this.height - 1) continue;
+      if (screenX < 0 || screenX >= this.width) continue;
+      
+      // Scale item box size based on distance
+      var boxChar = '?';
+      var boxWidth = 1;
+      if (t > 0.4) {
+        // Close enough to show larger box
+        boxWidth = 3;
+      } else if (t > 0.2) {
+        boxWidth = 2;
+      }
+      
+      // Render the item box with pulsing animation
+      var pulse = Math.floor(Date.now() / 200) % 2;
+      var attr = pulse === 0 ? makeAttr(itemBoxFg, itemBoxBg) : makeAttr(YELLOW, itemBoxBg);
+      
+      // Draw box (centered)
+      var startX = screenX - Math.floor(boxWidth / 2);
+      for (var col = 0; col < boxWidth; col++) {
+        var drawX = startX + col;
+        if (drawX >= 0 && drawX < this.width) {
+          frame.setData(drawX, screenY, boxChar, attr);
+        }
+      }
+    }
   }
   
   /**
@@ -414,17 +648,29 @@ class FrameRenderer implements IRenderer {
     // Build list of visible NPCs with distance info
     var visibleNPCs: { vehicle: IVehicle; relativeZ: number; relativeX: number }[] = [];
     
+    // Get road length for wrap-around calculations
+    var roadLength = this._currentRoad ? this._currentRoad.totalLength : 10000;
+    
     for (var i = 0; i < vehicles.length; i++) {
       var v = vehicles[i];
       if (!v.isNPC) continue;  // Skip player
       
-      // Calculate relative position
-      var relativeZ = v.trackZ - playerVehicle.trackZ;
+      // Calculate relative position with wrap-around handling
+      // This computes the signed distance on a circular track
+      var rawDiff = v.trackZ - playerVehicle.trackZ;
+      var relativeZ = rawDiff;
+      
+      // Handle wrap-around: if the raw difference is more than half the track,
+      // the shorter path is the other way around
+      if (rawDiff > roadLength / 2) {
+        relativeZ = rawDiff - roadLength;  // NPC is actually behind (wrapped)
+      } else if (rawDiff < -roadLength / 2) {
+        relativeZ = rawDiff + roadLength;  // NPC is actually ahead (wrapped)
+      }
+      
       var relativeX = v.playerX - playerVehicle.playerX;
       
-      // Render if ahead of player and within view distance
-      // Extended range so cars can reach the visual horizon (600 units)
-      // Also render cars slightly behind player (passed but still visible)
+      // Render if within view distance (ahead or slightly behind)
       if (relativeZ > -10 && relativeZ < 600) {
         visibleNPCs.push({ vehicle: v, relativeZ: relativeZ, relativeX: relativeX });
       }
@@ -447,12 +693,25 @@ class FrameRenderer implements IRenderer {
     var sprite = getNPCSprite(vehicle.npcType, vehicle.npcColorIndex);
     
     // Calculate screen position and scale based on distance
-    // t: 0 = far (horizon), 1 = close (bottom)
+    // t: 0 = far (horizon), 1 = close (player position)
     var maxViewDist = 500;  // World units before cars disappear
     
-    // Use perspective formula to place cars
-    var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);  // 0.01 to 1
-    var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+    // For cars ahead (positive relativeZ): map to screen Y from horizon to near-player
+    // For cars behind (negative relativeZ): they should appear below/at player level
+    //   but we limit rendering to just slightly behind (-10) to avoid weirdness
+    
+    // Calculate t: how close to player (1 = at player, 0 = at horizon)
+    // Use absolute value and sign to determine position
+    var t: number;
+    if (relativeZ >= 0) {
+      // Car is ahead - map distance to screen position
+      var normalizedDist = Math.min(1, relativeZ / maxViewDist);
+      t = 1 - normalizedDist;  // 0 at max distance, 1 at player position
+    } else {
+      // Car is behind - should appear at/below player (t > 1)
+      // But we only render up to -10 behind, so this is a small effect
+      t = 1 + Math.abs(relativeZ) / 50;  // Extends slightly past player
+    }
     
     // Map t to screen Y 
     // Use the VISUAL horizon (where road actually meets sky), not this.horizonY
@@ -3042,26 +3301,85 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Render player vehicle.
+   * Render player vehicle with visual effects.
    */
-  renderPlayerVehicle(playerX: number, isFlashing?: boolean): void {
+  renderPlayerVehicle(playerX: number, isFlashing?: boolean, isBoosting?: boolean, 
+                      hasStar?: boolean, hasBullet?: boolean, hasLightning?: boolean): void {
     var frame = this.frameManager.getVehicleFrame(0);
     if (!frame) return;
     
     // Render sprite to frame
     renderSpriteToFrame(frame, this.playerCarSprite, 0);
     
-    // If flashing, override with flash color (white/red alternating)
-    if (isFlashing) {
-      var flashColor = (Math.floor(Date.now() / 100) % 2 === 0) ? WHITE : LIGHTRED;
+    var now = Date.now();
+    
+    // STAR EFFECT: Rainbow cycling colors (most prominent effect)
+    if (hasStar) {
+      var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+      var colorIndex = Math.floor(now / 60) % starColors.length;
+      var starColor = starColors[colorIndex];
+      var starAttr = makeAttr(starColor, BG_BLACK);
+      // Color the entire car with cycling rainbow
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 5; x++) {
+          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          if (cell) {
+            frame.setData(x, y, cell.char, starAttr);
+          }
+        }
+      }
+    }
+    // BULLET EFFECT: Fast white/yellow flash + speed lines look
+    else if (hasBullet) {
+      var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : YELLOW;
+      var bulletAttr = makeAttr(bulletColor, BG_BLACK);
+      // Whole car flashes fast
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 5; x++) {
+          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          if (cell) {
+            frame.setData(x, y, cell.char, bulletAttr);
+          }
+        }
+      }
+    }
+    // LIGHTNING HIT: Blue/cyan crackling effect
+    else if (hasLightning) {
+      var lightningColor = (Math.floor(now / 120) % 3 === 0) ? BLUE : 
+                          (Math.floor(now / 120) % 3 === 1) ? LIGHTCYAN : CYAN;
+      var lightningAttr = makeAttr(lightningColor, BG_BLACK);
+      // Car flickers blue when slowed by lightning
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 5; x++) {
+          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          if (cell) {
+            frame.setData(x, y, cell.char, lightningAttr);
+          }
+        }
+      }
+    }
+    // DAMAGE FLASH: Red/white alternating (collision recovery)
+    else if (isFlashing) {
+      var flashColor = (Math.floor(now / 100) % 2 === 0) ? WHITE : LIGHTRED;
       var flashAttr = makeAttr(flashColor, BG_BLACK);
-      // Overlay flash on all non-transparent cells
       for (var y = 0; y < 3; y++) {
         for (var x = 0; x < 5; x++) {
           var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
           if (cell) {
             frame.setData(x, y, cell.char, flashAttr);
           }
+        }
+      }
+    }
+    // MUSHROOM BOOST: Cyan/yellow shimmer on exhaust
+    else if (isBoosting) {
+      var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : YELLOW;
+      var boostAttr = makeAttr(boostColor, BG_BLACK);
+      // Just color the bottom row (exhaust/wheels area) for boost effect
+      for (var bx = 0; bx < 5; bx++) {
+        var cell = this.playerCarSprite.variants[0][2] ? this.playerCarSprite.variants[0][2][bx] : null;
+        if (cell) {
+          frame.setData(bx, 2, cell.char, boostAttr);
         }
       }
     }
@@ -3085,28 +3403,113 @@ class FrameRenderer implements IRenderer {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
     var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
     
-    // Top bar - Lap, Position, Time
-    this.writeStringToFrame(frame, 2, 0, 'LAP', labelAttr);
-    this.writeStringToFrame(frame, 6, 0, hudData.lap + '/' + hudData.totalLaps, valueAttr);
+    // Top bar - Only TIME (centered)
+    this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
+    this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
     
-    this.writeStringToFrame(frame, 14, 0, 'POS', labelAttr);
-    this.writeStringToFrame(frame, 18, 0, hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position), valueAttr);
+    // Bottom bar (row 23):
+    // LEFT:  [1/3] [====TRACK====] [8th]
+    // RIGHT: [300] [=====SPD=====]
+    var bottomY = this.height - 1;
     
-    this.writeStringToFrame(frame, 26, 0, 'TIME', labelAttr);
-    this.writeStringToFrame(frame, 31, 0, LapTimer.format(hudData.lapTime), valueAttr);
+    // LEFT SIDE - Lap, Track progress, Position
+    this.writeStringToFrame(frame, 2, bottomY, hudData.lap + '/' + hudData.totalLaps, valueAttr);
+    this.renderTrackProgressCompact(frame, hudData.lapProgress, 7, bottomY, 12);
+    var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+    this.writeStringToFrame(frame, 21, bottomY, posStr, valueAttr);
     
-    this.writeStringToFrame(frame, 66, 0, 'SPD', labelAttr);
-    this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
+    // RIGHT SIDE - Speed numeric and bar
+    var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
+    var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+    this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+    this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 10);
     
-    // Speedometer bar at bottom left
-    this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
-    
-    // Track progress bar at bottom right
-    this.renderTrackProgress(frame, hudData.lapProgress);
+    // Held item display - ABOVE speedometer (row 22, right side)
+    if (hudData.heldItem !== null) {
+      var itemData = hudData.heldItem;
+      var itemName = this.getItemDisplayName(itemData.type);
+      var itemAttr = this.getItemDisplayAttr(itemData.type);
+      
+      // Show uses count for pack items (e.g., "MUSHROOMx3")
+      if (itemData.uses > 1) {
+        itemName = itemName + "x" + itemData.uses;
+      }
+      
+      this.writeStringToFrame(frame, 71 - itemName.length, bottomY - 1, itemName, itemAttr);
+    }
     
     // Render countdown stoplight if race hasn't started
     if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
       this.renderStoplight(frame, hudData.countdown);
+    }
+  }
+  
+  /**
+   * Get display name for an item type.
+   */
+  private getItemDisplayName(itemType: ItemType): string {
+    switch (itemType) {
+      case ItemType.MUSHROOM:
+      case ItemType.MUSHROOM_TRIPLE:
+        return 'MUSHROOM';
+      case ItemType.MUSHROOM_GOLDEN:
+        return 'G.MUSHROOM';
+      case ItemType.SHELL:
+      case ItemType.SHELL_TRIPLE:
+        return 'SHELL';
+      case ItemType.GREEN_SHELL:
+      case ItemType.GREEN_SHELL_TRIPLE:
+        return 'SHELL';
+      case ItemType.RED_SHELL:
+      case ItemType.RED_SHELL_TRIPLE:
+        return 'SHELL';
+      case ItemType.BLUE_SHELL:
+        return 'SHELL';
+      case ItemType.BANANA:
+      case ItemType.BANANA_TRIPLE:
+        return 'BANANA';
+      case ItemType.STAR:
+        return 'STAR';
+      case ItemType.LIGHTNING:
+        return 'LIGHTNING';
+      case ItemType.BULLET:
+        return 'BULLET';
+      default:
+        return '???';
+    }
+  }
+  
+  /**
+   * Get display attribute/color for an item type.
+   */
+  private getItemDisplayAttr(itemType: ItemType): number {
+    switch (itemType) {
+      case ItemType.MUSHROOM:
+      case ItemType.MUSHROOM_TRIPLE:
+      case ItemType.MUSHROOM_GOLDEN:
+        return makeAttr(LIGHTRED, BG_BLACK);
+      case ItemType.SHELL:
+      case ItemType.SHELL_TRIPLE:
+        return makeAttr(LIGHTGREEN, BG_BLACK);
+      case ItemType.GREEN_SHELL:
+      case ItemType.GREEN_SHELL_TRIPLE:
+        return makeAttr(LIGHTGREEN, BG_BLACK);
+      case ItemType.RED_SHELL:
+      case ItemType.RED_SHELL_TRIPLE:
+        return makeAttr(LIGHTRED, BG_BLACK);
+      case ItemType.BLUE_SHELL:
+        return makeAttr(LIGHTCYAN, BG_BLACK);
+      case ItemType.BANANA:
+      case ItemType.BANANA_TRIPLE:
+        return makeAttr(YELLOW, BG_BLACK);
+      case ItemType.STAR:
+        return makeAttr(YELLOW, BG_BLACK);
+      case ItemType.LIGHTNING:
+        return makeAttr(LIGHTCYAN, BG_BLACK);
+      case ItemType.BULLET:
+        return makeAttr(WHITE, BG_BLACK);
+      default:
+        return makeAttr(WHITE, BG_BLACK);
     }
   }
   
@@ -3177,62 +3580,63 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Render track progress bar on bottom right.
+   * Render compact track progress bar at specified position.
    */
-  private renderTrackProgress(frame: Frame, progress: number): void {
-    var y = this.height - 1;
-    var barX = 60;  // Bottom right area
-    var barWidth = 15;
-    
+  private renderTrackProgressCompact(frame: Frame, progress: number, x: number, y: number, width: number): void {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
     var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
     var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
-    var finishAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
     
-    // Label
-    this.writeStringToFrame(frame, barX - 5, y, 'TRK', labelAttr);
+    frame.setData(x, y, '[', labelAttr);
     
-    frame.setData(barX, y, '[', labelAttr);
+    var fillWidth = Math.round(progress * width);
     
-    var fillWidth = Math.round(progress * barWidth);
-    
-    for (var i = 0; i < barWidth; i++) {
+    for (var i = 0; i < width; i++) {
       var attr = (i < fillWidth) ? filledAttr : emptyAttr;
       var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-      frame.setData(barX + 1 + i, y, char, attr);
+      frame.setData(x + 1 + i, y, char, attr);
     }
     
-    // Finish flag marker at end
-    frame.setData(barX + barWidth + 1, y, ']', finishAttr);
+    frame.setData(x + width + 1, y, ']', labelAttr);
   }
   
   /**
-   * Render speedometer bar.
+   * Render compact speedometer bar at specified position.
    */
-  private renderSpeedometerBar(frame: Frame, speed: number, maxSpeed: number): void {
-    var y = this.height - 1;
-    var barX = 2;
-    var barWidth = 20;
-    
+  private renderSpeedometerBarCompact(frame: Frame, speed: number, maxSpeed: number, x: number, y: number, width: number): void {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
     var filledAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
     var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     var highAttr = colorToAttr({ fg: LIGHTRED, bg: BG_BLACK });
+    var boostAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
     
-    frame.setData(barX, y, '[', labelAttr);
+    frame.setData(x, y, '[', labelAttr);
     
-    var fillAmount = speed / maxSpeed;
-    var fillWidth = Math.round(fillAmount * barWidth);
+    // Clamp fill to 100% for bar display, but show boost color if over
+    var fillAmount = Math.min(1.0, speed / maxSpeed);
+    var isBoost = speed > maxSpeed;
+    var fillWidth = Math.round(fillAmount * width);
     
-    for (var i = 0; i < barWidth; i++) {
-      var attr = (i < fillWidth) ? (fillAmount > 0.8 ? highAttr : filledAttr) : emptyAttr;
+    for (var i = 0; i < width; i++) {
+      var attr: number;
+      if (i < fillWidth) {
+        if (isBoost) {
+          attr = boostAttr;  // Cyan when boosting
+        } else if (fillAmount > 0.8) {
+          attr = highAttr;   // Red when near max
+        } else {
+          attr = filledAttr; // Green normally
+        }
+      } else {
+        attr = emptyAttr;
+      }
       var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-      frame.setData(barX + 1 + i, y, char, attr);
+      frame.setData(x + 1 + i, y, char, attr);
     }
     
-    frame.setData(barX + barWidth + 1, y, ']', labelAttr);
+    frame.setData(x + width + 1, y, ']', labelAttr);
   }
-  
+
   /**
    * Helper to write a string to a frame.
    */

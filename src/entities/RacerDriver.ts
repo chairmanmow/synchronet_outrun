@@ -35,6 +35,9 @@ class RacerDriver implements IDriver {
   
   /** Whether this driver is allowed to move (false during countdown) */
   private canMove: boolean;
+  
+  /** Timer for item usage cooldown - prevents spamming */
+  private itemUseCooldown: number;
 
   constructor(skill: number, name?: string) {
     this.skill = clamp(skill, 0.3, 1.0);
@@ -42,8 +45,8 @@ class RacerDriver implements IDriver {
     
     // Calculate attributes based on skill
     // Higher skill = faster, more consistent, quicker reactions
-    // TUNED LOW for testing - player should easily catch up
-    this.targetSpeed = 0.35 + (this.skill * 0.30);  // 0.35 to 0.65 of max speed
+    // CPU racers now match player speed (100%) - tuning baseline
+    this.targetSpeed = 0.90 + (this.skill * 0.10);  // 0.90 to 1.00 of max speed (270-300)
     this._aggression = 0.3 + (this.skill * 0.5);   // How much they fight for position
     this._reactionDelay = 0.3 - (this.skill * 0.25); // 0.05 to 0.30 seconds
     
@@ -54,6 +57,7 @@ class RacerDriver implements IDriver {
     this.variationTimer = 0;
     this.speedVariation = 0;
     this.canMove = false;  // Start frozen, will be enabled when race starts
+    this.itemUseCooldown = 0;
   }
   
   /**
@@ -91,6 +95,11 @@ class RacerDriver implements IDriver {
         steer: 0,
         useItem: false
       };
+    }
+    
+    // Update item cooldown
+    if (this.itemUseCooldown > 0) {
+      this.itemUseCooldown -= dt;
     }
     
     // Update variation timer for natural-feeling speed changes
@@ -141,10 +150,29 @@ class RacerDriver implements IDriver {
       this.steerAmount = -0.5;
     }
     
+    // AI Item Usage:
+    // TODO: Improve item usage logic when tuning game (consider position, item type, etc.)
+    // For now, use simple RNG: ~5% chance per second to use held item
+    var shouldUseItem = false;
+    if (vehicle.heldItem !== null && this.itemUseCooldown <= 0) {
+      // Higher skill = slightly more strategic (uses items more often when behind)
+      var useChance = 0.05 * dt;  // ~5% per second base chance
+      
+      // Boost chance based on position (trailing racers use items more)
+      if (vehicle.racePosition > 2) {
+        useChance *= 1.5;
+      }
+      
+      if (Math.random() < useChance) {
+        shouldUseItem = true;
+        this.itemUseCooldown = 2 + Math.random() * 3;  // 2-5 second cooldown
+      }
+    }
+    
     return {
       accelerate: clamp(accelerate, 0, 1),
       steer: this.steerAmount,
-      useItem: false  // TODO: Item usage AI
+      useItem: shouldUseItem
     };
   }
   

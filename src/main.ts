@@ -30,6 +30,8 @@
 /// <reference path="hud/Speedometer.ts" />
 /// <reference path="hud/LapTimer.ts" />
 /// <reference path="hud/PositionIndicator.ts" />
+/// <reference path="highscores/HighScoreManager.ts" />
+/// <reference path="highscores/HighScoreDisplay.ts" />
 /// <reference path="render/cp437/Palette.ts" />
 /// <reference path="render/cp437/GlyphAtlas.ts" />
 /// <reference path="render/cp437/SceneComposer.ts" />
@@ -62,9 +64,8 @@
 
 // Initialize file-based debug logger FIRST (even before BBS check)
 // This ensures we capture any errors that occur during startup
-debugLog.init();
-debugLog.info("OutRun ANSI starting...");
-debugLog.info("Synchronet BBS Door Game");
+// Uncomment the line below to enable debug logging to /sbbs/ctrl/outrun_debug.log
+// debugLog.init();
 
 // ============================================================
 // BBS ENVIRONMENT CHECK
@@ -72,8 +73,8 @@ debugLog.info("Synchronet BBS Door Game");
 
 // Check if we're running in a proper BBS terminal session
 if (typeof console === 'undefined' || console === null) {
-  debugLog.error("No console object - not running in BBS session");
-  debugLog.close();
+  // debugLog.error("No console object - not running in BBS session");
+  // debugLog.close();
   print("ERROR: OutRun ANSI must be run from a Synchronet BBS terminal session.");
   print("This game cannot run directly with jsexec.");
   print("");
@@ -98,64 +99,96 @@ if (typeof console === 'undefined' || console === null) {
 
 /**
  * Display the title screen.
+ * Tries to load custom ANSI art from title.ans, falls back to built-in ASCII art.
  */
 function showTitleScreen(): void {
   console.clear();
-  console.attributes = LIGHTMAGENTA;
-
-  // ASCII art title
-  var title = [
-    "",
-    "     .d88b.  db    db d888888b d8888b. db    db d8b   db",
-    "    .8P  Y8. 88    88 `~~88~~' 88  `8D 88    88 888o  88",
-    "    88    88 88    88    88    88oobY' 88    88 88V8o 88",
-    "    88    88 88    88    88    88`8b   88    88 88 V8o88",
-    "    `8b  d8' 88b  d88    88    88 `88. 88b  d88 88  V888",
-    "     `Y88P'  ~Y8888P'    YP    88   YD ~Y8888P' VP   V8P",
-    ""
-  ];
-
-  for (var i = 0; i < title.length; i++) {
-    console.print(title[i] + "\r\n");
+  
+  // Try to load custom title screen (.bin preferred, .ans fallback)
+  var titleFile = "";
+  var f = new File(js.exec_dir + "title.bin");
+  
+  if (f.exists) {
+    titleFile = js.exec_dir + "title.bin";
+  } else {
+    f = new File(js.exec_dir + "title.ans");
+    if (f.exists) {
+      titleFile = js.exec_dir + "title.ans";
+    }
   }
+  
+  if (titleFile !== "") {
+    try {
+      // Load frame.js library
+      load('frame.js');
+      
+      // Display custom art using Frame
+      var titleFrame = new Frame(1, 1, console.screen_columns, console.screen_rows, BG_BLACK);
+      titleFrame.open();
+      titleFrame.load(titleFile);
+      titleFrame.draw();
+      titleFrame.close();
+    } catch (e) {
+      logError("Error loading custom title: " + e);
+      // Fall through to built-in title
+    }
+  } else {
+    // Fallback to built-in ASCII art
+    console.attributes = LIGHTMAGENTA;
 
-  console.attributes = CYAN;
-  console.print("              =========================================\r\n");
-  console.attributes = LIGHTCYAN;
-  console.print("                   A N S I   S Y N T H W A V E\r\n");
-  console.print("                        R A C E R\r\n");
-  console.attributes = CYAN;
-  console.print("              =========================================\r\n");
-  console.print("\r\n");
+    var title = [
+      "",
+      "     .d88b.  db    db d888888b d8888b. db    db d8b   db",
+      "    .8P  Y8. 88    88 `~~88~~' 88  `8D 88    88 888o  88",
+      "    88    88 88    88    88    88oobY' 88    88 88V8o 88",
+      "    88    88 88    88    88    88`8b   88    88 88 V8o88",
+      "    `8b  d8' 88b  d88    88    88 `88. 88b  d88 88  V888",
+      "     `Y88P'  ~Y8888P'    YP    88   YD ~Y8888P' VP   V8P",
+      ""
+    ];
 
-  // Synthwave grid decoration
-  console.attributes = DARKGRAY;
-  console.print("         /     |     \\         /     |     \\\r\n");
-  console.print("        /      |      \\       /      |      \\\r\n");
-  console.attributes = CYAN;
-  console.print("    ===/=======+=======\\=====/=======+=======\\===\r\n");
-  console.attributes = DARKGRAY;
-  console.print("      /        |        \\   /        |        \\\r\n");
-  console.print("\r\n");
+    for (var i = 0; i < title.length; i++) {
+      console.print(title[i] + "\r\n");
+    }
 
-  // Instructions
-  console.attributes = WHITE;
-  console.print("                    Controls:\r\n");
-  console.attributes = LIGHTGRAY;
-  console.print("        W/Up = Accelerate   A/Left = Steer Left\r\n");
-  console.print("        S/Dn = Brake        D/Right = Steer Right\r\n");
-  console.print("        SPACE = Use Item    P = Pause\r\n");
-  console.print("\r\n");
+    console.attributes = CYAN;
+    console.print("              =========================================\r\n");
+    console.attributes = LIGHTCYAN;
+    console.print("                   A N S I   S Y N T H W A V E\r\n");
+    console.print("                        R A C E R\r\n");
+    console.attributes = CYAN;
+    console.print("              =========================================\r\n");
+    console.print("\r\n");
 
-  console.attributes = YELLOW;
-  console.print("              Press any key to start racing...\r\n");
-  console.print("                     Q to quit\r\n");
-  console.print("\r\n");
+    // Synthwave grid decoration
+    console.attributes = DARKGRAY;
+    console.print("         /     |     \\         /     |     \\\r\n");
+    console.print("        /      |      \\       /      |      \\\r\n");
+    console.attributes = CYAN;
+    console.print("    ===/=======+=======\\=====/=======+=======\\===\r\n");
+    console.attributes = DARKGRAY;
+    console.print("      /        |        \\   /        |        \\\r\n");
+    console.print("\r\n");
 
-  console.attributes = DARKGRAY;
-  console.print("     Version 0.1.0 (Iteration 0) - Bootstrap Build\r\n");
+    // Instructions
+    console.attributes = WHITE;
+    console.print("                    Controls:\r\n");
+    console.attributes = LIGHTGRAY;
+    console.print("        W/Up = Accelerate   A/Left = Steer Left\r\n");
+    console.print("        S/Dn = Brake        D/Right = Steer Right\r\n");
+    console.print("        SPACE = Use Item    P = Pause\r\n");
+    console.print("\r\n");
 
-  console.attributes = LIGHTGRAY;
+    console.attributes = YELLOW;
+    console.print("              Press any key to start racing...\r\n");
+    console.print("                     Q to quit\r\n");
+    console.print("\r\n");
+
+    console.attributes = DARKGRAY;
+    console.print("     Version 0.1.0 (Iteration 0) - Bootstrap Build\r\n");
+
+    console.attributes = LIGHTGRAY;
+  }
 }
 
 /**
@@ -215,6 +248,12 @@ function main(): void {
   debugLog.separator("GAME START");
   debugLog.info("Entering main()");
 
+  // Load json-db for high scores
+  load('json-db.js');
+  
+  // Initialize high score manager
+  var highScoreManager = new HighScoreManager();
+
   try {
     // Main application loop - keeps running until user quits from splash
     var keepPlaying = true;
@@ -233,7 +272,7 @@ function main(): void {
 
       // Show track selector
       debugLog.info("Showing track selector");
-      var trackSelection = showTrackSelector();
+      var trackSelection = showTrackSelector(highScoreManager);
       
       if (!trackSelection.selected || !trackSelection.track) {
         // User pressed Q/ESC in track select - go back to splash
@@ -245,7 +284,7 @@ function main(): void {
 
       // Create and initialize game with selected track
       debugLog.separator("GAME INIT");
-      var game = new Game();
+      var game = new Game(undefined, highScoreManager);
       game.initWithTrack(trackSelection.track);
 
       // Run game loop
@@ -285,8 +324,8 @@ function main(): void {
   } finally {
     // Always restore terminal state and close log
     console.attributes = LIGHTGRAY;
-    debugLog.separator("LOG END");
-    debugLog.close();
+    // debugLog.separator("LOG END");
+    // debugLog.close();
   }
 }
 

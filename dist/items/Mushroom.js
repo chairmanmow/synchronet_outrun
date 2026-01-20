@@ -17,13 +17,16 @@ var __extends = (this && this.__extends) || (function () {
 var Mushroom = (function (_super) {
     __extends(Mushroom, _super);
     function Mushroom() {
-        var _this = _super.call(this, ItemType.MUSHROOM) || this;
-        _this.boostMultiplier = 1.5;
-        _this.boostDuration = 2.0;
-        return _this;
+        return _super.call(this, ItemType.MUSHROOM) || this;
     }
     Mushroom.applyEffect = function (vehicle) {
-        vehicle.speed = Math.min(vehicle.speed * 1.5, VEHICLE_PHYSICS.MAX_SPEED * 1.3);
+        vehicle.boostTimer = Mushroom.BOOST_DURATION;
+        vehicle.boostMultiplier = Mushroom.BOOST_MULTIPLIER;
+        vehicle.boostMinSpeed = Math.max(vehicle.speed, VEHICLE_PHYSICS.MAX_SPEED * 0.5);
+        vehicle.speed = Math.min(vehicle.speed * 1.3, VEHICLE_PHYSICS.MAX_SPEED * Mushroom.BOOST_MULTIPLIER);
+        logInfo("Mushroom boost activated! Duration: " + Mushroom.BOOST_DURATION + "s, minSpeed: " + vehicle.boostMinSpeed);
     };
+    Mushroom.BOOST_MULTIPLIER = 1.4;
+    Mushroom.BOOST_DURATION = 3.0;
     return Mushroom;
 }(Item));

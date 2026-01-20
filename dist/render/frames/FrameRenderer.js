@@ -249,17 +249,195 @@ var FrameRenderer = (function () {
         objects.sort(function (a, b) { return b.distance - a.distance; });
         return objects;
     };
-    FrameRenderer.prototype.renderEntities = function (playerVehicle, vehicles, _items) {
+    FrameRenderer.prototype.renderEntities = function (playerVehicle, vehicles, items, projectiles) {
+        this.renderItemBoxes(playerVehicle, items);
+        if (projectiles && projectiles.length > 0) {
+            this.renderProjectiles(playerVehicle, projectiles);
+        }
         this.renderNPCVehicles(playerVehicle, vehicles);
-        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0);
+        var v = playerVehicle;
+        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0, playerVehicle.boostTimer > 0, v.hasEffect ? v.hasEffect(ItemType.STAR) : false, v.hasEffect ? v.hasEffect(ItemType.BULLET) : false, v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false);
+    };
+    FrameRenderer.prototype.renderProjectiles = function (playerVehicle, projectiles) {
+        var frame = this.frameManager.getRoadFrame();
+        if (!frame)
+            return;
+        var visualHorizonY = 5;
+        var roadBottom = this.height - 4;
+        var roadHeight = roadBottom - visualHorizonY;
+        var greenSprites = [
+            ['.'],
+            ['o'],
+            ['(O)'],
+            ['_/O\\_', ' \\O/']
+        ];
+        var redSprites = [
+            ['.'],
+            ['o'],
+            ['(O)'],
+            ['_/O\\_', ' \\O/']
+        ];
+        var blueSprites = [
+            ['*'],
+            ['@'],
+            ['<@>'],
+            ['~/~@~\\~', ' ~\\@/~']
+        ];
+        var bananaSprites = [
+            ['.'],
+            ['o'],
+            ['(o)'],
+            [' /\\\\ ', '(__)']
+        ];
+        for (var i = 0; i < projectiles.length; i++) {
+            var projectile = projectiles[i];
+            if (projectile.isDestroyed)
+                continue;
+            var isBanana = projectile.speed === 0;
+            var distZ = projectile.trackZ - playerVehicle.trackZ;
+            if (distZ < -5 || distZ > 600)
+                continue;
+            var maxViewDist = 500;
+            var normalizedDist = Math.max(0.01, distZ / maxViewDist);
+            var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+            var screenY = Math.round(visualHorizonY + t * roadHeight);
+            var curveOffset = 0;
+            if (this._currentRoad && distZ > 0) {
+                var projWorldZ = this._currentTrackPosition + distZ;
+                var seg = this._currentRoad.getSegment(projWorldZ);
+                if (seg) {
+                    curveOffset = seg.curve * t * 15;
+                }
+            }
+            var perspectiveScale = t * t;
+            var relativeX = projectile.playerX - playerVehicle.playerX;
+            var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
+            var screenProgress = (screenY - visualHorizonY) / roadHeight;
+            var scaleIndex;
+            if (screenProgress < 0.08) {
+                scaleIndex = 0;
+            }
+            else if (screenProgress < 0.20) {
+                scaleIndex = 1;
+            }
+            else if (screenProgress < 0.40) {
+                scaleIndex = 2;
+            }
+            else {
+                scaleIndex = 3;
+            }
+            var sprites;
+            var attr;
+            if (isBanana) {
+                sprites = bananaSprites;
+                attr = makeAttr(YELLOW, BG_BLACK);
+            }
+            else {
+                var shell = projectile;
+                if (shell.shellType === ShellType.GREEN) {
+                    sprites = greenSprites;
+                    attr = makeAttr(LIGHTGREEN, BG_BLACK);
+                }
+                else if (shell.shellType === ShellType.RED) {
+                    sprites = redSprites;
+                    attr = makeAttr(LIGHTRED, BG_BLACK);
+                }
+                else {
+                    sprites = blueSprites;
+                    attr = makeAttr(LIGHTBLUE, BG_BLACK);
+                }
+            }
+            var spriteLines = sprites[scaleIndex];
+            var spriteWidth = spriteLines[0].length;
+            var spriteHeight = spriteLines.length;
+            var startX = screenX - Math.floor(spriteWidth / 2);
+            var startY = screenY - (spriteHeight - 1);
+            for (var ly = 0; ly < spriteHeight; ly++) {
+                var line = spriteLines[ly];
+                var drawY = startY + ly;
+                if (drawY < visualHorizonY || drawY >= roadBottom)
+                    continue;
+                for (var lx = 0; lx < line.length; lx++) {
+                    var ch = line.charAt(lx);
+                    if (ch === ' ')
+                        continue;
+                    var drawX = startX + lx;
+                    if (drawX < 0 || drawX >= 80)
+                        continue;
+                    frame.setData(drawX, drawY, ch, attr);
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderItemBoxes = function (playerVehicle, items) {
+        var frame = this.frameManager.getRoadFrame();
+        if (!frame)
+            return;
+        var roadColor = this.activeTheme.colors.roadSurface;
+        var itemBoxFg = YELLOW;
+        var itemBoxBg = roadColor.bg;
+        var visualHorizonY = 5;
+        var roadBottom = this.height - 4;
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!item.isAvailable())
+                continue;
+            var relativeZ = item.z - playerVehicle.trackZ;
+            var relativeX = item.x - (playerVehicle.playerX * 20);
+            if (relativeZ < 5 || relativeZ > 300)
+                continue;
+            var maxViewDist = 300;
+            var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
+            var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+            var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
+            var curveOffset = 0;
+            if (this._currentRoad && relativeZ > 0) {
+                var itemWorldZ = this._currentTrackPosition + relativeZ;
+                var seg = this._currentRoad.getSegment(itemWorldZ);
+                if (seg) {
+                    curveOffset = seg.curve * t * 15;
+                }
+            }
+            var perspectiveScale = t * t;
+            var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 0.1 - this._currentCameraX * 0.5);
+            if (screenY < visualHorizonY || screenY >= this.height - 1)
+                continue;
+            if (screenX < 0 || screenX >= this.width)
+                continue;
+            var boxChar = '?';
+            var boxWidth = 1;
+            if (t > 0.4) {
+                boxWidth = 3;
+            }
+            else if (t > 0.2) {
+                boxWidth = 2;
+            }
+            var pulse = Math.floor(Date.now() / 200) % 2;
+            var attr = pulse === 0 ? makeAttr(itemBoxFg, itemBoxBg) : makeAttr(YELLOW, itemBoxBg);
+            var startX = screenX - Math.floor(boxWidth / 2);
+            for (var col = 0; col < boxWidth; col++) {
+                var drawX = startX + col;
+                if (drawX >= 0 && drawX < this.width) {
+                    frame.setData(drawX, screenY, boxChar, attr);
+                }
+            }
+        }
     };
     FrameRenderer.prototype.renderNPCVehicles = function (playerVehicle, vehicles) {
         var visibleNPCs = [];
+        var roadLength = this._currentRoad ? this._currentRoad.totalLength : 10000;
         for (var i = 0; i < vehicles.length; i++) {
             var v = vehicles[i];
             if (!v.isNPC)
                 continue;
-            var relativeZ = v.trackZ - playerVehicle.trackZ;
+            var rawDiff = v.trackZ - playerVehicle.trackZ;
+            var relativeZ = rawDiff;
+            if (rawDiff > roadLength / 2) {
+                relativeZ = rawDiff - roadLength;
+            }
+            else if (rawDiff < -roadLength / 2) {
+                relativeZ = rawDiff + roadLength;
+            }
             var relativeX = v.playerX - playerVehicle.playerX;
             if (relativeZ > -10 && relativeZ < 600) {
                 visibleNPCs.push({ vehicle: v, relativeZ: relativeZ, relativeX: relativeX });
@@ -273,8 +451,14 @@ var FrameRenderer = (function () {
     FrameRenderer.prototype.renderNPCVehicle = function (vehicle, relativeZ, relativeX) {
         var sprite = getNPCSprite(vehicle.npcType, vehicle.npcColorIndex);
         var maxViewDist = 500;
-        var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
-        var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+        var t;
+        if (relativeZ >= 0) {
+            var normalizedDist = Math.min(1, relativeZ / maxViewDist);
+            t = 1 - normalizedDist;
+        }
+        else {
+            t = 1 + Math.abs(relativeZ) / 50;
+        }
         var visualHorizonY = 5;
         var roadBottom = this.height - 4;
         var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
@@ -2149,13 +2333,53 @@ var FrameRenderer = (function () {
             return 3;
         return 4;
     };
-    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing) {
+    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing, isBoosting, hasStar, hasBullet, hasLightning) {
         var frame = this.frameManager.getVehicleFrame(0);
         if (!frame)
             return;
         renderSpriteToFrame(frame, this.playerCarSprite, 0);
-        if (isFlashing) {
-            var flashColor = (Math.floor(Date.now() / 100) % 2 === 0) ? WHITE : LIGHTRED;
+        var now = Date.now();
+        if (hasStar) {
+            var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+            var colorIndex = Math.floor(now / 60) % starColors.length;
+            var starColor = starColors[colorIndex];
+            var starAttr = makeAttr(starColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, starAttr);
+                    }
+                }
+            }
+        }
+        else if (hasBullet) {
+            var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : YELLOW;
+            var bulletAttr = makeAttr(bulletColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, bulletAttr);
+                    }
+                }
+            }
+        }
+        else if (hasLightning) {
+            var lightningColor = (Math.floor(now / 120) % 3 === 0) ? BLUE :
+                (Math.floor(now / 120) % 3 === 1) ? LIGHTCYAN : CYAN;
+            var lightningAttr = makeAttr(lightningColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, lightningAttr);
+                    }
+                }
+            }
+        }
+        else if (isFlashing) {
+            var flashColor = (Math.floor(now / 100) % 2 === 0) ? WHITE : LIGHTRED;
             var flashAttr = makeAttr(flashColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
@@ -2163,6 +2387,16 @@ var FrameRenderer = (function () {
                     if (cell) {
                         frame.setData(x, y, cell.char, flashAttr);
                     }
+                }
+            }
+        }
+        else if (isBoosting) {
+            var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : YELLOW;
+            var boostAttr = makeAttr(boostColor, BG_BLACK);
+            for (var bx = 0; bx < 5; bx++) {
+                var cell = this.playerCarSprite.variants[0][2] ? this.playerCarSprite.variants[0][2][bx] : null;
+                if (cell) {
+                    frame.setData(bx, 2, cell.char, boostAttr);
                 }
             }
         }
@@ -2177,18 +2411,89 @@ var FrameRenderer = (function () {
         frame.clear();
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
-        this.writeStringToFrame(frame, 2, 0, 'LAP', labelAttr);
-        this.writeStringToFrame(frame, 6, 0, hudData.lap + '/' + hudData.totalLaps, valueAttr);
-        this.writeStringToFrame(frame, 14, 0, 'POS', labelAttr);
-        this.writeStringToFrame(frame, 18, 0, hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position), valueAttr);
-        this.writeStringToFrame(frame, 26, 0, 'TIME', labelAttr);
-        this.writeStringToFrame(frame, 31, 0, LapTimer.format(hudData.lapTime), valueAttr);
-        this.writeStringToFrame(frame, 66, 0, 'SPD', labelAttr);
-        this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
-        this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
-        this.renderTrackProgress(frame, hudData.lapProgress);
+        this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
+        this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
+        var bottomY = this.height - 1;
+        this.writeStringToFrame(frame, 2, bottomY, hudData.lap + '/' + hudData.totalLaps, valueAttr);
+        this.renderTrackProgressCompact(frame, hudData.lapProgress, 7, bottomY, 12);
+        var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+        this.writeStringToFrame(frame, 21, bottomY, posStr, valueAttr);
+        var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
+        var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+        this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+        this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 10);
+        if (hudData.heldItem !== null) {
+            var itemData = hudData.heldItem;
+            var itemName = this.getItemDisplayName(itemData.type);
+            var itemAttr = this.getItemDisplayAttr(itemData.type);
+            if (itemData.uses > 1) {
+                itemName = itemName + "x" + itemData.uses;
+            }
+            this.writeStringToFrame(frame, 71 - itemName.length, bottomY - 1, itemName, itemAttr);
+        }
         if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
             this.renderStoplight(frame, hudData.countdown);
+        }
+    };
+    FrameRenderer.prototype.getItemDisplayName = function (itemType) {
+        switch (itemType) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+                return 'MUSHROOM';
+            case ItemType.MUSHROOM_GOLDEN:
+                return 'G.MUSHROOM';
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.BLUE_SHELL:
+                return 'SHELL';
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                return 'BANANA';
+            case ItemType.STAR:
+                return 'STAR';
+            case ItemType.LIGHTNING:
+                return 'LIGHTNING';
+            case ItemType.BULLET:
+                return 'BULLET';
+            default:
+                return '???';
+        }
+    };
+    FrameRenderer.prototype.getItemDisplayAttr = function (itemType) {
+        switch (itemType) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+            case ItemType.MUSHROOM_GOLDEN:
+                return makeAttr(LIGHTRED, BG_BLACK);
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return makeAttr(LIGHTGREEN, BG_BLACK);
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                return makeAttr(LIGHTGREEN, BG_BLACK);
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
+                return makeAttr(LIGHTRED, BG_BLACK);
+            case ItemType.BLUE_SHELL:
+                return makeAttr(LIGHTCYAN, BG_BLACK);
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                return makeAttr(YELLOW, BG_BLACK);
+            case ItemType.STAR:
+                return makeAttr(YELLOW, BG_BLACK);
+            case ItemType.LIGHTNING:
+                return makeAttr(LIGHTCYAN, BG_BLACK);
+            case ItemType.BULLET:
+                return makeAttr(WHITE, BG_BLACK);
+            default:
+                return makeAttr(WHITE, BG_BLACK);
         }
     };
     FrameRenderer.prototype.renderStoplight = function (frame, countdown) {
@@ -2229,41 +2534,49 @@ var FrameRenderer = (function () {
         }
         frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
-    FrameRenderer.prototype.renderTrackProgress = function (frame, progress) {
-        var y = this.height - 1;
-        var barX = 60;
-        var barWidth = 15;
+    FrameRenderer.prototype.renderTrackProgressCompact = function (frame, progress, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
         var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
-        var finishAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
-        this.writeStringToFrame(frame, barX - 5, y, 'TRK', labelAttr);
-        frame.setData(barX, y, '[', labelAttr);
-        var fillWidth = Math.round(progress * barWidth);
-        for (var i = 0; i < barWidth; i++) {
+        frame.setData(x, y, '[', labelAttr);
+        var fillWidth = Math.round(progress * width);
+        for (var i = 0; i < width; i++) {
             var attr = (i < fillWidth) ? filledAttr : emptyAttr;
             var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-            frame.setData(barX + 1 + i, y, char, attr);
+            frame.setData(x + 1 + i, y, char, attr);
         }
-        frame.setData(barX + barWidth + 1, y, ']', finishAttr);
+        frame.setData(x + width + 1, y, ']', labelAttr);
     };
-    FrameRenderer.prototype.renderSpeedometerBar = function (frame, speed, maxSpeed) {
-        var y = this.height - 1;
-        var barX = 2;
-        var barWidth = 20;
+    FrameRenderer.prototype.renderSpeedometerBarCompact = function (frame, speed, maxSpeed, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var filledAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
         var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
         var highAttr = colorToAttr({ fg: LIGHTRED, bg: BG_BLACK });
-        frame.setData(barX, y, '[', labelAttr);
-        var fillAmount = speed / maxSpeed;
-        var fillWidth = Math.round(fillAmount * barWidth);
-        for (var i = 0; i < barWidth; i++) {
-            var attr = (i < fillWidth) ? (fillAmount > 0.8 ? highAttr : filledAttr) : emptyAttr;
+        var boostAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+        frame.setData(x, y, '[', labelAttr);
+        var fillAmount = Math.min(1.0, speed / maxSpeed);
+        var isBoost = speed > maxSpeed;
+        var fillWidth = Math.round(fillAmount * width);
+        for (var i = 0; i < width; i++) {
+            var attr;
+            if (i < fillWidth) {
+                if (isBoost) {
+                    attr = boostAttr;
+                }
+                else if (fillAmount > 0.8) {
+                    attr = highAttr;
+                }
+                else {
+                    attr = filledAttr;
+                }
+            }
+            else {
+                attr = emptyAttr;
+            }
             var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-            frame.setData(barX + 1 + i, y, char, attr);
+            frame.setData(x + 1 + i, y, char, attr);
         }
-        frame.setData(barX + barWidth + 1, y, ']', labelAttr);
+        frame.setData(x + width + 1, y, ']', labelAttr);
     };
     FrameRenderer.prototype.writeStringToFrame = function (frame, x, y, str, attr) {
         for (var i = 0; i < str.length; i++) {

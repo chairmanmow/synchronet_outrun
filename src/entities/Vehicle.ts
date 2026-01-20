@@ -36,8 +36,11 @@ interface IVehicle extends IEntity {
   /** Race position (1 = first) */
   racePosition: number;
 
-  /** Held item type, or null */
-  heldItem: ItemType | null;
+  /** Held item data (type + uses remaining), or null */
+  heldItem: HeldItemData | null;
+  
+  /** Active effects on this vehicle (star, lightning, etc.) */
+  activeEffects: ActiveEffect[];
 
   /** Vehicle color for rendering */
   color: number;
@@ -53,6 +56,15 @@ interface IVehicle extends IEntity {
 
   /** Flash timer for collision/reset visual feedback */
   flashTimer: number;
+  
+  /** Boost timer (seconds remaining) */
+  boostTimer: number;
+  
+  /** Boost speed multiplier (1.0 = normal) */
+  boostMultiplier: number;
+  
+  /** Minimum speed during boost (prevents deceleration from key issues) */
+  boostMinSpeed: number;
   
   /** Is this an NPC (commuter/AI) vehicle? */
   isNPC: boolean;
@@ -108,12 +120,16 @@ class Vehicle extends Entity implements IVehicle {
   lap: number;
   checkpoint: number;
   racePosition: number;
-  heldItem: ItemType | null;
+  heldItem: HeldItemData | null;
+  activeEffects: ActiveEffect[];
   color: number;
   isOffRoad: boolean;
   isCrashed: boolean;
   crashTimer: number;
   flashTimer: number;
+  boostTimer: number;
+  boostMultiplier: number;
+  boostMinSpeed: number;
   isNPC: boolean;
   isRacer: boolean;
   npcType: string;
@@ -131,27 +147,131 @@ class Vehicle extends Entity implements IVehicle {
     this.checkpoint = 0;
     this.racePosition = 1;
     this.heldItem = null;
+    this.activeEffects = [];
     this.color = YELLOW;
     this.isOffRoad = false;
     this.isCrashed = false;
     this.crashTimer = 0;
     this.flashTimer = 0;
+    this.boostTimer = 0;
+    this.boostMultiplier = 1.0;
+    this.boostMinSpeed = 0;
     this.isNPC = false;
     this.isRacer = false;
     this.npcType = 'sedan';
     this.npcColorIndex = 0;
   }
-
+  
+  /**
+   * Check if vehicle has an active effect of given type.
+   */
+  hasEffect(type: ItemType): boolean {
+    for (var i = 0; i < this.activeEffects.length; i++) {
+      if (this.activeEffects[i].type === type) return true;
+    }
+    return false;
+  }
+  
+  /**
+   * Add an active effect to this vehicle.
+   */
+  addEffect(type: ItemType, duration: number, sourceId: number): void {
+    // Remove existing effect of same type first
+    this.removeEffect(type);
+    this.activeEffects.push({ type: type, duration: duration, sourceVehicleId: sourceId });
+  }
+  
+  /**
+   * Remove an active effect by type.
+   */
+  removeEffect(type: ItemType): void {
+    for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+      if (this.activeEffects[i].type === type) {
+        this.activeEffects.splice(i, 1);
+      }
+    }
+  }
+  
+  /**
+   * Update active effects (countdown timers).
+   */
+  updateEffects(dt: number): void {
+    for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+      this.activeEffects[i].duration -= dt;
+      if (this.activeEffects[i].duration <= 0) {
+        // Effect expired - handle cleanup
+        var expiredType = this.activeEffects[i].type;
+        this.activeEffects.splice(i, 1);
+        this.onEffectExpired(expiredType);
+      }
+    }
+  }
+  
+  /**
+   * Called when an effect expires.
+   */
+  private onEffectExpired(type: ItemType): void {
+    switch (type) {
+      case ItemType.STAR:
+        // Reset boost (Star clears slot immediately, so no held item to clear)
+        this.boostTimer = 0;
+        this.boostMultiplier = 1.0;
+        this.boostMinSpeed = 0;
+        logInfo("Star effect expired");
+        break;
+        
+      case ItemType.MUSHROOM_GOLDEN:
+      case ItemType.BULLET:
+        // These items stay in slot while active - clear them now
+        this.boostTimer = 0;
+        this.boostMultiplier = 1.0;
+        this.boostMinSpeed = 0;
+        // Clear the held item since the effect is over
+        if (this.heldItem !== null && this.heldItem.type === type) {
+          this.heldItem = null;
+          logInfo(ItemType[type] + " effect expired - item cleared from slot");
+        }
+        break;
+        
+      case ItemType.LIGHTNING:
+        // Speed returns to normal (handled by effect check)
+        logInfo("Lightning effect expired");
+        break;
+    }
+  }
   /**
    * Update vehicle physics for one frame.
    * This is the core pseudo-3D racer physics.
    */
   updatePhysics(road: Road, intent: DriverIntent, dt: number): void {
+    // --- ACTIVE EFFECTS ---
+    this.updateEffects(dt);
+    
     // --- FLASH TIMER (visual feedback) ---
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
       if (this.flashTimer < 0) this.flashTimer = 0;
     }
+    
+    // --- BOOST TIMER ---
+    // Only reset boost if no active duration effects (Star, Bullet, Golden Mushroom)
+    if (this.boostTimer > 0) {
+      this.boostTimer -= dt;
+      if (this.boostTimer <= 0) {
+        this.boostTimer = 0;
+        // Don't reset boost if we have an active duration effect providing it
+        if (!this.hasEffect(ItemType.STAR) && 
+            !this.hasEffect(ItemType.BULLET) && 
+            !this.hasEffect(ItemType.MUSHROOM_GOLDEN)) {
+          this.boostMultiplier = 1.0;
+          this.boostMinSpeed = 0;
+        }
+      }
+    }
+    
+    // --- LIGHTNING SLOWDOWN ---
+    // If hit by lightning, reduce max speed significantly
+    var lightningSlowdown = this.hasEffect(ItemType.LIGHTNING) ? 0.5 : 1.0;
     
     // --- CRASH RECOVERY ---
     if (this.isCrashed) {
@@ -195,32 +315,60 @@ class Vehicle extends Entity implements IVehicle {
     }
 
     // Clamp speed (can't go negative or over max)
-    this.speed = clamp(this.speed, 0, VEHICLE_PHYSICS.MAX_SPEED);
+    // Apply boost multiplier to max speed when boosting
+    // Apply lightning slowdown if affected
+    var effectiveMaxSpeed = VEHICLE_PHYSICS.MAX_SPEED * this.boostMultiplier * lightningSlowdown;
+    
+    // Enforce minimum speed during boost (prevents deceleration from key handling issues)
+    var minSpeed = this.boostMinSpeed > 0 ? this.boostMinSpeed : 0;
+    this.speed = clamp(this.speed, minSpeed, effectiveMaxSpeed);
 
     // Speed ratio is used for steering and centrifugal force
     var speedRatio = this.speed / VEHICLE_PHYSICS.MAX_SPEED;
 
-    // --- STEERING ---
-    // Can't steer effectively without forward motion
-    // At 0 speed, steering should do nothing
-    if (this.speed >= 5) {
-      // Steering effectiveness decreases at high speed
-      var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
-      var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
-      this.playerX += steerDelta;
+    // --- BULLET AUTOPILOT ---
+    // When Bullet is active, auto-steer toward center of road and ignore player input
+    var hasBullet = this.hasEffect(ItemType.BULLET);
+    if (hasBullet) {
+      // Auto-steer toward center (playerX = 0)
+      var autoPilotRate = 3.0;  // Faster than normal steering
+      if (this.playerX < -0.05) {
+        this.playerX += autoPilotRate * dt;
+        if (this.playerX > 0) this.playerX = 0;
+      } else if (this.playerX > 0.05) {
+        this.playerX -= autoPilotRate * dt;
+        if (this.playerX < 0) this.playerX = 0;
+      }
+      // Skip normal steering and centrifugal force
+    } else {
+      // --- STEERING ---
+      // Can't steer effectively without forward motion
+      // At 0 speed, steering should do nothing
+      if (this.speed >= 5) {
+        // Steering effectiveness decreases at high speed
+        var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
+        var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
+        this.playerX += steerDelta;
+      }
+
+      // --- CENTRIFUGAL FORCE ---
+      // Road curves push you toward the outside
+      // This is what makes steering necessary on curves!
+      var curve = road.getCurvature(this.trackZ);
+      var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
+      this.playerX += centrifugal;
     }
 
-    // --- CENTRIFUGAL FORCE ---
-    // Road curves push you toward the outside
-    // This is what makes steering necessary on curves!
-    var curve = road.getCurvature(this.trackZ);
-    var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
-    this.playerX += centrifugal;
-
     // --- CRASH CHECK ---
-    if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT) {
+    // Invincible vehicles (Star/Bullet) can't crash from going off road
+    var isInvincible = this.hasEffect(ItemType.STAR) || hasBullet;
+    if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT && !isInvincible) {
       this.triggerCrash();
       return;
+    }
+    // Clamp invincible vehicles to road limits instead of crashing
+    if (isInvincible && Math.abs(this.playerX) > VEHICLE_PHYSICS.ROAD_HALF_WIDTH) {
+      this.playerX = clamp(this.playerX, -VEHICLE_PHYSICS.ROAD_HALF_WIDTH, VEHICLE_PHYSICS.ROAD_HALF_WIDTH);
     }
 
     // --- ADVANCE ALONG TRACK ---

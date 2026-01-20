@@ -109,6 +109,12 @@ class InputMap {
     this.bind('2', GameAction.BRAKE);        // Brake straight
     this.bind('3', GameAction.BRAKE_RIGHT);  // Brake + right
 
+    // === ARROW KEYS ===
+    this.bind(KEY_UP, GameAction.ACCELERATE);    // Gas straight
+    this.bind(KEY_DOWN, GameAction.BRAKE);       // Brake
+    this.bind(KEY_LEFT, GameAction.STEER_LEFT);  // Turn left (cruise)
+    this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);// Turn right (cruise)
+
     // === OTHER CONTROLS ===
     this.bind(' ', GameAction.USE_ITEM);
     this.bind('\r', GameAction.USE_ITEM);

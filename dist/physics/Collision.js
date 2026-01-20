@@ -43,15 +43,38 @@ var Collision = (function () {
                     continue;
                 if (a.isNPC && b.isNPC)
                     continue;
+                var aInvincible = this.isInvincible(a);
+                var bInvincible = this.isInvincible(b);
                 var latDist = Math.abs(a.playerX - b.playerX);
                 var longDist = Math.abs(a.trackZ - b.trackZ);
                 var collisionLat = 0.4;
                 var collisionLong = 10;
                 if (latDist < collisionLat && longDist < collisionLong) {
-                    this.resolveVehicleCollision(a, b);
+                    if (aInvincible && !bInvincible) {
+                        this.applyCollisionDamage(b, a);
+                    }
+                    else if (bInvincible && !aInvincible) {
+                        this.applyCollisionDamage(a, b);
+                    }
+                    else if (!aInvincible && !bInvincible) {
+                        this.resolveVehicleCollision(a, b);
+                    }
                 }
             }
         }
+    };
+    Collision.isInvincible = function (vehicle) {
+        var v = vehicle;
+        if (!v.hasEffect)
+            return false;
+        return v.hasEffect(ItemType.STAR) || v.hasEffect(ItemType.BULLET);
+    };
+    Collision.applyCollisionDamage = function (victim, _hitter) {
+        victim.speed = 0;
+        var knockDirection = victim.playerX >= 0 ? 1 : -1;
+        victim.playerX = knockDirection * (0.7 + Math.random() * 0.2);
+        victim.flashTimer = 1.5;
+        logInfo("Invincible collision! Vehicle " + victim.id + " knocked to edge at playerX=" + victim.playerX.toFixed(2) + ", speed=0!");
     };
     Collision.resolveVehicleCollision = function (a, b) {
         var aAhead = a.trackZ > b.trackZ;

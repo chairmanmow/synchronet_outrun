@@ -1,37 +1,42 @@
 "use strict";
+var DEBUG_FORCE_ITEM = null;
 var ItemSystem = (function () {
     function ItemSystem() {
         this.items = [];
         this.projectiles = [];
     }
-    ItemSystem.prototype.initFromTrack = function (_track) {
-        var itemPositions = [
-            { x: 0, z: 150, respawnTime: 10 },
-            { x: 0, z: 450, respawnTime: 10 },
-            { x: -10, z: 750, respawnTime: 10 },
-            { x: 10, z: 750, respawnTime: 10 },
-            { x: 0, z: 1050, respawnTime: 10 }
-        ];
-        for (var i = 0; i < itemPositions.length; i++) {
-            var pos = itemPositions[i];
+    ItemSystem.prototype.initFromTrack = function (_track, road) {
+        this.items = [];
+        var trackLength = road.totalLength;
+        var numBoxes = Math.max(5, Math.floor(trackLength / 300));
+        var spacing = trackLength / (numBoxes + 1);
+        for (var i = 1; i <= numBoxes; i++) {
+            var z = spacing * i;
+            var side = i % 3;
+            var x = side === 0 ? 0 : (side === 1 ? -8 : 8);
             var item = new Item(ItemType.NONE);
-            item.x = pos.x;
-            item.z = pos.z;
-            item.respawnTime = pos.respawnTime;
+            item.x = x;
+            item.z = z;
+            item.respawnTime = 8;
             this.items.push(item);
         }
+        logInfo("ItemSystem: Placed " + numBoxes + " item boxes across track length " + trackLength);
     };
-    ItemSystem.prototype.update = function (dt) {
+    ItemSystem.prototype.update = function (dt, vehicles, roadLength) {
         for (var i = 0; i < this.items.length; i++) {
             this.items[i].updateRespawn(dt);
         }
-        for (var j = this.projectiles.length - 1; j >= 0; j--) {
-            var proj = this.projectiles[j];
-            proj.z += proj.speed * dt;
-            if (proj.z > 10000) {
-                this.projectiles.splice(j, 1);
+        if (vehicles && roadLength) {
+            for (var j = this.projectiles.length - 1; j >= 0; j--) {
+                var shell = this.projectiles[j];
+                if (shell.update(dt, vehicles, roadLength)) {
+                    this.projectiles.splice(j, 1);
+                }
             }
         }
+    };
+    ItemSystem.prototype.getProjectiles = function () {
+        return this.projectiles;
     };
     ItemSystem.prototype.checkPickups = function (vehicles) {
         for (var i = 0; i < vehicles.length; i++) {
@@ -43,42 +48,200 @@ var ItemSystem = (function () {
                 if (!item.isAvailable())
                     continue;
                 var dx = vehicle.x - item.x;
-                var dz = vehicle.z - item.z;
-                if (Math.abs(dx) < 10 && Math.abs(dz) < 10) {
+                var dz = vehicle.trackZ - item.z;
+                if (Math.abs(dx) < 15 && Math.abs(dz) < 20) {
                     item.pickup();
-                    vehicle.heldItem = this.randomItemType();
-                    logInfo("Vehicle " + vehicle.id + " picked up item: " + vehicle.heldItem);
+                    var itemType = this.randomItemType(vehicle.racePosition, vehicles.length);
+                    vehicle.heldItem = {
+                        type: itemType,
+                        uses: getItemUses(itemType),
+                        activated: false
+                    };
+                    logInfo("Vehicle picked up " + ItemType[itemType] + " (x" + vehicle.heldItem.uses + ")");
                 }
             }
         }
     };
-    ItemSystem.prototype.useItem = function (vehicle) {
+    ItemSystem.prototype.useItem = function (vehicle, allVehicles) {
         if (vehicle.heldItem === null)
             return;
-        switch (vehicle.heldItem) {
+        var itemType = vehicle.heldItem.type;
+        var consumed = false;
+        switch (itemType) {
             case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
                 Mushroom.applyEffect(vehicle);
+                consumed = true;
                 break;
+            case ItemType.MUSHROOM_GOLDEN:
+                if (!vehicle.heldItem.activated) {
+                    vehicle.heldItem.activated = true;
+                    this.applyDurationEffect(vehicle, itemType);
+                    logInfo("Golden Mushroom ACTIVATED - unlimited boosts for duration!");
+                }
+                Mushroom.applyEffect(vehicle);
+                return;
+            case ItemType.STAR:
+                this.applyDurationEffect(vehicle, itemType);
+                vehicle.heldItem = null;
+                return;
+            case ItemType.LIGHTNING:
+                if (allVehicles) {
+                    this.applyLightning(vehicle, allVehicles);
+                    vehicle.flashTimer = 0.3;
+                }
+                vehicle.heldItem = null;
+                return;
+            case ItemType.BULLET:
+                if (!vehicle.heldItem.activated) {
+                    vehicle.heldItem.activated = true;
+                    this.applyDurationEffect(vehicle, itemType);
+                    logInfo("Bullet Bill ACTIVATED - autopilot engaged!");
+                }
+                return;
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                {
+                    var greenShell = Shell.fireGreen(vehicle);
+                    this.projectiles.push(greenShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
             case ItemType.SHELL:
-                var shell = Shell.fire(vehicle);
-                this.projectiles.push(shell);
+            case ItemType.SHELL_TRIPLE:
+                if (allVehicles) {
+                    var redShell = Shell.fireRed(vehicle, allVehicles);
+                    this.projectiles.push(redShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.BLUE_SHELL:
+                if (allVehicles) {
+                    var blueShell = Shell.fireBlue(vehicle, allVehicles);
+                    this.projectiles.push(blueShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                {
+                    var banana = Banana.drop(vehicle);
+                    this.projectiles.push(banana);
+                }
+                consumed = true;
                 break;
         }
-        vehicle.heldItem = null;
+        if (consumed && vehicle.heldItem) {
+            vehicle.heldItem.uses--;
+            if (vehicle.heldItem.uses <= 0) {
+                vehicle.heldItem = null;
+            }
+        }
     };
-    ItemSystem.prototype.randomItemType = function () {
+    ItemSystem.prototype.applyDurationEffect = function (vehicle, type) {
+        var duration = getItemDuration(type);
+        vehicle.addEffect(type, duration, vehicle.id);
+        vehicle.boostMinSpeed = Math.max(vehicle.speed, VEHICLE_PHYSICS.MAX_SPEED * 0.5);
+        switch (type) {
+            case ItemType.MUSHROOM_GOLDEN:
+                vehicle.boostMultiplier = 1.4;
+                vehicle.speed = Math.min(vehicle.speed * 1.2, VEHICLE_PHYSICS.MAX_SPEED * 1.4);
+                break;
+            case ItemType.STAR:
+                vehicle.boostMultiplier = 1.35;
+                vehicle.speed = Math.min(vehicle.speed * 1.25, VEHICLE_PHYSICS.MAX_SPEED * 1.35);
+                break;
+            case ItemType.BULLET:
+                vehicle.boostMultiplier = 1.6;
+                vehicle.speed = VEHICLE_PHYSICS.MAX_SPEED * 1.6;
+                vehicle.boostMinSpeed = VEHICLE_PHYSICS.MAX_SPEED * 1.5;
+                break;
+        }
+        logInfo("Applied " + ItemType[type] + " effect for " + duration + "s, minSpeed: " + vehicle.boostMinSpeed);
+    };
+    ItemSystem.prototype.applyLightning = function (user, allVehicles) {
+        var duration = getItemDuration(ItemType.LIGHTNING);
+        var hitCount = 0;
+        for (var i = 0; i < allVehicles.length; i++) {
+            var v = allVehicles[i];
+            if (v.id === user.id)
+                continue;
+            if (v.trackZ <= user.trackZ)
+                continue;
+            if (v.hasEffect && (v.hasEffect(ItemType.STAR) ||
+                v.hasEffect(ItemType.BULLET))) {
+                continue;
+            }
+            v.addEffect(ItemType.LIGHTNING, duration, user.id);
+            hitCount++;
+        }
+        logInfo("Lightning struck " + hitCount + " opponents ahead!");
+    };
+    ItemSystem.prototype.randomItemType = function (position, totalRacers) {
+        if (DEBUG_FORCE_ITEM !== null) {
+            return DEBUG_FORCE_ITEM;
+        }
         var roll = globalRand.next();
-        if (roll < 0.5)
-            return ItemType.MUSHROOM;
-        if (roll < 0.8)
-            return ItemType.SHELL;
-        return ItemType.BANANA;
+        var positionFactor = totalRacers > 1 ? (position - 1) / (totalRacers - 1) : 0;
+        if (positionFactor < 0.25) {
+            if (roll < 0.40)
+                return ItemType.BANANA;
+            if (roll < 0.70)
+                return ItemType.GREEN_SHELL;
+            if (roll < 0.85)
+                return ItemType.MUSHROOM;
+            if (roll < 0.95)
+                return ItemType.RED_SHELL;
+            return ItemType.BANANA_TRIPLE;
+        }
+        else if (positionFactor < 0.50) {
+            if (roll < 0.25)
+                return ItemType.MUSHROOM;
+            if (roll < 0.45)
+                return ItemType.GREEN_SHELL;
+            if (roll < 0.65)
+                return ItemType.RED_SHELL;
+            if (roll < 0.80)
+                return ItemType.BANANA;
+            if (roll < 0.90)
+                return ItemType.MUSHROOM_TRIPLE;
+            return ItemType.GREEN_SHELL_TRIPLE;
+        }
+        else if (positionFactor < 0.75) {
+            if (roll < 0.20)
+                return ItemType.MUSHROOM_TRIPLE;
+            if (roll < 0.35)
+                return ItemType.RED_SHELL;
+            if (roll < 0.50)
+                return ItemType.RED_SHELL_TRIPLE;
+            if (roll < 0.65)
+                return ItemType.MUSHROOM_GOLDEN;
+            if (roll < 0.80)
+                return ItemType.STAR;
+            if (roll < 0.90)
+                return ItemType.LIGHTNING;
+            return ItemType.MUSHROOM_GOLDEN;
+        }
+        else {
+            if (roll < 0.20)
+                return ItemType.MUSHROOM_GOLDEN;
+            if (roll < 0.40)
+                return ItemType.STAR;
+            if (roll < 0.55)
+                return ItemType.BULLET;
+            if (roll < 0.70)
+                return ItemType.LIGHTNING;
+            if (roll < 0.80)
+                return ItemType.BLUE_SHELL;
+            if (roll < 0.90)
+                return ItemType.RED_SHELL_TRIPLE;
+            return ItemType.MUSHROOM_GOLDEN;
+        }
     };
     ItemSystem.prototype.getItemBoxes = function () {
         return this.items;
-    };
-    ItemSystem.prototype.getProjectiles = function () {
-        return this.projectiles;
     };
     return ItemSystem;
 }());

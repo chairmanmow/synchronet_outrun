@@ -76,6 +76,22 @@ class RaceSystem implements ISystem {
         debugLog.info("LAP COMPLETE! Vehicle " + vehicle.id + " now on lap " + vehicle.lap + "/" + state.track.laps);
         debugLog.info("  lastZ=" + lastZ.toFixed(1) + " currentZ=" + currentZ.toFixed(1) + " roadLength=" + roadLength);
 
+        // Track lap time for player
+        if (!vehicle.isNPC) {
+          var lapTime = state.time - state.lapStartTime;
+          state.lapTimes.push(lapTime);
+          
+          // Update best lap time
+          if (state.bestLapTime < 0 || lapTime < state.bestLapTime) {
+            state.bestLapTime = lapTime;
+          }
+          
+          // Reset lap start time for next lap
+          state.lapStartTime = state.time;
+          
+          debugLog.info("  Lap time: " + lapTime.toFixed(2) + " (best: " + state.bestLapTime.toFixed(2) + ")");
+        }
+
         // Check if race is complete (only for player, not NPCs)
         if (!vehicle.isNPC && vehicle.lap > state.track.laps) {
           state.finished = true;
@@ -88,7 +104,7 @@ class RaceSystem implements ISystem {
       this.lastTrackZ[vehicle.id] = currentZ;
     }
 
-    // Update race positions (pass roadLength for wrap-around handling)
-    PositionIndicator.calculatePositions(state.vehicles, roadLength);
+    // Update race positions
+    PositionIndicator.calculatePositions(state.vehicles);
   }
 }

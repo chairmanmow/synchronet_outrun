@@ -35,6 +35,9 @@ interface CupResult {
 interface GameState {
   /** Current track (legacy, for checkpoint system) */
   track: ITrack;
+  
+  /** Track definition (for ID and metadata) */
+  trackDefinition: TrackDefinition;
 
   /** Road segments for pseudo-3D rendering and physics */
   road: Road;
@@ -85,9 +88,10 @@ interface GameState {
 /**
  * Create initial game state.
  */
-function createInitialState(track: ITrack, road: Road, playerVehicle: IVehicle, raceMode?: RaceMode): GameState {
+function createInitialState(track: ITrack, trackDef: TrackDefinition, road: Road, playerVehicle: IVehicle, raceMode?: RaceMode): GameState {
   return {
     track: track,
+    trackDefinition: trackDef,
     road: road,
     vehicles: [playerVehicle],
     playerVehicle: playerVehicle,

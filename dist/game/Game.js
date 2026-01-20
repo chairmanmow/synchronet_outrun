@@ -6,7 +6,7 @@ var DEFAULT_CONFIG = {
     maxTicksPerFrame: 5
 };
 var Game = (function () {
-    function Game(config) {
+    function Game(config, highScoreManager) {
         this.config = config || DEFAULT_CONFIG;
         this.running = false;
         this.paused = false;
@@ -23,6 +23,7 @@ var Game = (function () {
         this.physicsSystem = new PhysicsSystem();
         this.raceSystem = new RaceSystem();
         this.itemSystem = new ItemSystem();
+        this.highScoreManager = highScoreManager || null;
         this.state = null;
     }
     Game.prototype.initWithTrack = function (trackDef, raceMode) {
@@ -59,7 +60,7 @@ var Game = (function () {
         playerVehicle.driver = new HumanDriver(this.controls);
         playerVehicle.color = YELLOW;
         playerVehicle.isNPC = false;
-        this.state = createInitialState(track, road, playerVehicle, mode);
+        this.state = createInitialState(track, trackDef, road, playerVehicle, mode);
         if (mode === RaceMode.GRAND_PRIX) {
             this.spawnRacers(7, road);
             this.positionOnStartingGrid(road);
@@ -79,11 +80,10 @@ var Game = (function () {
         }
         this.physicsSystem.init(this.state);
         this.raceSystem.init(this.state);
-        this.itemSystem.initFromTrack(track);
-        var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
-        this.hud.init(totalRacers);
+        this.itemSystem.initFromTrack(track, road);
+        this.hud.init(this.state.time);
         this.running = true;
-        this.state.racing = true;
+        this.state.racing = false;
         debugLog.info("Game initialized with track: " + trackDef.name);
         debugLog.info("  Race mode: " + mode);
         debugLog.info("  Road segments: " + road.segments.length);
@@ -129,6 +129,7 @@ var Game = (function () {
                 for (var i = 0; i < ticks; i++) {
                     this.tick(this.timestep.getDt());
                 }
+                this.controls.endFrame();
                 if (this.state.time - lastLogTime >= 1.0) {
                     debugLog.logVehicle(this.state.playerVehicle);
                     lastLogTime = this.state.time;
@@ -161,7 +162,6 @@ var Game = (function () {
             this.controls.endFrame();
             return;
         }
-        this.controls.endFrame();
     };
     Game.prototype.tick = function (dt) {
         if (!this.state)
@@ -170,9 +170,11 @@ var Game = (function () {
             this.state.countdown -= dt;
             if (this.state.countdown <= 0) {
                 this.state.raceStarted = true;
+                this.state.racing = true;
                 this.state.countdown = 0;
                 this.state.time = 0;
                 this.state.lapStartTime = 0;
+                this.hud.init(0);
                 for (var i = 0; i < this.state.vehicles.length; i++) {
                     var vehicle = this.state.vehicles[i];
                     var driver = vehicle.driver;
@@ -191,10 +193,23 @@ var Game = (function () {
             this.activateDormantNPCs();
             this.applyNPCPacing();
         }
-        this.itemSystem.update(dt);
+        this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
         this.itemSystem.checkPickups(this.state.vehicles);
-        if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
-            this.itemSystem.useItem(this.state.playerVehicle);
+        if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
+            this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles);
+        }
+        for (var i = 0; i < this.state.vehicles.length; i++) {
+            var vehicle = this.state.vehicles[i];
+            if (vehicle === this.state.playerVehicle)
+                continue;
+            if (!vehicle.isRacer)
+                continue;
+            if (!vehicle.driver)
+                continue;
+            var intent = vehicle.driver.update(vehicle, this.state.track, dt);
+            if (intent.useItem && vehicle.heldItem !== null) {
+                this.itemSystem.useItem(vehicle, this.state.vehicles);
+            }
         }
         Collision.processVehicleCollisions(this.state.vehicles);
         if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
@@ -210,21 +225,56 @@ var Game = (function () {
         var finalPosition = player.racePosition;
         var finalTime = this.state.time;
         var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
+        var trackTimePosition = 0;
+        var lapTimePosition = 0;
+        if (this.highScoreManager && this.state.trackDefinition) {
+            var trackId = this.state.trackDefinition.id;
+            trackTimePosition = this.highScoreManager.checkQualification(HighScoreType.TRACK_TIME, trackId, finalTime);
+            if (bestLap > 0) {
+                lapTimePosition = this.highScoreManager.checkQualification(HighScoreType.LAP_TIME, trackId, bestLap);
+            }
+            var playerName = "Player";
+            try {
+                if (typeof user !== 'undefined' && user && user.alias) {
+                    playerName = user.alias;
+                }
+            }
+            catch (e) {
+            }
+            if (trackTimePosition > 0) {
+                this.highScoreManager.submitScore(HighScoreType.TRACK_TIME, trackId, playerName, finalTime, this.state.track.name);
+                logInfo("NEW HIGH SCORE! Track time #" + trackTimePosition + ": " + finalTime.toFixed(2));
+            }
+            if (lapTimePosition > 0) {
+                this.highScoreManager.submitScore(HighScoreType.LAP_TIME, trackId, playerName, bestLap, this.state.track.name);
+                logInfo("NEW HIGH SCORE! Lap time #" + lapTimePosition + ": " + bestLap.toFixed(2));
+            }
+        }
+        this.renderResultsScreen(finalPosition, finalTime, bestLap, trackTimePosition, lapTimePosition);
         while (true) {
-            this.renderResultsScreen(finalPosition, finalTime, bestLap);
-            var key = console.inkey(K_NONE, 0);
+            var key = console.inkey(K_NONE, 100);
             if (key === '\r' || key === '\n') {
                 debugLog.info("ENTER pressed, exiting game over screen");
                 break;
             }
-            mswait(16);
+        }
+        if (this.highScoreManager && this.state.trackDefinition && (trackTimePosition > 0 || lapTimePosition > 0)) {
+            var trackId = this.state.trackDefinition.id;
+            if (trackTimePosition > 0) {
+                showHighScoreList(HighScoreType.TRACK_TIME, trackId, "=== TRACK TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
+            }
+            if (lapTimePosition > 0) {
+                showHighScoreList(HighScoreType.LAP_TIME, trackId, "=== LAP TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
+            }
         }
     };
-    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap) {
+    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap, trackTimePosition, lapTimePosition) {
         this.renderer.beginFrame();
-        var composer = this.renderer.getComposer();
-        for (var y = 0; y < 25; y++) {
-            for (var x = 0; x < 80; x++) {
+        var screenWidth = console.screen_columns;
+        var screenHeight = console.screen_rows;
+        var composer = new SceneComposer(screenWidth, screenHeight);
+        for (var y = 0; y < screenHeight; y++) {
+            for (var x = 0; x < screenWidth; x++) {
                 composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
             }
         }
@@ -235,8 +285,8 @@ var Game = (function () {
         var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
         var boxWidth = 40;
         var boxHeight = 12;
-        var boxX = 20;
-        var topY = 6;
+        var boxX = Math.floor((screenWidth - boxWidth) / 2);
+        var topY = Math.floor((screenHeight - boxHeight) / 2);
         composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
         composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
         composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
@@ -260,6 +310,15 @@ var Game = (function () {
         composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
         composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
         composer.writeString(boxX + 22, topY + 8, this.state.track.name, valueAttr);
+        var highScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+        if (trackTimePosition && trackTimePosition > 0) {
+            var msg = "NEW HIGH SCORE! #" + trackTimePosition + " Track Time";
+            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 4, msg, highScoreAttr);
+        }
+        if (lapTimePosition && lapTimePosition > 0) {
+            var msg = "NEW HIGH SCORE! #" + lapTimePosition + " Lap Time";
+            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 3, msg, highScoreAttr);
+        }
         var prompt = "Press ENTER to continue";
         composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
         this.flushComposerToConsole(composer);
@@ -391,7 +450,7 @@ var Game = (function () {
         this.renderer.beginFrame();
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
         this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);
-        this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes());
+        this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes(), this.itemSystem.getProjectiles());
         var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time, this.state.countdown, this.state.raceMode);
         this.renderer.renderHud(hudData);
         this.renderer.endFrame();
@@ -439,8 +498,8 @@ var Game = (function () {
         if (!this.state)
             return;
         var vehicles = this.state.vehicles;
-        var gridColSpacing = 0.4;
-        var startZ = 0;
+        var gridRowSpacing = 20;
+        var gridColSpacing = 0.5;
         var playerIdx = -1;
         for (var p = 0; p < vehicles.length; p++) {
             if (!vehicles[p].isNPC) {
@@ -448,27 +507,31 @@ var Game = (function () {
                 break;
             }
         }
-        var gridSlot = 0;
+        var numAICars = vehicles.length - 1;
+        var totalGridLength = Math.ceil(numAICars / 2) * gridRowSpacing;
+        var aiSlot = 0;
         for (var v = 0; v < vehicles.length; v++) {
             var vehicle = vehicles[v];
-            vehicle.trackZ = startZ;
-            vehicle.z = startZ;
             if (v === playerIdx) {
+                vehicle.trackZ = totalGridLength + gridRowSpacing;
+                vehicle.z = vehicle.trackZ;
                 vehicle.playerX = 0;
             }
             else {
-                var side = (gridSlot % 2 === 0) ? -1 : 1;
-                var offset = Math.floor(gridSlot / 2) * 0.15;
-                vehicle.playerX = side * (gridColSpacing + offset);
-                gridSlot++;
+                var row = Math.floor(aiSlot / 2);
+                var col = aiSlot % 2;
+                vehicle.trackZ = totalGridLength - (row * gridRowSpacing);
+                vehicle.z = vehicle.trackZ;
+                vehicle.playerX = (col === 0) ? -gridColSpacing : gridColSpacing;
+                aiSlot++;
             }
             vehicle.speed = 0;
             vehicle.lap = 1;
             vehicle.checkpoint = 0;
-            vehicle.racePosition = v + 1;
-            debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+            vehicle.racePosition = 1;
+            debugLog.info("Grid slot " + v + " (NPC=" + vehicle.isNPC + "): trackZ=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
         }
-        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
+        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid (player at front)");
     };
     Game.prototype.spawnNPCs = function (count, road) {
         if (!this.state)

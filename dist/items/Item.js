@@ -18,10 +18,81 @@ var ItemType;
 (function (ItemType) {
     ItemType[ItemType["NONE"] = 0] = "NONE";
     ItemType[ItemType["MUSHROOM"] = 1] = "MUSHROOM";
-    ItemType[ItemType["SHELL"] = 2] = "SHELL";
-    ItemType[ItemType["BANANA"] = 3] = "BANANA";
-    ItemType[ItemType["STAR"] = 4] = "STAR";
+    ItemType[ItemType["GREEN_SHELL"] = 2] = "GREEN_SHELL";
+    ItemType[ItemType["RED_SHELL"] = 3] = "RED_SHELL";
+    ItemType[ItemType["BLUE_SHELL"] = 4] = "BLUE_SHELL";
+    ItemType[ItemType["SHELL"] = 5] = "SHELL";
+    ItemType[ItemType["BANANA"] = 6] = "BANANA";
+    ItemType[ItemType["MUSHROOM_TRIPLE"] = 7] = "MUSHROOM_TRIPLE";
+    ItemType[ItemType["GREEN_SHELL_TRIPLE"] = 8] = "GREEN_SHELL_TRIPLE";
+    ItemType[ItemType["RED_SHELL_TRIPLE"] = 9] = "RED_SHELL_TRIPLE";
+    ItemType[ItemType["SHELL_TRIPLE"] = 10] = "SHELL_TRIPLE";
+    ItemType[ItemType["BANANA_TRIPLE"] = 11] = "BANANA_TRIPLE";
+    ItemType[ItemType["MUSHROOM_GOLDEN"] = 12] = "MUSHROOM_GOLDEN";
+    ItemType[ItemType["STAR"] = 13] = "STAR";
+    ItemType[ItemType["LIGHTNING"] = 14] = "LIGHTNING";
+    ItemType[ItemType["BULLET"] = 15] = "BULLET";
 })(ItemType || (ItemType = {}));
+function getBaseItemType(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_TRIPLE:
+        case ItemType.MUSHROOM_GOLDEN:
+            return ItemType.MUSHROOM;
+        case ItemType.GREEN_SHELL_TRIPLE:
+            return ItemType.GREEN_SHELL;
+        case ItemType.RED_SHELL_TRIPLE:
+        case ItemType.SHELL_TRIPLE:
+        case ItemType.SHELL:
+            return ItemType.RED_SHELL;
+        case ItemType.BANANA_TRIPLE:
+            return ItemType.BANANA;
+        case ItemType.BLUE_SHELL:
+            return ItemType.BLUE_SHELL;
+        default:
+            return type;
+    }
+}
+function getItemUses(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_TRIPLE:
+        case ItemType.GREEN_SHELL_TRIPLE:
+        case ItemType.RED_SHELL_TRIPLE:
+        case ItemType.SHELL_TRIPLE:
+        case ItemType.BANANA_TRIPLE:
+            return 3;
+        default:
+            return 1;
+    }
+}
+function isDurationItem(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN:
+        case ItemType.STAR:
+        case ItemType.LIGHTNING:
+        case ItemType.BULLET:
+            return true;
+        default:
+            return false;
+    }
+}
+function getItemDuration(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN: return 8.0;
+        case ItemType.STAR: return 8.0;
+        case ItemType.LIGHTNING: return 5.0;
+        case ItemType.BULLET: return 8.0;
+        default: return 0;
+    }
+}
+function itemStaysInSlotWhileActive(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN:
+        case ItemType.BULLET:
+            return true;
+        default:
+            return false;
+    }
+}
 var Item = (function (_super) {
     __extends(Item, _super);
     function Item(type) {

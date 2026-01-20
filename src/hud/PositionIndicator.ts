@@ -38,30 +38,28 @@ class PositionIndicator {
 
   /**
    * Calculate race positions for all vehicles.
-   * Sorts by lap > checkpoint > track position.
+   * Sorts by lap > track position.
    * Position 1 = first place (furthest along).
    */
-  static calculatePositions(vehicles: IVehicle[], roadLength?: number): void {
+  static calculatePositions(vehicles: IVehicle[]): void {
     // Only calculate positions for actual racers (player + AI racers), not commuter NPCs
     var racers = vehicles.filter(function(v) { return !v.isNPC || v.isRacer; });
     
-    // Sort vehicles by race progress (best = highest lap, checkpoint, trackZ)
+    // Visual offset compensation: the player's visual position appears ahead of their trackZ
+    // This offset corrects for the difference between where the player sees themselves
+    // and where trackZ says they are. Without this, player shows as behind cars they've passed.
+    var VISUAL_OFFSET = 200;  // World units - tune this value
+    
+    // Sort vehicles by race progress (best = highest lap, then highest trackZ)
     var sorted = racers.slice().sort(function(a, b) {
-      // First by lap (higher = better = should be first in array)
+      // First by lap (higher = better)
       if (a.lap !== b.lap) return b.lap - a.lap;
 
-      // Then by checkpoint (higher = better)
-      if (a.checkpoint !== b.checkpoint) return b.checkpoint - a.checkpoint;
-
-      // Then by track Z position (higher = further along = better)
-      // Normalize to road length if provided
-      var aZ = a.trackZ;
-      var bZ = b.trackZ;
-      if (roadLength && roadLength > 0) {
-        aZ = aZ % roadLength;
-        bZ = bZ % roadLength;
-      }
-      return bZ - aZ;  // Higher Z = earlier in array = position 1
+      // Same lap: higher trackZ = further ahead = better position
+      // Apply visual offset for non-NPC (player) vehicles
+      var aZ = a.trackZ + (a.isNPC ? 0 : VISUAL_OFFSET);
+      var bZ = b.trackZ + (b.isNPC ? 0 : VISUAL_OFFSET);
+      return bZ - aZ;
     });
 
     // Assign positions (index 0 = position 1 = first place)

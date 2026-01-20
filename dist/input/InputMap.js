@@ -51,6 +51,10 @@ var InputMap = (function () {
         this.bind('1', GameAction.BRAKE_LEFT);
         this.bind('2', GameAction.BRAKE);
         this.bind('3', GameAction.BRAKE_RIGHT);
+        this.bind(KEY_UP, GameAction.ACCELERATE);
+        this.bind(KEY_DOWN, GameAction.BRAKE);
+        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
+        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind(' ', GameAction.USE_ITEM);
         this.bind('\r', GameAction.USE_ITEM);
         this.bind('x', GameAction.PAUSE);

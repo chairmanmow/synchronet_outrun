@@ -36,15 +36,8 @@ class DebugLogger {
    */
   init(): boolean {
     try {
-      // Get the script directory for log file location
-      var scriptDir = "";
-      if (typeof js !== 'undefined' && js.exec_dir) {
-        scriptDir = js.exec_dir;
-      } else {
-        scriptDir = "./";
-      }
-      
-      this.logPath = scriptDir + DEBUG_LOG_FILE;
+      // Log file goes in script directory (using relative path)
+      this.logPath = DEBUG_LOG_FILE;
       this.startTime = Date.now();
 
       // Debug: Print where we're trying to write

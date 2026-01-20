@@ -121,14 +121,7 @@ var DebugLogger = (function () {
     }
     DebugLogger.prototype.init = function () {
         try {
-            var scriptDir = "";
-            if (typeof js !== 'undefined' && js.exec_dir) {
-                scriptDir = js.exec_dir;
-            }
-            else {
-                scriptDir = "./";
-            }
-            this.logPath = scriptDir + DEBUG_LOG_FILE;
+            this.logPath = DEBUG_LOG_FILE;
             this.startTime = Date.now();
             if (typeof console !== 'undefined' && console.print) {
                 console.print("DEBUG: Log path = " + this.logPath + "\r\n");
@@ -405,6 +398,10 @@ var InputMap = (function () {
         this.bind('1', GameAction.BRAKE_LEFT);
         this.bind('2', GameAction.BRAKE);
         this.bind('3', GameAction.BRAKE_RIGHT);
+        this.bind(KEY_UP, GameAction.ACCELERATE);
+        this.bind(KEY_DOWN, GameAction.BRAKE);
+        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
+        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind(' ', GameAction.USE_ITEM);
         this.bind('\r', GameAction.USE_ITEM);
         this.bind('x', GameAction.PAUSE);
@@ -503,6 +500,13 @@ var Controls = (function () {
     };
     Controls.prototype.wasJustPressed = function (action) {
         return this.justPressedActions[action] === true;
+    };
+    Controls.prototype.consumeJustPressed = function (action) {
+        if (this.justPressedActions[action] === true) {
+            this.justPressedActions[action] = false;
+            return true;
+        }
+        return false;
     };
     Controls.prototype.endFrame = function () {
         this.justPressedActions = {};
@@ -645,7 +649,7 @@ var RacerDriver = (function () {
     function RacerDriver(skill, name) {
         this.skill = clamp(skill, 0.3, 1.0);
         this.name = name || this.generateName();
-        this.targetSpeed = 0.35 + (this.skill * 0.30);
+        this.targetSpeed = 0.90 + (this.skill * 0.10);
         this._aggression = 0.3 + (this.skill * 0.5);
         this._reactionDelay = 0.3 - (this.skill * 0.25);
         this.preferredLine = (Math.random() - 0.5) * 0.6;
@@ -653,6 +657,7 @@ var RacerDriver = (function () {
         this.variationTimer = 0;
         this.speedVariation = 0;
         this.canMove = false;
+        this.itemUseCooldown = 0;
     }
     RacerDriver.prototype.setCanMove = function (canMove) {
         this.canMove = canMove;
@@ -677,6 +682,9 @@ var RacerDriver = (function () {
                 steer: 0,
                 useItem: false
             };
+        }
+        if (this.itemUseCooldown > 0) {
+            this.itemUseCooldown -= dt;
         }
         this.variationTimer += dt;
         if (this.variationTimer > 2 + Math.random() * 2) {
@@ -710,10 +718,21 @@ var RacerDriver = (function () {
         else if (currentX > 0.8) {
             this.steerAmount = -0.5;
         }
+        var shouldUseItem = false;
+        if (vehicle.heldItem !== null && this.itemUseCooldown <= 0) {
+            var useChance = 0.05 * dt;
+            if (vehicle.racePosition > 2) {
+                useChance *= 1.5;
+            }
+            if (Math.random() < useChance) {
+                shouldUseItem = true;
+                this.itemUseCooldown = 2 + Math.random() * 3;
+            }
+        }
         return {
             accelerate: clamp(accelerate, 0, 1),
             steer: this.steerAmount,
-            useItem: false
+            useItem: shouldUseItem
         };
     };
     RacerDriver.prototype.getSkill = function () {
@@ -770,23 +789,92 @@ var Vehicle = (function (_super) {
         _this.checkpoint = 0;
         _this.racePosition = 1;
         _this.heldItem = null;
+        _this.activeEffects = [];
         _this.color = YELLOW;
         _this.isOffRoad = false;
         _this.isCrashed = false;
         _this.crashTimer = 0;
         _this.flashTimer = 0;
+        _this.boostTimer = 0;
+        _this.boostMultiplier = 1.0;
+        _this.boostMinSpeed = 0;
         _this.isNPC = false;
         _this.isRacer = false;
         _this.npcType = 'sedan';
         _this.npcColorIndex = 0;
         return _this;
     }
+    Vehicle.prototype.hasEffect = function (type) {
+        for (var i = 0; i < this.activeEffects.length; i++) {
+            if (this.activeEffects[i].type === type)
+                return true;
+        }
+        return false;
+    };
+    Vehicle.prototype.addEffect = function (type, duration, sourceId) {
+        this.removeEffect(type);
+        this.activeEffects.push({ type: type, duration: duration, sourceVehicleId: sourceId });
+    };
+    Vehicle.prototype.removeEffect = function (type) {
+        for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+            if (this.activeEffects[i].type === type) {
+                this.activeEffects.splice(i, 1);
+            }
+        }
+    };
+    Vehicle.prototype.updateEffects = function (dt) {
+        for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+            this.activeEffects[i].duration -= dt;
+            if (this.activeEffects[i].duration <= 0) {
+                var expiredType = this.activeEffects[i].type;
+                this.activeEffects.splice(i, 1);
+                this.onEffectExpired(expiredType);
+            }
+        }
+    };
+    Vehicle.prototype.onEffectExpired = function (type) {
+        switch (type) {
+            case ItemType.STAR:
+                this.boostTimer = 0;
+                this.boostMultiplier = 1.0;
+                this.boostMinSpeed = 0;
+                logInfo("Star effect expired");
+                break;
+            case ItemType.MUSHROOM_GOLDEN:
+            case ItemType.BULLET:
+                this.boostTimer = 0;
+                this.boostMultiplier = 1.0;
+                this.boostMinSpeed = 0;
+                if (this.heldItem !== null && this.heldItem.type === type) {
+                    this.heldItem = null;
+                    logInfo(ItemType[type] + " effect expired - item cleared from slot");
+                }
+                break;
+            case ItemType.LIGHTNING:
+                logInfo("Lightning effect expired");
+                break;
+        }
+    };
     Vehicle.prototype.updatePhysics = function (road, intent, dt) {
+        this.updateEffects(dt);
         if (this.flashTimer > 0) {
             this.flashTimer -= dt;
             if (this.flashTimer < 0)
                 this.flashTimer = 0;
         }
+        if (this.boostTimer > 0) {
+            this.boostTimer -= dt;
+            if (this.boostTimer <= 0) {
+                this.boostTimer = 0;
+                if (!this.hasEffect(ItemType.STAR) &&
+                    !this.hasEffect(ItemType.BULLET) &&
+                    !this.hasEffect(ItemType.MUSHROOM_GOLDEN)) {
+                    this.boostMultiplier = 1.0;
+                    this.boostMinSpeed = 0;
+                }
+            }
+        }
+        var lightningSlowdown = this.hasEffect(ItemType.LIGHTNING) ? 0.5 : 1.0;
         if (this.isCrashed) {
             this.crashTimer -= dt;
             if (this.crashTimer <= 0) {
@@ -819,19 +907,41 @@ var Vehicle = (function (_super) {
                 this.flashTimer = 0.5;
             }
         }
-        this.speed = clamp(this.speed, 0, VEHICLE_PHYSICS.MAX_SPEED);
+        var effectiveMaxSpeed = VEHICLE_PHYSICS.MAX_SPEED * this.boostMultiplier * lightningSlowdown;
+        var minSpeed = this.boostMinSpeed > 0 ? this.boostMinSpeed : 0;
+        this.speed = clamp(this.speed, minSpeed, effectiveMaxSpeed);
         var speedRatio = this.speed / VEHICLE_PHYSICS.MAX_SPEED;
-        if (this.speed >= 5) {
-            var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
-            var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
-            this.playerX += steerDelta;
+        var hasBullet = this.hasEffect(ItemType.BULLET);
+        if (hasBullet) {
+            var autoPilotRate = 3.0;
+            if (this.playerX < -0.05) {
+                this.playerX += autoPilotRate * dt;
+                if (this.playerX > 0)
+                    this.playerX = 0;
+            }
+            else if (this.playerX > 0.05) {
+                this.playerX -= autoPilotRate * dt;
+                if (this.playerX < 0)
+                    this.playerX = 0;
+            }
         }
-        var curve = road.getCurvature(this.trackZ);
-        var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
-        this.playerX += centrifugal;
-        if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT) {
+        else {
+            if (this.speed >= 5) {
+                var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
+                var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
+                this.playerX += steerDelta;
+            }
+            var curve = road.getCurvature(this.trackZ);
+            var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
+            this.playerX += centrifugal;
+        }
+        var isInvincible = this.hasEffect(ItemType.STAR) || hasBullet;
+        if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT && !isInvincible) {
             this.triggerCrash();
             return;
+        }
+        if (isInvincible && Math.abs(this.playerX) > VEHICLE_PHYSICS.ROAD_HALF_WIDTH) {
+            this.playerX = clamp(this.playerX, -VEHICLE_PHYSICS.ROAD_HALF_WIDTH, VEHICLE_PHYSICS.ROAD_HALF_WIDTH);
         }
         this.trackZ += this.speed * dt;
         if (this.trackZ >= road.totalLength) {
@@ -2224,15 +2334,38 @@ var Collision = (function () {
                     continue;
                 if (a.isNPC && b.isNPC)
                     continue;
+                var aInvincible = this.isInvincible(a);
+                var bInvincible = this.isInvincible(b);
                 var latDist = Math.abs(a.playerX - b.playerX);
                 var longDist = Math.abs(a.trackZ - b.trackZ);
                 var collisionLat = 0.4;
                 var collisionLong = 10;
                 if (latDist < collisionLat && longDist < collisionLong) {
-                    this.resolveVehicleCollision(a, b);
+                    if (aInvincible && !bInvincible) {
+                        this.applyCollisionDamage(b, a);
+                    }
+                    else if (bInvincible && !aInvincible) {
+                        this.applyCollisionDamage(a, b);
+                    }
+                    else if (!aInvincible && !bInvincible) {
+                        this.resolveVehicleCollision(a, b);
+                    }
                 }
             }
         }
+    };
+    Collision.isInvincible = function (vehicle) {
+        var v = vehicle;
+        if (!v.hasEffect)
+            return false;
+        return v.hasEffect(ItemType.STAR) || v.hasEffect(ItemType.BULLET);
+    };
+    Collision.applyCollisionDamage = function (victim, _hitter) {
+        victim.speed = 0;
+        var knockDirection = victim.playerX >= 0 ? 1 : -1;
+        victim.playerX = knockDirection * (0.7 + Math.random() * 0.2);
+        victim.flashTimer = 1.5;
+        logInfo("Invincible collision! Vehicle " + victim.id + " knocked to edge at playerX=" + victim.playerX.toFixed(2) + ", speed=0!");
     };
     Collision.resolveVehicleCollision = function (a, b) {
         var aAhead = a.trackZ > b.trackZ;
@@ -2289,10 +2422,81 @@ var ItemType;
 (function (ItemType) {
     ItemType[ItemType["NONE"] = 0] = "NONE";
     ItemType[ItemType["MUSHROOM"] = 1] = "MUSHROOM";
-    ItemType[ItemType["SHELL"] = 2] = "SHELL";
-    ItemType[ItemType["BANANA"] = 3] = "BANANA";
-    ItemType[ItemType["STAR"] = 4] = "STAR";
+    ItemType[ItemType["GREEN_SHELL"] = 2] = "GREEN_SHELL";
+    ItemType[ItemType["RED_SHELL"] = 3] = "RED_SHELL";
+    ItemType[ItemType["BLUE_SHELL"] = 4] = "BLUE_SHELL";
+    ItemType[ItemType["SHELL"] = 5] = "SHELL";
+    ItemType[ItemType["BANANA"] = 6] = "BANANA";
+    ItemType[ItemType["MUSHROOM_TRIPLE"] = 7] = "MUSHROOM_TRIPLE";
+    ItemType[ItemType["GREEN_SHELL_TRIPLE"] = 8] = "GREEN_SHELL_TRIPLE";
+    ItemType[ItemType["RED_SHELL_TRIPLE"] = 9] = "RED_SHELL_TRIPLE";
+    ItemType[ItemType["SHELL_TRIPLE"] = 10] = "SHELL_TRIPLE";
+    ItemType[ItemType["BANANA_TRIPLE"] = 11] = "BANANA_TRIPLE";
+    ItemType[ItemType["MUSHROOM_GOLDEN"] = 12] = "MUSHROOM_GOLDEN";
+    ItemType[ItemType["STAR"] = 13] = "STAR";
+    ItemType[ItemType["LIGHTNING"] = 14] = "LIGHTNING";
+    ItemType[ItemType["BULLET"] = 15] = "BULLET";
 })(ItemType || (ItemType = {}));
+function getBaseItemType(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_TRIPLE:
+        case ItemType.MUSHROOM_GOLDEN:
+            return ItemType.MUSHROOM;
+        case ItemType.GREEN_SHELL_TRIPLE:
+            return ItemType.GREEN_SHELL;
+        case ItemType.RED_SHELL_TRIPLE:
+        case ItemType.SHELL_TRIPLE:
+        case ItemType.SHELL:
+            return ItemType.RED_SHELL;
+        case ItemType.BANANA_TRIPLE:
+            return ItemType.BANANA;
+        case ItemType.BLUE_SHELL:
+            return ItemType.BLUE_SHELL;
+        default:
+            return type;
+    }
+}
+function getItemUses(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_TRIPLE:
+        case ItemType.GREEN_SHELL_TRIPLE:
+        case ItemType.RED_SHELL_TRIPLE:
+        case ItemType.SHELL_TRIPLE:
+        case ItemType.BANANA_TRIPLE:
+            return 3;
+        default:
+            return 1;
+    }
+}
+function isDurationItem(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN:
+        case ItemType.STAR:
+        case ItemType.LIGHTNING:
+        case ItemType.BULLET:
+            return true;
+        default:
+            return false;
+    }
+}
+function getItemDuration(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN: return 8.0;
+        case ItemType.STAR: return 8.0;
+        case ItemType.LIGHTNING: return 5.0;
+        case ItemType.BULLET: return 8.0;
+        default: return 0;
+    }
+}
+function itemStaysInSlotWhileActive(type) {
+    switch (type) {
+        case ItemType.MUSHROOM_GOLDEN:
+        case ItemType.BULLET:
+            return true;
+        default:
+            return false;
+    }
+}
 var Item = (function (_super) {
     __extends(Item, _super);
     function Item(type) {
@@ -2334,14 +2538,17 @@ var __extends = (this && this.__extends) || (function () {
 var Mushroom = (function (_super) {
     __extends(Mushroom, _super);
     function Mushroom() {
-        var _this = _super.call(this, ItemType.MUSHROOM) || this;
-        _this.boostMultiplier = 1.5;
-        _this.boostDuration = 2.0;
-        return _this;
+        return _super.call(this, ItemType.MUSHROOM) || this;
     }
     Mushroom.applyEffect = function (vehicle) {
-        vehicle.speed = Math.min(vehicle.speed * 1.5, VEHICLE_PHYSICS.MAX_SPEED * 1.3);
+        vehicle.boostTimer = Mushroom.BOOST_DURATION;
+        vehicle.boostMultiplier = Mushroom.BOOST_MULTIPLIER;
+        vehicle.boostMinSpeed = Math.max(vehicle.speed, VEHICLE_PHYSICS.MAX_SPEED * 0.5);
+        vehicle.speed = Math.min(vehicle.speed * 1.3, VEHICLE_PHYSICS.MAX_SPEED * Mushroom.BOOST_MULTIPLIER);
+        logInfo("Mushroom boost activated! Duration: " + Mushroom.BOOST_DURATION + "s, minSpeed: " + vehicle.boostMinSpeed);
     };
+    Mushroom.BOOST_MULTIPLIER = 1.4;
+    Mushroom.BOOST_DURATION = 3.0;
     return Mushroom;
 }(Item));
 "use strict";
@@ -2360,65 +2567,274 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var ShellType;
+(function (ShellType) {
+    ShellType[ShellType["GREEN"] = 0] = "GREEN";
+    ShellType[ShellType["RED"] = 1] = "RED";
+    ShellType[ShellType["BLUE"] = 2] = "BLUE";
+})(ShellType || (ShellType = {}));
 var Shell = (function (_super) {
     __extends(Shell, _super);
-    function Shell() {
+    function Shell(shellType) {
         var _this = _super.call(this, ItemType.SHELL) || this;
-        _this.speed = 300;
+        _this.shellType = shellType;
+        _this.trackZ = 0;
+        _this.playerX = 0;
+        _this.speed = 500;
         _this.ownerId = -1;
+        _this.targetId = -1;
+        _this.ttl = 10;
+        _this.isDestroyed = false;
         return _this;
     }
-    Shell.fire = function (vehicle) {
-        var shell = new Shell();
-        shell.x = vehicle.x;
-        shell.z = vehicle.z + 12;
-        shell.rotation = vehicle.rotation;
+    Shell.fireGreen = function (vehicle) {
+        var shell = new Shell(ShellType.GREEN);
+        shell.trackZ = vehicle.trackZ + 15;
+        shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = 300;
+        shell.speed = Math.max(200, vehicle.speed + 100);
+        logInfo("GREEN SHELL fired at speed=" + shell.speed.toFixed(0) + " from playerX=" + shell.playerX.toFixed(2));
         return shell;
     };
-    Shell.prototype.updatePosition = function (dt) {
-        this.z += this.speed * dt;
+    Shell.fireRed = function (vehicle, vehicles) {
+        var shell = new Shell(ShellType.RED);
+        shell.trackZ = vehicle.trackZ + 15;
+        shell.playerX = vehicle.playerX;
+        shell.ownerId = vehicle.id;
+        shell.speed = Math.max(180, vehicle.speed + 80);
+        shell.targetId = Shell.findNextVehicleAhead(vehicle, vehicles);
+        logInfo("RED SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        return shell;
     };
-    Shell.applyHit = function (vehicle) {
+    Shell.fireBlue = function (vehicle, vehicles) {
+        var shell = new Shell(ShellType.BLUE);
+        shell.trackZ = vehicle.trackZ + 15;
+        shell.playerX = vehicle.playerX;
+        shell.ownerId = vehicle.id;
+        shell.speed = 900;
+        shell.targetId = Shell.findFirstPlace(vehicles);
+        logInfo("BLUE SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        return shell;
+    };
+    Shell.findNextVehicleAhead = function (shooter, vehicles) {
+        var bestId = -1;
+        var bestDist = Infinity;
+        for (var i = 0; i < vehicles.length; i++) {
+            var v = vehicles[i];
+            if (v.id === shooter.id)
+                continue;
+            var dist = v.trackZ - shooter.trackZ;
+            if (dist > 0 && dist < bestDist) {
+                bestDist = dist;
+                bestId = v.id;
+            }
+        }
+        return bestId;
+    };
+    Shell.findFirstPlace = function (vehicles) {
+        for (var i = 0; i < vehicles.length; i++) {
+            if (vehicles[i].racePosition === 1) {
+                return vehicles[i].id;
+            }
+        }
+        return -1;
+    };
+    Shell.prototype.update = function (dt, vehicles, roadLength) {
+        if (this.isDestroyed)
+            return true;
+        this.ttl -= dt;
+        if (this.ttl <= 0 && this.shellType !== ShellType.BLUE) {
+            logInfo("Shell despawned (TTL)");
+            return true;
+        }
+        this.trackZ += this.speed * dt;
+        if (this.trackZ >= roadLength) {
+            this.trackZ = this.trackZ % roadLength;
+        }
+        if (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE) {
+            var target = this.findVehicleById(vehicles, this.targetId);
+            if (target) {
+                var homingRate = 2.0;
+                if (this.playerX < target.playerX - 0.05) {
+                    this.playerX += homingRate * dt;
+                }
+                else if (this.playerX > target.playerX + 0.05) {
+                    this.playerX -= homingRate * dt;
+                }
+            }
+            else {
+                this.shellType = ShellType.GREEN;
+            }
+        }
+        for (var i = 0; i < vehicles.length; i++) {
+            var v = vehicles[i];
+            if (v.id === this.ownerId)
+                continue;
+            if (v.isCrashed)
+                continue;
+            var isInvincible = false;
+            for (var e = 0; e < v.activeEffects.length; e++) {
+                var effectType = v.activeEffects[e].type;
+                if (effectType === ItemType.STAR || effectType === ItemType.BULLET) {
+                    isInvincible = true;
+                    break;
+                }
+            }
+            if (isInvincible)
+                continue;
+            var latDist = Math.abs(this.playerX - v.playerX);
+            var longDist = Math.abs(this.trackZ - v.trackZ);
+            if (latDist < 0.5 && longDist < 15) {
+                this.applyHitToVehicle(v);
+                this.isDestroyed = true;
+                return true;
+            }
+        }
+        return false;
+    };
+    Shell.prototype.findVehicleById = function (vehicles, id) {
+        for (var i = 0; i < vehicles.length; i++) {
+            if (vehicles[i].id === id)
+                return vehicles[i];
+        }
+        return null;
+    };
+    Shell.prototype.applyHitToVehicle = function (vehicle) {
         vehicle.speed = 0;
+        var knockDirection = vehicle.playerX >= 0 ? 1 : -1;
+        vehicle.playerX = knockDirection * (0.7 + Math.random() * 0.2);
+        vehicle.flashTimer = 1.5;
+        var shellNames = ['GREEN', 'RED', 'BLUE'];
+        logInfo(shellNames[this.shellType] + " SHELL hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
     };
     return Shell;
 }(Item));
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var Banana = (function (_super) {
+    __extends(Banana, _super);
+    function Banana() {
+        var _this = _super.call(this, ItemType.BANANA) || this;
+        _this.shellType = ShellType.GREEN;
+        _this.trackZ = 0;
+        _this.playerX = 0;
+        _this.speed = 0;
+        _this.ownerId = -1;
+        _this.targetId = -1;
+        _this.ttl = 60;
+        _this.isDestroyed = false;
+        return _this;
+    }
+    Banana.drop = function (vehicle) {
+        var banana = new Banana();
+        banana.trackZ = vehicle.trackZ - 20;
+        banana.playerX = vehicle.playerX;
+        banana.ownerId = vehicle.id;
+        logInfo("BANANA dropped at trackZ=" + banana.trackZ.toFixed(0) + ", playerX=" + banana.playerX.toFixed(2));
+        return banana;
+    };
+    Banana.prototype.update = function (dt, vehicles, roadLength) {
+        if (this.isDestroyed)
+            return true;
+        this.ttl -= dt;
+        if (this.ttl <= 0) {
+            logInfo("Banana despawned (TTL)");
+            return true;
+        }
+        if (this.trackZ < 0) {
+            this.trackZ += roadLength;
+        }
+        else if (this.trackZ >= roadLength) {
+            this.trackZ = this.trackZ % roadLength;
+        }
+        for (var i = 0; i < vehicles.length; i++) {
+            var v = vehicles[i];
+            if (v.id === this.ownerId)
+                continue;
+            if (v.isCrashed)
+                continue;
+            var isInvincible = false;
+            for (var e = 0; e < v.activeEffects.length; e++) {
+                var effectType = v.activeEffects[e].type;
+                if (effectType === ItemType.STAR || effectType === ItemType.BULLET) {
+                    isInvincible = true;
+                    break;
+                }
+            }
+            if (isInvincible)
+                continue;
+            var latDist = Math.abs(this.playerX - v.playerX);
+            var longDist = Math.abs(this.trackZ - v.trackZ);
+            if (latDist < 0.5 && longDist < 15) {
+                this.applyHitToVehicle(v);
+                this.isDestroyed = true;
+                return true;
+            }
+        }
+        return false;
+    };
+    Banana.prototype.applyHitToVehicle = function (vehicle) {
+        vehicle.speed = 0;
+        var knockDirection = vehicle.playerX >= 0 ? 1 : -1;
+        vehicle.playerX = knockDirection * (0.7 + Math.random() * 0.2);
+        vehicle.flashTimer = 2.0;
+        logInfo("BANANA hit vehicle " + vehicle.id + " - spun out to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
+    };
+    return Banana;
+}(Item));
+"use strict";
+var DEBUG_FORCE_ITEM = null;
 var ItemSystem = (function () {
     function ItemSystem() {
         this.items = [];
         this.projectiles = [];
     }
-    ItemSystem.prototype.initFromTrack = function (_track) {
-        var itemPositions = [
-            { x: 0, z: 150, respawnTime: 10 },
-            { x: 0, z: 450, respawnTime: 10 },
-            { x: -10, z: 750, respawnTime: 10 },
-            { x: 10, z: 750, respawnTime: 10 },
-            { x: 0, z: 1050, respawnTime: 10 }
-        ];
-        for (var i = 0; i < itemPositions.length; i++) {
-            var pos = itemPositions[i];
+    ItemSystem.prototype.initFromTrack = function (_track, road) {
+        this.items = [];
+        var trackLength = road.totalLength;
+        var numBoxes = Math.max(5, Math.floor(trackLength / 300));
+        var spacing = trackLength / (numBoxes + 1);
+        for (var i = 1; i <= numBoxes; i++) {
+            var z = spacing * i;
+            var side = i % 3;
+            var x = side === 0 ? 0 : (side === 1 ? -8 : 8);
             var item = new Item(ItemType.NONE);
-            item.x = pos.x;
-            item.z = pos.z;
-            item.respawnTime = pos.respawnTime;
+            item.x = x;
+            item.z = z;
+            item.respawnTime = 8;
             this.items.push(item);
         }
+        logInfo("ItemSystem: Placed " + numBoxes + " item boxes across track length " + trackLength);
     };
-    ItemSystem.prototype.update = function (dt) {
+    ItemSystem.prototype.update = function (dt, vehicles, roadLength) {
         for (var i = 0; i < this.items.length; i++) {
             this.items[i].updateRespawn(dt);
         }
-        for (var j = this.projectiles.length - 1; j >= 0; j--) {
-            var proj = this.projectiles[j];
-            proj.z += proj.speed * dt;
-            if (proj.z > 10000) {
-                this.projectiles.splice(j, 1);
+        if (vehicles && roadLength) {
+            for (var j = this.projectiles.length - 1; j >= 0; j--) {
+                var shell = this.projectiles[j];
+                if (shell.update(dt, vehicles, roadLength)) {
+                    this.projectiles.splice(j, 1);
+                }
             }
         }
+    };
+    ItemSystem.prototype.getProjectiles = function () {
+        return this.projectiles;
     };
     ItemSystem.prototype.checkPickups = function (vehicles) {
         for (var i = 0; i < vehicles.length; i++) {
@@ -2430,42 +2846,200 @@ var ItemSystem = (function () {
                 if (!item.isAvailable())
                     continue;
                 var dx = vehicle.x - item.x;
-                var dz = vehicle.z - item.z;
-                if (Math.abs(dx) < 10 && Math.abs(dz) < 10) {
+                var dz = vehicle.trackZ - item.z;
+                if (Math.abs(dx) < 15 && Math.abs(dz) < 20) {
                     item.pickup();
-                    vehicle.heldItem = this.randomItemType();
-                    logInfo("Vehicle " + vehicle.id + " picked up item: " + vehicle.heldItem);
+                    var itemType = this.randomItemType(vehicle.racePosition, vehicles.length);
+                    vehicle.heldItem = {
+                        type: itemType,
+                        uses: getItemUses(itemType),
+                        activated: false
+                    };
+                    logInfo("Vehicle picked up " + ItemType[itemType] + " (x" + vehicle.heldItem.uses + ")");
                 }
             }
         }
     };
-    ItemSystem.prototype.useItem = function (vehicle) {
+    ItemSystem.prototype.useItem = function (vehicle, allVehicles) {
         if (vehicle.heldItem === null)
             return;
-        switch (vehicle.heldItem) {
+        var itemType = vehicle.heldItem.type;
+        var consumed = false;
+        switch (itemType) {
             case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
                 Mushroom.applyEffect(vehicle);
+                consumed = true;
                 break;
+            case ItemType.MUSHROOM_GOLDEN:
+                if (!vehicle.heldItem.activated) {
+                    vehicle.heldItem.activated = true;
+                    this.applyDurationEffect(vehicle, itemType);
+                    logInfo("Golden Mushroom ACTIVATED - unlimited boosts for duration!");
+                }
+                Mushroom.applyEffect(vehicle);
+                return;
+            case ItemType.STAR:
+                this.applyDurationEffect(vehicle, itemType);
+                vehicle.heldItem = null;
+                return;
+            case ItemType.LIGHTNING:
+                if (allVehicles) {
+                    this.applyLightning(vehicle, allVehicles);
+                    vehicle.flashTimer = 0.3;
+                }
+                vehicle.heldItem = null;
+                return;
+            case ItemType.BULLET:
+                if (!vehicle.heldItem.activated) {
+                    vehicle.heldItem.activated = true;
+                    this.applyDurationEffect(vehicle, itemType);
+                    logInfo("Bullet Bill ACTIVATED - autopilot engaged!");
+                }
+                return;
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                {
+                    var greenShell = Shell.fireGreen(vehicle);
+                    this.projectiles.push(greenShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
             case ItemType.SHELL:
-                var shell = Shell.fire(vehicle);
-                this.projectiles.push(shell);
+            case ItemType.SHELL_TRIPLE:
+                if (allVehicles) {
+                    var redShell = Shell.fireRed(vehicle, allVehicles);
+                    this.projectiles.push(redShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.BLUE_SHELL:
+                if (allVehicles) {
+                    var blueShell = Shell.fireBlue(vehicle, allVehicles);
+                    this.projectiles.push(blueShell);
+                }
+                consumed = true;
+                break;
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                {
+                    var banana = Banana.drop(vehicle);
+                    this.projectiles.push(banana);
+                }
+                consumed = true;
                 break;
         }
-        vehicle.heldItem = null;
+        if (consumed && vehicle.heldItem) {
+            vehicle.heldItem.uses--;
+            if (vehicle.heldItem.uses <= 0) {
+                vehicle.heldItem = null;
+            }
+        }
     };
-    ItemSystem.prototype.randomItemType = function () {
+    ItemSystem.prototype.applyDurationEffect = function (vehicle, type) {
+        var duration = getItemDuration(type);
+        vehicle.addEffect(type, duration, vehicle.id);
+        vehicle.boostMinSpeed = Math.max(vehicle.speed, VEHICLE_PHYSICS.MAX_SPEED * 0.5);
+        switch (type) {
+            case ItemType.MUSHROOM_GOLDEN:
+                vehicle.boostMultiplier = 1.4;
+                vehicle.speed = Math.min(vehicle.speed * 1.2, VEHICLE_PHYSICS.MAX_SPEED * 1.4);
+                break;
+            case ItemType.STAR:
+                vehicle.boostMultiplier = 1.35;
+                vehicle.speed = Math.min(vehicle.speed * 1.25, VEHICLE_PHYSICS.MAX_SPEED * 1.35);
+                break;
+            case ItemType.BULLET:
+                vehicle.boostMultiplier = 1.6;
+                vehicle.speed = VEHICLE_PHYSICS.MAX_SPEED * 1.6;
+                vehicle.boostMinSpeed = VEHICLE_PHYSICS.MAX_SPEED * 1.5;
+                break;
+        }
+        logInfo("Applied " + ItemType[type] + " effect for " + duration + "s, minSpeed: " + vehicle.boostMinSpeed);
+    };
+    ItemSystem.prototype.applyLightning = function (user, allVehicles) {
+        var duration = getItemDuration(ItemType.LIGHTNING);
+        var hitCount = 0;
+        for (var i = 0; i < allVehicles.length; i++) {
+            var v = allVehicles[i];
+            if (v.id === user.id)
+                continue;
+            if (v.trackZ <= user.trackZ)
+                continue;
+            if (v.hasEffect && (v.hasEffect(ItemType.STAR) ||
+                v.hasEffect(ItemType.BULLET))) {
+                continue;
+            }
+            v.addEffect(ItemType.LIGHTNING, duration, user.id);
+            hitCount++;
+        }
+        logInfo("Lightning struck " + hitCount + " opponents ahead!");
+    };
+    ItemSystem.prototype.randomItemType = function (position, totalRacers) {
+        if (DEBUG_FORCE_ITEM !== null) {
+            return DEBUG_FORCE_ITEM;
+        }
         var roll = globalRand.next();
-        if (roll < 0.5)
-            return ItemType.MUSHROOM;
-        if (roll < 0.8)
-            return ItemType.SHELL;
-        return ItemType.BANANA;
+        var positionFactor = totalRacers > 1 ? (position - 1) / (totalRacers - 1) : 0;
+        if (positionFactor < 0.25) {
+            if (roll < 0.40)
+                return ItemType.BANANA;
+            if (roll < 0.70)
+                return ItemType.GREEN_SHELL;
+            if (roll < 0.85)
+                return ItemType.MUSHROOM;
+            if (roll < 0.95)
+                return ItemType.RED_SHELL;
+            return ItemType.BANANA_TRIPLE;
+        }
+        else if (positionFactor < 0.50) {
+            if (roll < 0.25)
+                return ItemType.MUSHROOM;
+            if (roll < 0.45)
+                return ItemType.GREEN_SHELL;
+            if (roll < 0.65)
+                return ItemType.RED_SHELL;
+            if (roll < 0.80)
+                return ItemType.BANANA;
+            if (roll < 0.90)
+                return ItemType.MUSHROOM_TRIPLE;
+            return ItemType.GREEN_SHELL_TRIPLE;
+        }
+        else if (positionFactor < 0.75) {
+            if (roll < 0.20)
+                return ItemType.MUSHROOM_TRIPLE;
+            if (roll < 0.35)
+                return ItemType.RED_SHELL;
+            if (roll < 0.50)
+                return ItemType.RED_SHELL_TRIPLE;
+            if (roll < 0.65)
+                return ItemType.MUSHROOM_GOLDEN;
+            if (roll < 0.80)
+                return ItemType.STAR;
+            if (roll < 0.90)
+                return ItemType.LIGHTNING;
+            return ItemType.MUSHROOM_GOLDEN;
+        }
+        else {
+            if (roll < 0.20)
+                return ItemType.MUSHROOM_GOLDEN;
+            if (roll < 0.40)
+                return ItemType.STAR;
+            if (roll < 0.55)
+                return ItemType.BULLET;
+            if (roll < 0.70)
+                return ItemType.LIGHTNING;
+            if (roll < 0.80)
+                return ItemType.BLUE_SHELL;
+            if (roll < 0.90)
+                return ItemType.RED_SHELL_TRIPLE;
+            return ItemType.MUSHROOM_GOLDEN;
+        }
     };
     ItemSystem.prototype.getItemBoxes = function () {
         return this.items;
-    };
-    ItemSystem.prototype.getProjectiles = function () {
-        return this.projectiles;
     };
     return ItemSystem;
 }());
@@ -2682,19 +3256,14 @@ var PositionIndicator = (function () {
     PositionIndicator.format = function (data) {
         return data.position + data.suffix + " / " + data.totalRacers;
     };
-    PositionIndicator.calculatePositions = function (vehicles, roadLength) {
+    PositionIndicator.calculatePositions = function (vehicles) {
         var racers = vehicles.filter(function (v) { return !v.isNPC || v.isRacer; });
+        var VISUAL_OFFSET = 200;
         var sorted = racers.slice().sort(function (a, b) {
             if (a.lap !== b.lap)
                 return b.lap - a.lap;
-            if (a.checkpoint !== b.checkpoint)
-                return b.checkpoint - a.checkpoint;
-            var aZ = a.trackZ;
-            var bZ = b.trackZ;
-            if (roadLength && roadLength > 0) {
-                aZ = aZ % roadLength;
-                bZ = bZ % roadLength;
-            }
+            var aZ = a.trackZ + (a.isNPC ? 0 : VISUAL_OFFSET);
+            var bZ = b.trackZ + (b.isNPC ? 0 : VISUAL_OFFSET);
             return bZ - aZ;
         });
         for (var i = 0; i < sorted.length; i++) {
@@ -2703,6 +3272,252 @@ var PositionIndicator = (function () {
     };
     return PositionIndicator;
 }());
+"use strict";
+if (typeof JSONdb === 'undefined') {
+    load('json-db.js');
+}
+var HighScoreType;
+(function (HighScoreType) {
+    HighScoreType["TRACK_TIME"] = "track_time";
+    HighScoreType["LAP_TIME"] = "lap_time";
+    HighScoreType["CIRCUIT_TIME"] = "circuit_time";
+})(HighScoreType || (HighScoreType = {}));
+var HighScoreManager = (function () {
+    function HighScoreManager() {
+        this.maxEntries = 10;
+        this.dbPath = js.exec_dir + 'highscores.json';
+        try {
+            this.db = new JSONdb(this.dbPath, 'OUTRUN_SCORES');
+            this.db.settings.KEEP_READABLE = true;
+            this.db.load();
+        }
+        catch (e) {
+            logError("Failed to initialize high score database: " + e);
+            this.db = null;
+        }
+    }
+    HighScoreManager.prototype.getKey = function (type, identifier) {
+        var sanitized = identifier.replace(/\s+/g, '_').toLowerCase();
+        return type + '.' + sanitized;
+    };
+    HighScoreManager.prototype.getScores = function (type, identifier) {
+        if (!this.db)
+            return [];
+        try {
+            this.db.load();
+            var key = this.getKey(type, identifier);
+            var data = this.db.masterData.data || {};
+            var scores = data[key];
+            if (scores && Array.isArray(scores)) {
+                return scores;
+            }
+            return [];
+        }
+        catch (e) {
+            logError("Failed to get high scores: " + e);
+            return [];
+        }
+    };
+    HighScoreManager.prototype.getTopScore = function (type, identifier) {
+        var scores = this.getScores(type, identifier);
+        if (scores.length > 0) {
+            return scores[0];
+        }
+        return null;
+    };
+    HighScoreManager.prototype.checkQualification = function (type, identifier, time) {
+        var scores = this.getScores(type, identifier);
+        if (scores.length < this.maxEntries) {
+            for (var i = 0; i < scores.length; i++) {
+                if (time < scores[i].time) {
+                    return i + 1;
+                }
+            }
+            return scores.length + 1;
+        }
+        for (var i = 0; i < scores.length; i++) {
+            if (time < scores[i].time) {
+                return i + 1;
+            }
+        }
+        return 0;
+    };
+    HighScoreManager.prototype.submitScore = function (type, identifier, playerName, time, trackName, circuitName) {
+        if (!this.db)
+            return 0;
+        try {
+            this.db.load();
+            var key = this.getKey(type, identifier);
+            var scores = this.getScores(type, identifier);
+            var entry = {
+                playerName: playerName,
+                time: time,
+                date: Date.now()
+            };
+            if (trackName)
+                entry.trackName = trackName;
+            if (circuitName)
+                entry.circuitName = circuitName;
+            var position = 0;
+            for (var i = 0; i < scores.length; i++) {
+                if (time < scores[i].time) {
+                    position = i;
+                    break;
+                }
+            }
+            if (position === 0 && scores.length < this.maxEntries) {
+                position = scores.length;
+            }
+            if (position === 0 && scores.length >= this.maxEntries) {
+                return 0;
+            }
+            scores.splice(position, 0, entry);
+            if (scores.length > this.maxEntries) {
+                scores = scores.slice(0, this.maxEntries);
+            }
+            var data = this.db.masterData.data || {};
+            data[key] = scores;
+            this.db.masterData.data = data;
+            this.db.save();
+            return position + 1;
+        }
+        catch (e) {
+            logError("Failed to submit high score: " + e);
+            return 0;
+        }
+    };
+    HighScoreManager.prototype.clearAll = function () {
+        if (!this.db)
+            return;
+        try {
+            this.db.masterData.data = {};
+            this.db.save();
+        }
+        catch (e) {
+            logError("Failed to clear high scores: " + e);
+        }
+    };
+    HighScoreManager.prototype.clear = function (type, identifier) {
+        if (!this.db)
+            return;
+        try {
+            this.db.load();
+            var key = this.getKey(type, identifier);
+            var data = this.db.masterData.data || {};
+            delete data[key];
+            this.db.masterData.data = data;
+            this.db.save();
+        }
+        catch (e) {
+            logError("Failed to clear high scores: " + e);
+        }
+    };
+    return HighScoreManager;
+}());
+"use strict";
+function displayHighScores(scores, title, trackOrCircuitName) {
+    console.clear();
+    var screenWidth = console.screen_columns;
+    var screenHeight = console.screen_rows;
+    var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+    var headerAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var nameAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+    var timeAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+    var dateAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var boxWidth = Math.min(70, screenWidth - 4);
+    var boxHeight = 18;
+    var boxX = Math.floor((screenWidth - boxWidth) / 2);
+    var topY = Math.floor((screenHeight - boxHeight) / 2);
+    console.gotoxy(boxX, topY);
+    console.attributes = boxAttr;
+    console.print(GLYPH.DBOX_TL);
+    for (var i = 1; i < boxWidth - 1; i++) {
+        console.print(GLYPH.DBOX_H);
+    }
+    console.print(GLYPH.DBOX_TR + "\r\n");
+    for (var j = 1; j < boxHeight - 1; j++) {
+        console.gotoxy(boxX, topY + j);
+        console.print(GLYPH.DBOX_V);
+        console.gotoxy(boxX + boxWidth - 1, topY + j);
+        console.print(GLYPH.DBOX_V + "\r\n");
+    }
+    console.gotoxy(boxX, topY + boxHeight - 1);
+    console.print(GLYPH.DBOX_BL);
+    for (var i = 1; i < boxWidth - 1; i++) {
+        console.print(GLYPH.DBOX_H);
+    }
+    console.print(GLYPH.DBOX_BR + "\r\n");
+    console.gotoxy(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2);
+    console.attributes = titleAttr;
+    console.print(title);
+    console.gotoxy(boxX + Math.floor((boxWidth - trackOrCircuitName.length) / 2), topY + 3);
+    console.attributes = headerAttr;
+    console.print(trackOrCircuitName);
+    console.gotoxy(boxX + 3, topY + 5);
+    console.attributes = headerAttr;
+    console.print("RANK  PLAYER NAME           TIME        DATE");
+    var startY = topY + 6;
+    for (var i = 0; i < 10; i++) {
+        console.gotoxy(boxX + 3, startY + i);
+        if (i < scores.length) {
+            var score = scores[i];
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.attributes = nameAttr;
+            console.print(rank + "   ");
+            var name = score.playerName;
+            if (name.length > 18) {
+                name = name.substring(0, 15) + "...";
+            }
+            while (name.length < 18) {
+                name += " ";
+            }
+            console.print(name + "  ");
+            console.attributes = timeAttr;
+            var timeStr = LapTimer.format(score.time);
+            console.print(timeStr);
+            while (timeStr.length < 10) {
+                timeStr += " ";
+                console.print(" ");
+            }
+            console.print("  ");
+            console.attributes = dateAttr;
+            var date = new Date(score.date);
+            var dateStr = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
+            console.print(dateStr);
+        }
+        else {
+            console.attributes = emptyAttr;
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.print(rank + "   ---");
+        }
+    }
+    console.gotoxy(boxX + Math.floor((boxWidth - 24) / 2), topY + boxHeight - 2);
+    console.attributes = headerAttr;
+    console.print("Press any key to continue");
+}
+function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager) {
+    var scores = highScoreManager.getScores(type, identifier);
+    displayHighScores(scores, title, trackOrCircuitName);
+    console.inkey(K_NONE);
+}
+function displayTopScoreLine(label, score, x, y, labelAttr, valueAttr) {
+    console.gotoxy(x, y);
+    console.attributes = labelAttr;
+    console.print(label + ": ");
+    console.attributes = valueAttr;
+    if (score) {
+        console.print(LapTimer.format(score.time) + " by " + score.playerName);
+    }
+    else {
+        console.print("--:--.-- (No record)");
+    }
+}
 "use strict";
 var PALETTE = {
     SKY_TOP: { fg: MAGENTA, bg: BG_BLACK },
@@ -3571,14 +4386,30 @@ var HudRenderer = (function () {
         if (data.heldItem !== null) {
             var itemAttr;
             var itemChar;
-            switch (data.heldItem) {
+            var itemType = data.heldItem.type;
+            switch (itemType) {
                 case ItemType.MUSHROOM:
+                case ItemType.MUSHROOM_TRIPLE:
+                case ItemType.MUSHROOM_GOLDEN:
                     itemAttr = colorToAttr(PALETTE.ITEM_MUSHROOM);
                     itemChar = 'MUSH';
                     break;
                 case ItemType.SHELL:
+                case ItemType.SHELL_TRIPLE:
                     itemAttr = colorToAttr(PALETTE.ITEM_SHELL);
                     itemChar = 'SHEL';
+                    break;
+                case ItemType.STAR:
+                    itemAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+                    itemChar = 'STAR';
+                    break;
+                case ItemType.LIGHTNING:
+                    itemAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+                    itemChar = 'BOLT';
+                    break;
+                case ItemType.BULLET:
+                    itemAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+                    itemChar = 'BULL';
                     break;
                 default:
                     itemAttr = colorToAttr(PALETTE.HUD_VALUE);
@@ -9485,17 +10316,195 @@ var FrameRenderer = (function () {
         objects.sort(function (a, b) { return b.distance - a.distance; });
         return objects;
     };
-    FrameRenderer.prototype.renderEntities = function (playerVehicle, vehicles, _items) {
+    FrameRenderer.prototype.renderEntities = function (playerVehicle, vehicles, items, projectiles) {
+        this.renderItemBoxes(playerVehicle, items);
+        if (projectiles && projectiles.length > 0) {
+            this.renderProjectiles(playerVehicle, projectiles);
+        }
         this.renderNPCVehicles(playerVehicle, vehicles);
-        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0);
+        var v = playerVehicle;
+        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0, playerVehicle.boostTimer > 0, v.hasEffect ? v.hasEffect(ItemType.STAR) : false, v.hasEffect ? v.hasEffect(ItemType.BULLET) : false, v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false);
+    };
+    FrameRenderer.prototype.renderProjectiles = function (playerVehicle, projectiles) {
+        var frame = this.frameManager.getRoadFrame();
+        if (!frame)
+            return;
+        var visualHorizonY = 5;
+        var roadBottom = this.height - 4;
+        var roadHeight = roadBottom - visualHorizonY;
+        var greenSprites = [
+            ['.'],
+            ['o'],
+            ['(O)'],
+            ['_/O\\_', ' \\O/']
+        ];
+        var redSprites = [
+            ['.'],
+            ['o'],
+            ['(O)'],
+            ['_/O\\_', ' \\O/']
+        ];
+        var blueSprites = [
+            ['*'],
+            ['@'],
+            ['<@>'],
+            ['~/~@~\\~', ' ~\\@/~']
+        ];
+        var bananaSprites = [
+            ['.'],
+            ['o'],
+            ['(o)'],
+            [' /\\\\ ', '(__)']
+        ];
+        for (var i = 0; i < projectiles.length; i++) {
+            var projectile = projectiles[i];
+            if (projectile.isDestroyed)
+                continue;
+            var isBanana = projectile.speed === 0;
+            var distZ = projectile.trackZ - playerVehicle.trackZ;
+            if (distZ < -5 || distZ > 600)
+                continue;
+            var maxViewDist = 500;
+            var normalizedDist = Math.max(0.01, distZ / maxViewDist);
+            var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+            var screenY = Math.round(visualHorizonY + t * roadHeight);
+            var curveOffset = 0;
+            if (this._currentRoad && distZ > 0) {
+                var projWorldZ = this._currentTrackPosition + distZ;
+                var seg = this._currentRoad.getSegment(projWorldZ);
+                if (seg) {
+                    curveOffset = seg.curve * t * 15;
+                }
+            }
+            var perspectiveScale = t * t;
+            var relativeX = projectile.playerX - playerVehicle.playerX;
+            var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 25 - this._currentCameraX * 0.5);
+            var screenProgress = (screenY - visualHorizonY) / roadHeight;
+            var scaleIndex;
+            if (screenProgress < 0.08) {
+                scaleIndex = 0;
+            }
+            else if (screenProgress < 0.20) {
+                scaleIndex = 1;
+            }
+            else if (screenProgress < 0.40) {
+                scaleIndex = 2;
+            }
+            else {
+                scaleIndex = 3;
+            }
+            var sprites;
+            var attr;
+            if (isBanana) {
+                sprites = bananaSprites;
+                attr = makeAttr(YELLOW, BG_BLACK);
+            }
+            else {
+                var shell = projectile;
+                if (shell.shellType === ShellType.GREEN) {
+                    sprites = greenSprites;
+                    attr = makeAttr(LIGHTGREEN, BG_BLACK);
+                }
+                else if (shell.shellType === ShellType.RED) {
+                    sprites = redSprites;
+                    attr = makeAttr(LIGHTRED, BG_BLACK);
+                }
+                else {
+                    sprites = blueSprites;
+                    attr = makeAttr(LIGHTBLUE, BG_BLACK);
+                }
+            }
+            var spriteLines = sprites[scaleIndex];
+            var spriteWidth = spriteLines[0].length;
+            var spriteHeight = spriteLines.length;
+            var startX = screenX - Math.floor(spriteWidth / 2);
+            var startY = screenY - (spriteHeight - 1);
+            for (var ly = 0; ly < spriteHeight; ly++) {
+                var line = spriteLines[ly];
+                var drawY = startY + ly;
+                if (drawY < visualHorizonY || drawY >= roadBottom)
+                    continue;
+                for (var lx = 0; lx < line.length; lx++) {
+                    var ch = line.charAt(lx);
+                    if (ch === ' ')
+                        continue;
+                    var drawX = startX + lx;
+                    if (drawX < 0 || drawX >= 80)
+                        continue;
+                    frame.setData(drawX, drawY, ch, attr);
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderItemBoxes = function (playerVehicle, items) {
+        var frame = this.frameManager.getRoadFrame();
+        if (!frame)
+            return;
+        var roadColor = this.activeTheme.colors.roadSurface;
+        var itemBoxFg = YELLOW;
+        var itemBoxBg = roadColor.bg;
+        var visualHorizonY = 5;
+        var roadBottom = this.height - 4;
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!item.isAvailable())
+                continue;
+            var relativeZ = item.z - playerVehicle.trackZ;
+            var relativeX = item.x - (playerVehicle.playerX * 20);
+            if (relativeZ < 5 || relativeZ > 300)
+                continue;
+            var maxViewDist = 300;
+            var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
+            var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+            var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
+            var curveOffset = 0;
+            if (this._currentRoad && relativeZ > 0) {
+                var itemWorldZ = this._currentTrackPosition + relativeZ;
+                var seg = this._currentRoad.getSegment(itemWorldZ);
+                if (seg) {
+                    curveOffset = seg.curve * t * 15;
+                }
+            }
+            var perspectiveScale = t * t;
+            var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 0.1 - this._currentCameraX * 0.5);
+            if (screenY < visualHorizonY || screenY >= this.height - 1)
+                continue;
+            if (screenX < 0 || screenX >= this.width)
+                continue;
+            var boxChar = '?';
+            var boxWidth = 1;
+            if (t > 0.4) {
+                boxWidth = 3;
+            }
+            else if (t > 0.2) {
+                boxWidth = 2;
+            }
+            var pulse = Math.floor(Date.now() / 200) % 2;
+            var attr = pulse === 0 ? makeAttr(itemBoxFg, itemBoxBg) : makeAttr(YELLOW, itemBoxBg);
+            var startX = screenX - Math.floor(boxWidth / 2);
+            for (var col = 0; col < boxWidth; col++) {
+                var drawX = startX + col;
+                if (drawX >= 0 && drawX < this.width) {
+                    frame.setData(drawX, screenY, boxChar, attr);
+                }
+            }
+        }
     };
     FrameRenderer.prototype.renderNPCVehicles = function (playerVehicle, vehicles) {
         var visibleNPCs = [];
+        var roadLength = this._currentRoad ? this._currentRoad.totalLength : 10000;
         for (var i = 0; i < vehicles.length; i++) {
             var v = vehicles[i];
             if (!v.isNPC)
                 continue;
-            var relativeZ = v.trackZ - playerVehicle.trackZ;
+            var rawDiff = v.trackZ - playerVehicle.trackZ;
+            var relativeZ = rawDiff;
+            if (rawDiff > roadLength / 2) {
+                relativeZ = rawDiff - roadLength;
+            }
+            else if (rawDiff < -roadLength / 2) {
+                relativeZ = rawDiff + roadLength;
+            }
             var relativeX = v.playerX - playerVehicle.playerX;
             if (relativeZ > -10 && relativeZ < 600) {
                 visibleNPCs.push({ vehicle: v, relativeZ: relativeZ, relativeX: relativeX });
@@ -9509,8 +10518,14 @@ var FrameRenderer = (function () {
     FrameRenderer.prototype.renderNPCVehicle = function (vehicle, relativeZ, relativeX) {
         var sprite = getNPCSprite(vehicle.npcType, vehicle.npcColorIndex);
         var maxViewDist = 500;
-        var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
-        var t = Math.max(0, Math.min(1, 1 - normalizedDist));
+        var t;
+        if (relativeZ >= 0) {
+            var normalizedDist = Math.min(1, relativeZ / maxViewDist);
+            t = 1 - normalizedDist;
+        }
+        else {
+            t = 1 + Math.abs(relativeZ) / 50;
+        }
         var visualHorizonY = 5;
         var roadBottom = this.height - 4;
         var screenY = Math.round(visualHorizonY + t * (roadBottom - visualHorizonY));
@@ -11385,13 +12400,53 @@ var FrameRenderer = (function () {
             return 3;
         return 4;
     };
-    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing) {
+    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing, isBoosting, hasStar, hasBullet, hasLightning) {
         var frame = this.frameManager.getVehicleFrame(0);
         if (!frame)
             return;
         renderSpriteToFrame(frame, this.playerCarSprite, 0);
-        if (isFlashing) {
-            var flashColor = (Math.floor(Date.now() / 100) % 2 === 0) ? WHITE : LIGHTRED;
+        var now = Date.now();
+        if (hasStar) {
+            var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
+            var colorIndex = Math.floor(now / 60) % starColors.length;
+            var starColor = starColors[colorIndex];
+            var starAttr = makeAttr(starColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, starAttr);
+                    }
+                }
+            }
+        }
+        else if (hasBullet) {
+            var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : YELLOW;
+            var bulletAttr = makeAttr(bulletColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, bulletAttr);
+                    }
+                }
+            }
+        }
+        else if (hasLightning) {
+            var lightningColor = (Math.floor(now / 120) % 3 === 0) ? BLUE :
+                (Math.floor(now / 120) % 3 === 1) ? LIGHTCYAN : CYAN;
+            var lightningAttr = makeAttr(lightningColor, BG_BLACK);
+            for (var y = 0; y < 3; y++) {
+                for (var x = 0; x < 5; x++) {
+                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    if (cell) {
+                        frame.setData(x, y, cell.char, lightningAttr);
+                    }
+                }
+            }
+        }
+        else if (isFlashing) {
+            var flashColor = (Math.floor(now / 100) % 2 === 0) ? WHITE : LIGHTRED;
             var flashAttr = makeAttr(flashColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
@@ -11399,6 +12454,16 @@ var FrameRenderer = (function () {
                     if (cell) {
                         frame.setData(x, y, cell.char, flashAttr);
                     }
+                }
+            }
+        }
+        else if (isBoosting) {
+            var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : YELLOW;
+            var boostAttr = makeAttr(boostColor, BG_BLACK);
+            for (var bx = 0; bx < 5; bx++) {
+                var cell = this.playerCarSprite.variants[0][2] ? this.playerCarSprite.variants[0][2][bx] : null;
+                if (cell) {
+                    frame.setData(bx, 2, cell.char, boostAttr);
                 }
             }
         }
@@ -11413,18 +12478,89 @@ var FrameRenderer = (function () {
         frame.clear();
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
-        this.writeStringToFrame(frame, 2, 0, 'LAP', labelAttr);
-        this.writeStringToFrame(frame, 6, 0, hudData.lap + '/' + hudData.totalLaps, valueAttr);
-        this.writeStringToFrame(frame, 14, 0, 'POS', labelAttr);
-        this.writeStringToFrame(frame, 18, 0, hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position), valueAttr);
-        this.writeStringToFrame(frame, 26, 0, 'TIME', labelAttr);
-        this.writeStringToFrame(frame, 31, 0, LapTimer.format(hudData.lapTime), valueAttr);
-        this.writeStringToFrame(frame, 66, 0, 'SPD', labelAttr);
-        this.writeStringToFrame(frame, 70, 0, this.padLeft(hudData.speed.toString(), 3), valueAttr);
-        this.renderSpeedometerBar(frame, hudData.speed, hudData.speedMax);
-        this.renderTrackProgress(frame, hudData.lapProgress);
+        this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
+        this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
+        var bottomY = this.height - 1;
+        this.writeStringToFrame(frame, 2, bottomY, hudData.lap + '/' + hudData.totalLaps, valueAttr);
+        this.renderTrackProgressCompact(frame, hudData.lapProgress, 7, bottomY, 12);
+        var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+        this.writeStringToFrame(frame, 21, bottomY, posStr, valueAttr);
+        var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
+        var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+        this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+        this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 10);
+        if (hudData.heldItem !== null) {
+            var itemData = hudData.heldItem;
+            var itemName = this.getItemDisplayName(itemData.type);
+            var itemAttr = this.getItemDisplayAttr(itemData.type);
+            if (itemData.uses > 1) {
+                itemName = itemName + "x" + itemData.uses;
+            }
+            this.writeStringToFrame(frame, 71 - itemName.length, bottomY - 1, itemName, itemAttr);
+        }
         if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
             this.renderStoplight(frame, hudData.countdown);
+        }
+    };
+    FrameRenderer.prototype.getItemDisplayName = function (itemType) {
+        switch (itemType) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+                return 'MUSHROOM';
+            case ItemType.MUSHROOM_GOLDEN:
+                return 'G.MUSHROOM';
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
+                return 'SHELL';
+            case ItemType.BLUE_SHELL:
+                return 'SHELL';
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                return 'BANANA';
+            case ItemType.STAR:
+                return 'STAR';
+            case ItemType.LIGHTNING:
+                return 'LIGHTNING';
+            case ItemType.BULLET:
+                return 'BULLET';
+            default:
+                return '???';
+        }
+    };
+    FrameRenderer.prototype.getItemDisplayAttr = function (itemType) {
+        switch (itemType) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+            case ItemType.MUSHROOM_GOLDEN:
+                return makeAttr(LIGHTRED, BG_BLACK);
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return makeAttr(LIGHTGREEN, BG_BLACK);
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                return makeAttr(LIGHTGREEN, BG_BLACK);
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
+                return makeAttr(LIGHTRED, BG_BLACK);
+            case ItemType.BLUE_SHELL:
+                return makeAttr(LIGHTCYAN, BG_BLACK);
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                return makeAttr(YELLOW, BG_BLACK);
+            case ItemType.STAR:
+                return makeAttr(YELLOW, BG_BLACK);
+            case ItemType.LIGHTNING:
+                return makeAttr(LIGHTCYAN, BG_BLACK);
+            case ItemType.BULLET:
+                return makeAttr(WHITE, BG_BLACK);
+            default:
+                return makeAttr(WHITE, BG_BLACK);
         }
     };
     FrameRenderer.prototype.renderStoplight = function (frame, countdown) {
@@ -11465,41 +12601,49 @@ var FrameRenderer = (function () {
         }
         frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
-    FrameRenderer.prototype.renderTrackProgress = function (frame, progress) {
-        var y = this.height - 1;
-        var barX = 60;
-        var barWidth = 15;
+    FrameRenderer.prototype.renderTrackProgressCompact = function (frame, progress, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
         var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
-        var finishAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
-        this.writeStringToFrame(frame, barX - 5, y, 'TRK', labelAttr);
-        frame.setData(barX, y, '[', labelAttr);
-        var fillWidth = Math.round(progress * barWidth);
-        for (var i = 0; i < barWidth; i++) {
+        frame.setData(x, y, '[', labelAttr);
+        var fillWidth = Math.round(progress * width);
+        for (var i = 0; i < width; i++) {
             var attr = (i < fillWidth) ? filledAttr : emptyAttr;
             var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-            frame.setData(barX + 1 + i, y, char, attr);
+            frame.setData(x + 1 + i, y, char, attr);
         }
-        frame.setData(barX + barWidth + 1, y, ']', finishAttr);
+        frame.setData(x + width + 1, y, ']', labelAttr);
     };
-    FrameRenderer.prototype.renderSpeedometerBar = function (frame, speed, maxSpeed) {
-        var y = this.height - 1;
-        var barX = 2;
-        var barWidth = 20;
+    FrameRenderer.prototype.renderSpeedometerBarCompact = function (frame, speed, maxSpeed, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var filledAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
         var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
         var highAttr = colorToAttr({ fg: LIGHTRED, bg: BG_BLACK });
-        frame.setData(barX, y, '[', labelAttr);
-        var fillAmount = speed / maxSpeed;
-        var fillWidth = Math.round(fillAmount * barWidth);
-        for (var i = 0; i < barWidth; i++) {
-            var attr = (i < fillWidth) ? (fillAmount > 0.8 ? highAttr : filledAttr) : emptyAttr;
+        var boostAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+        frame.setData(x, y, '[', labelAttr);
+        var fillAmount = Math.min(1.0, speed / maxSpeed);
+        var isBoost = speed > maxSpeed;
+        var fillWidth = Math.round(fillAmount * width);
+        for (var i = 0; i < width; i++) {
+            var attr;
+            if (i < fillWidth) {
+                if (isBoost) {
+                    attr = boostAttr;
+                }
+                else if (fillAmount > 0.8) {
+                    attr = highAttr;
+                }
+                else {
+                    attr = filledAttr;
+                }
+            }
+            else {
+                attr = emptyAttr;
+            }
             var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-            frame.setData(barX + 1 + i, y, char, attr);
+            frame.setData(x + 1 + i, y, char, attr);
         }
-        frame.setData(barX + barWidth + 1, y, ']', labelAttr);
+        frame.setData(x + width + 1, y, ']', labelAttr);
     };
     FrameRenderer.prototype.writeStringToFrame = function (frame, x, y, str, attr) {
         for (var i = 0; i < str.length; i++) {
@@ -11628,9 +12772,10 @@ var RaceMode;
     RaceMode["TIME_TRIAL"] = "time_trial";
     RaceMode["GRAND_PRIX"] = "grand_prix";
 })(RaceMode || (RaceMode = {}));
-function createInitialState(track, road, playerVehicle, raceMode) {
+function createInitialState(track, trackDef, road, playerVehicle, raceMode) {
     return {
         track: track,
+        trackDefinition: trackDef,
         road: road,
         vehicles: [playerVehicle],
         playerVehicle: playerVehicle,
@@ -11693,6 +12838,15 @@ var RaceSystem = (function () {
                 vehicle.lap++;
                 debugLog.info("LAP COMPLETE! Vehicle " + vehicle.id + " now on lap " + vehicle.lap + "/" + state.track.laps);
                 debugLog.info("  lastZ=" + lastZ.toFixed(1) + " currentZ=" + currentZ.toFixed(1) + " roadLength=" + roadLength);
+                if (!vehicle.isNPC) {
+                    var lapTime = state.time - state.lapStartTime;
+                    state.lapTimes.push(lapTime);
+                    if (state.bestLapTime < 0 || lapTime < state.bestLapTime) {
+                        state.bestLapTime = lapTime;
+                    }
+                    state.lapStartTime = state.time;
+                    debugLog.info("  Lap time: " + lapTime.toFixed(2) + " (best: " + state.bestLapTime.toFixed(2) + ")");
+                }
                 if (!vehicle.isNPC && vehicle.lap > state.track.laps) {
                     state.finished = true;
                     state.racing = false;
@@ -11701,7 +12855,7 @@ var RaceSystem = (function () {
             }
             this.lastTrackZ[vehicle.id] = currentZ;
         }
-        PositionIndicator.calculatePositions(state.vehicles, roadLength);
+        PositionIndicator.calculatePositions(state.vehicles);
     };
     return RaceSystem;
 }());
@@ -11713,7 +12867,7 @@ var DEFAULT_CONFIG = {
     maxTicksPerFrame: 5
 };
 var Game = (function () {
-    function Game(config) {
+    function Game(config, highScoreManager) {
         this.config = config || DEFAULT_CONFIG;
         this.running = false;
         this.paused = false;
@@ -11730,6 +12884,7 @@ var Game = (function () {
         this.physicsSystem = new PhysicsSystem();
         this.raceSystem = new RaceSystem();
         this.itemSystem = new ItemSystem();
+        this.highScoreManager = highScoreManager || null;
         this.state = null;
     }
     Game.prototype.initWithTrack = function (trackDef, raceMode) {
@@ -11766,7 +12921,7 @@ var Game = (function () {
         playerVehicle.driver = new HumanDriver(this.controls);
         playerVehicle.color = YELLOW;
         playerVehicle.isNPC = false;
-        this.state = createInitialState(track, road, playerVehicle, mode);
+        this.state = createInitialState(track, trackDef, road, playerVehicle, mode);
         if (mode === RaceMode.GRAND_PRIX) {
             this.spawnRacers(7, road);
             this.positionOnStartingGrid(road);
@@ -11786,11 +12941,10 @@ var Game = (function () {
         }
         this.physicsSystem.init(this.state);
         this.raceSystem.init(this.state);
-        this.itemSystem.initFromTrack(track);
-        var totalRacers = mode === RaceMode.GRAND_PRIX ? 8 : 1;
-        this.hud.init(totalRacers);
+        this.itemSystem.initFromTrack(track, road);
+        this.hud.init(this.state.time);
         this.running = true;
-        this.state.racing = true;
+        this.state.racing = false;
         debugLog.info("Game initialized with track: " + trackDef.name);
         debugLog.info("  Race mode: " + mode);
         debugLog.info("  Road segments: " + road.segments.length);
@@ -11836,6 +12990,7 @@ var Game = (function () {
                 for (var i = 0; i < ticks; i++) {
                     this.tick(this.timestep.getDt());
                 }
+                this.controls.endFrame();
                 if (this.state.time - lastLogTime >= 1.0) {
                     debugLog.logVehicle(this.state.playerVehicle);
                     lastLogTime = this.state.time;
@@ -11868,7 +13023,6 @@ var Game = (function () {
             this.controls.endFrame();
             return;
         }
-        this.controls.endFrame();
     };
     Game.prototype.tick = function (dt) {
         if (!this.state)
@@ -11877,9 +13031,11 @@ var Game = (function () {
             this.state.countdown -= dt;
             if (this.state.countdown <= 0) {
                 this.state.raceStarted = true;
+                this.state.racing = true;
                 this.state.countdown = 0;
                 this.state.time = 0;
                 this.state.lapStartTime = 0;
+                this.hud.init(0);
                 for (var i = 0; i < this.state.vehicles.length; i++) {
                     var vehicle = this.state.vehicles[i];
                     var driver = vehicle.driver;
@@ -11898,10 +13054,23 @@ var Game = (function () {
             this.activateDormantNPCs();
             this.applyNPCPacing();
         }
-        this.itemSystem.update(dt);
+        this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
         this.itemSystem.checkPickups(this.state.vehicles);
-        if (this.controls.wasJustPressed(GameAction.USE_ITEM)) {
-            this.itemSystem.useItem(this.state.playerVehicle);
+        if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
+            this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles);
+        }
+        for (var i = 0; i < this.state.vehicles.length; i++) {
+            var vehicle = this.state.vehicles[i];
+            if (vehicle === this.state.playerVehicle)
+                continue;
+            if (!vehicle.isRacer)
+                continue;
+            if (!vehicle.driver)
+                continue;
+            var intent = vehicle.driver.update(vehicle, this.state.track, dt);
+            if (intent.useItem && vehicle.heldItem !== null) {
+                this.itemSystem.useItem(vehicle, this.state.vehicles);
+            }
         }
         Collision.processVehicleCollisions(this.state.vehicles);
         if (this.state.raceMode !== RaceMode.GRAND_PRIX) {
@@ -11917,21 +13086,56 @@ var Game = (function () {
         var finalPosition = player.racePosition;
         var finalTime = this.state.time;
         var bestLap = this.state.bestLapTime > 0 ? this.state.bestLapTime : 0;
+        var trackTimePosition = 0;
+        var lapTimePosition = 0;
+        if (this.highScoreManager && this.state.trackDefinition) {
+            var trackId = this.state.trackDefinition.id;
+            trackTimePosition = this.highScoreManager.checkQualification(HighScoreType.TRACK_TIME, trackId, finalTime);
+            if (bestLap > 0) {
+                lapTimePosition = this.highScoreManager.checkQualification(HighScoreType.LAP_TIME, trackId, bestLap);
+            }
+            var playerName = "Player";
+            try {
+                if (typeof user !== 'undefined' && user && user.alias) {
+                    playerName = user.alias;
+                }
+            }
+            catch (e) {
+            }
+            if (trackTimePosition > 0) {
+                this.highScoreManager.submitScore(HighScoreType.TRACK_TIME, trackId, playerName, finalTime, this.state.track.name);
+                logInfo("NEW HIGH SCORE! Track time #" + trackTimePosition + ": " + finalTime.toFixed(2));
+            }
+            if (lapTimePosition > 0) {
+                this.highScoreManager.submitScore(HighScoreType.LAP_TIME, trackId, playerName, bestLap, this.state.track.name);
+                logInfo("NEW HIGH SCORE! Lap time #" + lapTimePosition + ": " + bestLap.toFixed(2));
+            }
+        }
+        this.renderResultsScreen(finalPosition, finalTime, bestLap, trackTimePosition, lapTimePosition);
         while (true) {
-            this.renderResultsScreen(finalPosition, finalTime, bestLap);
-            var key = console.inkey(K_NONE, 0);
+            var key = console.inkey(K_NONE, 100);
             if (key === '\r' || key === '\n') {
                 debugLog.info("ENTER pressed, exiting game over screen");
                 break;
             }
-            mswait(16);
+        }
+        if (this.highScoreManager && this.state.trackDefinition && (trackTimePosition > 0 || lapTimePosition > 0)) {
+            var trackId = this.state.trackDefinition.id;
+            if (trackTimePosition > 0) {
+                showHighScoreList(HighScoreType.TRACK_TIME, trackId, "=== TRACK TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
+            }
+            if (lapTimePosition > 0) {
+                showHighScoreList(HighScoreType.LAP_TIME, trackId, "=== LAP TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
+            }
         }
     };
-    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap) {
+    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap, trackTimePosition, lapTimePosition) {
         this.renderer.beginFrame();
-        var composer = this.renderer.getComposer();
-        for (var y = 0; y < 25; y++) {
-            for (var x = 0; x < 80; x++) {
+        var screenWidth = console.screen_columns;
+        var screenHeight = console.screen_rows;
+        var composer = new SceneComposer(screenWidth, screenHeight);
+        for (var y = 0; y < screenHeight; y++) {
+            for (var x = 0; x < screenWidth; x++) {
                 composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
             }
         }
@@ -11942,8 +13146,8 @@ var Game = (function () {
         var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
         var boxWidth = 40;
         var boxHeight = 12;
-        var boxX = 20;
-        var topY = 6;
+        var boxX = Math.floor((screenWidth - boxWidth) / 2);
+        var topY = Math.floor((screenHeight - boxHeight) / 2);
         composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
         composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
         composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
@@ -11967,6 +13171,15 @@ var Game = (function () {
         composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
         composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
         composer.writeString(boxX + 22, topY + 8, this.state.track.name, valueAttr);
+        var highScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+        if (trackTimePosition && trackTimePosition > 0) {
+            var msg = "NEW HIGH SCORE! #" + trackTimePosition + " Track Time";
+            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 4, msg, highScoreAttr);
+        }
+        if (lapTimePosition && lapTimePosition > 0) {
+            var msg = "NEW HIGH SCORE! #" + lapTimePosition + " Lap Time";
+            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 3, msg, highScoreAttr);
+        }
         var prompt = "Press ENTER to continue";
         composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
         this.flushComposerToConsole(composer);
@@ -12098,7 +13311,7 @@ var Game = (function () {
         this.renderer.beginFrame();
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
         this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);
-        this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes());
+        this.renderer.renderEntities(this.state.playerVehicle, this.state.vehicles, this.itemSystem.getItemBoxes(), this.itemSystem.getProjectiles());
         var hudData = this.hud.compute(this.state.playerVehicle, this.state.track, this.state.road, this.state.vehicles, this.state.time, this.state.countdown, this.state.raceMode);
         this.renderer.renderHud(hudData);
         this.renderer.endFrame();
@@ -12146,8 +13359,8 @@ var Game = (function () {
         if (!this.state)
             return;
         var vehicles = this.state.vehicles;
-        var gridColSpacing = 0.4;
-        var startZ = 0;
+        var gridRowSpacing = 20;
+        var gridColSpacing = 0.5;
         var playerIdx = -1;
         for (var p = 0; p < vehicles.length; p++) {
             if (!vehicles[p].isNPC) {
@@ -12155,27 +13368,31 @@ var Game = (function () {
                 break;
             }
         }
-        var gridSlot = 0;
+        var numAICars = vehicles.length - 1;
+        var totalGridLength = Math.ceil(numAICars / 2) * gridRowSpacing;
+        var aiSlot = 0;
         for (var v = 0; v < vehicles.length; v++) {
             var vehicle = vehicles[v];
-            vehicle.trackZ = startZ;
-            vehicle.z = startZ;
             if (v === playerIdx) {
+                vehicle.trackZ = totalGridLength + gridRowSpacing;
+                vehicle.z = vehicle.trackZ;
                 vehicle.playerX = 0;
             }
             else {
-                var side = (gridSlot % 2 === 0) ? -1 : 1;
-                var offset = Math.floor(gridSlot / 2) * 0.15;
-                vehicle.playerX = side * (gridColSpacing + offset);
-                gridSlot++;
+                var row = Math.floor(aiSlot / 2);
+                var col = aiSlot % 2;
+                vehicle.trackZ = totalGridLength - (row * gridRowSpacing);
+                vehicle.z = vehicle.trackZ;
+                vehicle.playerX = (col === 0) ? -gridColSpacing : gridColSpacing;
+                aiSlot++;
             }
             vehicle.speed = 0;
             vehicle.lap = 1;
             vehicle.checkpoint = 0;
-            vehicle.racePosition = v + 1;
-            debugLog.info("Grid position " + (v + 1) + ": Z=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
+            vehicle.racePosition = 1;
+            debugLog.info("Grid slot " + v + " (NPC=" + vehicle.isNPC + "): trackZ=" + vehicle.trackZ.toFixed(0) + " X=" + vehicle.playerX.toFixed(2));
         }
-        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid");
+        debugLog.info("Positioned " + vehicles.length + " vehicles on starting grid (player at front)");
     };
     Game.prototype.spawnNPCs = function (count, road) {
         if (!this.state)
@@ -12273,14 +13490,14 @@ var CIRCUITS = [
 var LEFT_PANEL_WIDTH = 22;
 var RIGHT_PANEL_START = 24;
 var SCREEN_WIDTH = 80;
-function showTrackSelector() {
+function showTrackSelector(highScoreManager) {
     var state = {
         mode: 'circuit',
         circuitIndex: 0,
         trackIndex: 0
     };
     console.clear(LIGHTGRAY);
-    drawSelectorUI(state);
+    drawSelectorUI(state, highScoreManager);
     while (true) {
         var key = console.inkey(K_UPPER, 100);
         if (key === '')
@@ -12350,7 +13567,7 @@ function showTrackSelector() {
         }
         if (needsRedraw) {
             console.clear(LIGHTGRAY);
-            drawSelectorUI(state);
+            drawSelectorUI(state, highScoreManager);
         }
     }
 }
@@ -12363,10 +13580,10 @@ function getCircuitTracks(circuit) {
     }
     return tracks;
 }
-function drawSelectorUI(state) {
+function drawSelectorUI(state, highScoreManager) {
     drawHeader();
     drawLeftPanel(state);
-    drawRightPanel(state);
+    drawRightPanel(state, highScoreManager);
     drawControls(state);
 }
 function drawHeader() {
@@ -12473,7 +13690,7 @@ function drawTrackList(state, startY) {
     console.attributes = isPlaySelected ? LIGHTGREEN : GREEN;
     console.print(GLYPH.TRIANGLE_RIGHT + ' PLAY CUP');
 }
-function drawRightPanel(state) {
+function drawRightPanel(state, highScoreManager) {
     var circuit = CIRCUITS[state.circuitIndex];
     console.gotoxy(RIGHT_PANEL_START, 5);
     console.attributes = WHITE;
@@ -12482,7 +13699,7 @@ function drawRightPanel(state) {
         console.gotoxy(RIGHT_PANEL_START, 6);
         console.attributes = DARKGRAY;
         console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
-        drawCircuitInfo(circuit);
+        drawCircuitInfo(circuit, highScoreManager);
     }
     else {
         var track = getTrackDefinition(circuit.trackIds[state.trackIndex]);
@@ -12491,12 +13708,12 @@ function drawRightPanel(state) {
             console.gotoxy(RIGHT_PANEL_START, 6);
             console.attributes = DARKGRAY;
             console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
-            drawTrackInfo(track, circuit.color);
+            drawTrackInfo(track, circuit.color, highScoreManager);
             drawTrackRoute(track);
         }
     }
 }
-function drawCircuitInfo(circuit) {
+function drawCircuitInfo(circuit, _highScoreManager) {
     var y = 8;
     console.gotoxy(RIGHT_PANEL_START, y);
     console.attributes = circuit.color;
@@ -12545,7 +13762,7 @@ function drawCircuitInfo(circuit) {
     console.attributes = WHITE;
     console.print(formatTime(totalTime));
 }
-function drawTrackInfo(track, _accentColor) {
+function drawTrackInfo(track, _accentColor, highScoreManager) {
     var theme = getTrackTheme(track);
     console.gotoxy(RIGHT_PANEL_START, 8);
     console.attributes = theme.road.edge.fg;
@@ -12555,6 +13772,33 @@ function drawTrackInfo(track, _accentColor) {
     console.gotoxy(RIGHT_PANEL_START, 9);
     console.attributes = DARKGRAY;
     console.print(track.laps + ' laps');
+    if (highScoreManager) {
+        var trackTimeScore = highScoreManager.getTopScore(HighScoreType.TRACK_TIME, track.id);
+        var lapTimeScore = highScoreManager.getTopScore(HighScoreType.LAP_TIME, track.id);
+        if (trackTimeScore || lapTimeScore) {
+            console.gotoxy(RIGHT_PANEL_START, 10);
+            console.attributes = DARKGRAY;
+            console.print('High Scores:');
+            if (trackTimeScore) {
+                console.gotoxy(RIGHT_PANEL_START + 2, 11);
+                console.attributes = LIGHTGRAY;
+                console.print('Track: ');
+                console.attributes = LIGHTGREEN;
+                console.print(LapTimer.format(trackTimeScore.time) + ' ');
+                console.attributes = DARKGRAY;
+                console.print('(' + trackTimeScore.playerName + ')');
+            }
+            if (lapTimeScore) {
+                console.gotoxy(RIGHT_PANEL_START + 2, 12);
+                console.attributes = LIGHTGRAY;
+                console.print('Lap:   ');
+                console.attributes = LIGHTGREEN;
+                console.print(LapTimer.format(lapTimeScore.time) + ' ');
+                console.attributes = DARKGRAY;
+                console.print('(' + lapTimeScore.playerName + ')');
+            }
+        }
+    }
     drawThemedTrackMap(track, theme);
 }
 function drawThemedTrackMap(track, theme) {
@@ -13032,12 +14276,7 @@ function padRight(str, len) {
     return str.substring(0, len);
 }
 "use strict";
-debugLog.init();
-debugLog.info("OutRun ANSI starting...");
-debugLog.info("Synchronet BBS Door Game");
 if (typeof console === 'undefined' || console === null) {
-    debugLog.error("No console object - not running in BBS session");
-    debugLog.close();
     print("ERROR: OutRun ANSI must be run from a Synchronet BBS terminal session.");
     print("This game cannot run directly with jsexec.");
     print("");
@@ -13048,50 +14287,76 @@ if (typeof console === 'undefined' || console === null) {
 }
 function showTitleScreen() {
     console.clear();
-    console.attributes = LIGHTMAGENTA;
-    var title = [
-        "",
-        "     .d88b.  db    db d888888b d8888b. db    db d8b   db",
-        "    .8P  Y8. 88    88 `~~88~~' 88  `8D 88    88 888o  88",
-        "    88    88 88    88    88    88oobY' 88    88 88V8o 88",
-        "    88    88 88    88    88    88`8b   88    88 88 V8o88",
-        "    `8b  d8' 88b  d88    88    88 `88. 88b  d88 88  V888",
-        "     `Y88P'  ~Y8888P'    YP    88   YD ~Y8888P' VP   V8P",
-        ""
-    ];
-    for (var i = 0; i < title.length; i++) {
-        console.print(title[i] + "\r\n");
+    var titleFile = "";
+    var f = new File(js.exec_dir + "title.bin");
+    if (f.exists) {
+        titleFile = js.exec_dir + "title.bin";
     }
-    console.attributes = CYAN;
-    console.print("              =========================================\r\n");
-    console.attributes = LIGHTCYAN;
-    console.print("                   A N S I   S Y N T H W A V E\r\n");
-    console.print("                        R A C E R\r\n");
-    console.attributes = CYAN;
-    console.print("              =========================================\r\n");
-    console.print("\r\n");
-    console.attributes = DARKGRAY;
-    console.print("         /     |     \\         /     |     \\\r\n");
-    console.print("        /      |      \\       /      |      \\\r\n");
-    console.attributes = CYAN;
-    console.print("    ===/=======+=======\\=====/=======+=======\\===\r\n");
-    console.attributes = DARKGRAY;
-    console.print("      /        |        \\   /        |        \\\r\n");
-    console.print("\r\n");
-    console.attributes = WHITE;
-    console.print("                    Controls:\r\n");
-    console.attributes = LIGHTGRAY;
-    console.print("        W/Up = Accelerate   A/Left = Steer Left\r\n");
-    console.print("        S/Dn = Brake        D/Right = Steer Right\r\n");
-    console.print("        SPACE = Use Item    P = Pause\r\n");
-    console.print("\r\n");
-    console.attributes = YELLOW;
-    console.print("              Press any key to start racing...\r\n");
-    console.print("                     Q to quit\r\n");
-    console.print("\r\n");
-    console.attributes = DARKGRAY;
-    console.print("     Version 0.1.0 (Iteration 0) - Bootstrap Build\r\n");
-    console.attributes = LIGHTGRAY;
+    else {
+        f = new File(js.exec_dir + "title.ans");
+        if (f.exists) {
+            titleFile = js.exec_dir + "title.ans";
+        }
+    }
+    if (titleFile !== "") {
+        try {
+            load('frame.js');
+            var titleFrame = new Frame(1, 1, console.screen_columns, console.screen_rows, BG_BLACK);
+            titleFrame.open();
+            titleFrame.load(titleFile);
+            titleFrame.draw();
+            titleFrame.close();
+        }
+        catch (e) {
+            logError("Error loading custom title: " + e);
+        }
+    }
+    else {
+        console.attributes = LIGHTMAGENTA;
+        var title = [
+            "",
+            "     .d88b.  db    db d888888b d8888b. db    db d8b   db",
+            "    .8P  Y8. 88    88 `~~88~~' 88  `8D 88    88 888o  88",
+            "    88    88 88    88    88    88oobY' 88    88 88V8o 88",
+            "    88    88 88    88    88    88`8b   88    88 88 V8o88",
+            "    `8b  d8' 88b  d88    88    88 `88. 88b  d88 88  V888",
+            "     `Y88P'  ~Y8888P'    YP    88   YD ~Y8888P' VP   V8P",
+            ""
+        ];
+        for (var i = 0; i < title.length; i++) {
+            console.print(title[i] + "\r\n");
+        }
+        console.attributes = CYAN;
+        console.print("              =========================================\r\n");
+        console.attributes = LIGHTCYAN;
+        console.print("                   A N S I   S Y N T H W A V E\r\n");
+        console.print("                        R A C E R\r\n");
+        console.attributes = CYAN;
+        console.print("              =========================================\r\n");
+        console.print("\r\n");
+        console.attributes = DARKGRAY;
+        console.print("         /     |     \\         /     |     \\\r\n");
+        console.print("        /      |      \\       /      |      \\\r\n");
+        console.attributes = CYAN;
+        console.print("    ===/=======+=======\\=====/=======+=======\\===\r\n");
+        console.attributes = DARKGRAY;
+        console.print("      /        |        \\   /        |        \\\r\n");
+        console.print("\r\n");
+        console.attributes = WHITE;
+        console.print("                    Controls:\r\n");
+        console.attributes = LIGHTGRAY;
+        console.print("        W/Up = Accelerate   A/Left = Steer Left\r\n");
+        console.print("        S/Dn = Brake        D/Right = Steer Right\r\n");
+        console.print("        SPACE = Use Item    P = Pause\r\n");
+        console.print("\r\n");
+        console.attributes = YELLOW;
+        console.print("              Press any key to start racing...\r\n");
+        console.print("                     Q to quit\r\n");
+        console.print("\r\n");
+        console.attributes = DARKGRAY;
+        console.print("     Version 0.1.0 (Iteration 0) - Bootstrap Build\r\n");
+        console.attributes = LIGHTGRAY;
+    }
 }
 function waitForTitleInput() {
     while (true) {
@@ -13126,6 +14391,8 @@ function showRaceEndScreen() {
 function main() {
     debugLog.separator("GAME START");
     debugLog.info("Entering main()");
+    load('json-db.js');
+    var highScoreManager = new HighScoreManager();
     try {
         var keepPlaying = true;
         while (keepPlaying) {
@@ -13137,14 +14404,14 @@ function main() {
                 break;
             }
             debugLog.info("Showing track selector");
-            var trackSelection = showTrackSelector();
+            var trackSelection = showTrackSelector(highScoreManager);
             if (!trackSelection.selected || !trackSelection.track) {
                 debugLog.info("User went back from track selection");
                 continue;
             }
             debugLog.info("Selected track: " + trackSelection.track.name);
             debugLog.separator("GAME INIT");
-            var game = new Game();
+            var game = new Game(undefined, highScoreManager);
             game.initWithTrack(trackSelection.track);
             debugLog.separator("GAME LOOP");
             debugLog.info("Entering game loop");
@@ -13172,8 +14439,6 @@ function main() {
     }
     finally {
         console.attributes = LIGHTGRAY;
-        debugLog.separator("LOG END");
-        debugLog.close();
     }
 }
 main();

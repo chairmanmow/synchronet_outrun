@@ -4,9 +4,10 @@ var RaceMode;
     RaceMode["TIME_TRIAL"] = "time_trial";
     RaceMode["GRAND_PRIX"] = "grand_prix";
 })(RaceMode || (RaceMode = {}));
-function createInitialState(track, road, playerVehicle, raceMode) {
+function createInitialState(track, trackDef, road, playerVehicle, raceMode) {
     return {
         track: track,
+        trackDefinition: trackDef,
         road: road,
         vehicles: [playerVehicle],
         playerVehicle: playerVehicle,

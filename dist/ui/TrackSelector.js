@@ -60,14 +60,14 @@ var CIRCUITS = [
 var LEFT_PANEL_WIDTH = 22;
 var RIGHT_PANEL_START = 24;
 var SCREEN_WIDTH = 80;
-function showTrackSelector() {
+function showTrackSelector(highScoreManager) {
     var state = {
         mode: 'circuit',
         circuitIndex: 0,
         trackIndex: 0
     };
     console.clear(LIGHTGRAY);
-    drawSelectorUI(state);
+    drawSelectorUI(state, highScoreManager);
     while (true) {
         var key = console.inkey(K_UPPER, 100);
         if (key === '')
@@ -137,7 +137,7 @@ function showTrackSelector() {
         }
         if (needsRedraw) {
             console.clear(LIGHTGRAY);
-            drawSelectorUI(state);
+            drawSelectorUI(state, highScoreManager);
         }
     }
 }
@@ -150,10 +150,10 @@ function getCircuitTracks(circuit) {
     }
     return tracks;
 }
-function drawSelectorUI(state) {
+function drawSelectorUI(state, highScoreManager) {
     drawHeader();
     drawLeftPanel(state);
-    drawRightPanel(state);
+    drawRightPanel(state, highScoreManager);
     drawControls(state);
 }
 function drawHeader() {
@@ -260,7 +260,7 @@ function drawTrackList(state, startY) {
     console.attributes = isPlaySelected ? LIGHTGREEN : GREEN;
     console.print(GLYPH.TRIANGLE_RIGHT + ' PLAY CUP');
 }
-function drawRightPanel(state) {
+function drawRightPanel(state, highScoreManager) {
     var circuit = CIRCUITS[state.circuitIndex];
     console.gotoxy(RIGHT_PANEL_START, 5);
     console.attributes = WHITE;
@@ -269,7 +269,7 @@ function drawRightPanel(state) {
         console.gotoxy(RIGHT_PANEL_START, 6);
         console.attributes = DARKGRAY;
         console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
-        drawCircuitInfo(circuit);
+        drawCircuitInfo(circuit, highScoreManager);
     }
     else {
         var track = getTrackDefinition(circuit.trackIds[state.trackIndex]);
@@ -278,12 +278,12 @@ function drawRightPanel(state) {
             console.gotoxy(RIGHT_PANEL_START, 6);
             console.attributes = DARKGRAY;
             console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
-            drawTrackInfo(track, circuit.color);
+            drawTrackInfo(track, circuit.color, highScoreManager);
             drawTrackRoute(track);
         }
     }
 }
-function drawCircuitInfo(circuit) {
+function drawCircuitInfo(circuit, _highScoreManager) {
     var y = 8;
     console.gotoxy(RIGHT_PANEL_START, y);
     console.attributes = circuit.color;
@@ -332,7 +332,7 @@ function drawCircuitInfo(circuit) {
     console.attributes = WHITE;
     console.print(formatTime(totalTime));
 }
-function drawTrackInfo(track, _accentColor) {
+function drawTrackInfo(track, _accentColor, highScoreManager) {
     var theme = getTrackTheme(track);
     console.gotoxy(RIGHT_PANEL_START, 8);
     console.attributes = theme.road.edge.fg;
@@ -342,6 +342,33 @@ function drawTrackInfo(track, _accentColor) {
     console.gotoxy(RIGHT_PANEL_START, 9);
     console.attributes = DARKGRAY;
     console.print(track.laps + ' laps');
+    if (highScoreManager) {
+        var trackTimeScore = highScoreManager.getTopScore(HighScoreType.TRACK_TIME, track.id);
+        var lapTimeScore = highScoreManager.getTopScore(HighScoreType.LAP_TIME, track.id);
+        if (trackTimeScore || lapTimeScore) {
+            console.gotoxy(RIGHT_PANEL_START, 10);
+            console.attributes = DARKGRAY;
+            console.print('High Scores:');
+            if (trackTimeScore) {
+                console.gotoxy(RIGHT_PANEL_START + 2, 11);
+                console.attributes = LIGHTGRAY;
+                console.print('Track: ');
+                console.attributes = LIGHTGREEN;
+                console.print(LapTimer.format(trackTimeScore.time) + ' ');
+                console.attributes = DARKGRAY;
+                console.print('(' + trackTimeScore.playerName + ')');
+            }
+            if (lapTimeScore) {
+                console.gotoxy(RIGHT_PANEL_START + 2, 12);
+                console.attributes = LIGHTGRAY;
+                console.print('Lap:   ');
+                console.attributes = LIGHTGREEN;
+                console.print(LapTimer.format(lapTimeScore.time) + ' ');
+                console.attributes = DARKGRAY;
+                console.print('(' + lapTimeScore.playerName + ')');
+            }
+        }
+    }
     drawThemedTrackMap(track, theme);
 }
 function drawThemedTrackMap(track, theme) {

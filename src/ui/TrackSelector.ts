@@ -122,7 +122,7 @@ var SCREEN_WIDTH = 80;
 /**
  * Display the track selector and wait for user input.
  */
-function showTrackSelector(): TrackSelectionResult {
+function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionResult {
   var state: SelectorState = {
     mode: 'circuit',
     circuitIndex: 0,
@@ -131,7 +131,7 @@ function showTrackSelector(): TrackSelectionResult {
 
   // Initial draw
   console.clear(LIGHTGRAY);
-  drawSelectorUI(state);
+  drawSelectorUI(state, highScoreManager);
 
   while (true) {
     var key = console.inkey(K_UPPER, 100);
@@ -207,7 +207,7 @@ function showTrackSelector(): TrackSelectionResult {
 
     if (needsRedraw) {
       console.clear(LIGHTGRAY);
-      drawSelectorUI(state);
+      drawSelectorUI(state, highScoreManager);
     }
   }
 }
@@ -231,10 +231,10 @@ function getCircuitTracks(circuit: Circuit): TrackDefinition[] {
 /**
  * Draw the complete selector UI.
  */
-function drawSelectorUI(state: SelectorState): void {
+function drawSelectorUI(state: SelectorState, highScoreManager?: HighScoreManager): void {
   drawHeader();
   drawLeftPanel(state);
-  drawRightPanel(state);
+  drawRightPanel(state, highScoreManager);
   drawControls(state);
 }
 
@@ -391,7 +391,7 @@ function drawTrackList(state: SelectorState, startY: number): void {
 /**
  * Draw the right panel - track info and route visualization.
  */
-function drawRightPanel(state: SelectorState): void {
+function drawRightPanel(state: SelectorState, highScoreManager?: HighScoreManager): void {
   var circuit = CIRCUITS[state.circuitIndex];
   
   // Panel header
@@ -406,7 +406,7 @@ function drawRightPanel(state: SelectorState): void {
     console.attributes = DARKGRAY;
     console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
     
-    drawCircuitInfo(circuit);
+    drawCircuitInfo(circuit, highScoreManager);
   } else {
     // Individual track selected - show track info
     var track = getTrackDefinition(circuit.trackIds[state.trackIndex]);
@@ -417,7 +417,7 @@ function drawRightPanel(state: SelectorState): void {
       console.attributes = DARKGRAY;
       console.print(repeatChar(GLYPH.BOX_H, SCREEN_WIDTH - RIGHT_PANEL_START - 1));
       
-      drawTrackInfo(track, circuit.color);
+      drawTrackInfo(track, circuit.color, highScoreManager);
       drawTrackRoute(track);
     }
   }
@@ -426,7 +426,7 @@ function drawRightPanel(state: SelectorState): void {
 /**
  * Draw circuit info - shows track listing for the circuit.
  */
-function drawCircuitInfo(circuit: Circuit): void {
+function drawCircuitInfo(circuit: Circuit, _highScoreManager?: HighScoreManager): void {
   var y = 8;
   
   // Circuit name with icon
@@ -495,7 +495,7 @@ function drawCircuitInfo(circuit: Circuit): void {
 /**
  * Draw track info - large themed track map as the hero element.
  */
-function drawTrackInfo(track: TrackDefinition, _accentColor: number): void {
+function drawTrackInfo(track: TrackDefinition, _accentColor: number, highScoreManager?: HighScoreManager): void {
   var theme = getTrackTheme(track);
   
   // Track name in theme color with difficulty stars
@@ -509,6 +509,38 @@ function drawTrackInfo(track: TrackDefinition, _accentColor: number): void {
   console.gotoxy(RIGHT_PANEL_START, 9);
   console.attributes = DARKGRAY;
   console.print(track.laps + ' laps');
+  
+  // High scores for this track
+  if (highScoreManager) {
+    var trackTimeScore = highScoreManager.getTopScore(HighScoreType.TRACK_TIME, track.id);
+    var lapTimeScore = highScoreManager.getTopScore(HighScoreType.LAP_TIME, track.id);
+    
+    if (trackTimeScore || lapTimeScore) {
+      console.gotoxy(RIGHT_PANEL_START, 10);
+      console.attributes = DARKGRAY;
+      console.print('High Scores:');
+      
+      if (trackTimeScore) {
+        console.gotoxy(RIGHT_PANEL_START + 2, 11);
+        console.attributes = LIGHTGRAY;
+        console.print('Track: ');
+        console.attributes = LIGHTGREEN;
+        console.print(LapTimer.format(trackTimeScore.time) + ' ');
+        console.attributes = DARKGRAY;
+        console.print('(' + trackTimeScore.playerName + ')');
+      }
+      
+      if (lapTimeScore) {
+        console.gotoxy(RIGHT_PANEL_START + 2, 12);
+        console.attributes = LIGHTGRAY;
+        console.print('Lap:   ');
+        console.attributes = LIGHTGREEN;
+        console.print(LapTimer.format(lapTimeScore.time) + ' ');
+        console.attributes = DARKGRAY;
+        console.print('(' + lapTimeScore.playerName + ')');
+      }
+    }
+  }
   
   // Large track map visualization - this is the hero
   drawThemedTrackMap(track, theme);

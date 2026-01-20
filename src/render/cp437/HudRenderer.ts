@@ -163,15 +163,31 @@ class HudRenderer {
     if (data.heldItem !== null) {
       var itemAttr: number;
       var itemChar: string;
-
-      switch (data.heldItem) {
+      var itemType = data.heldItem.type;
+      
+      switch (itemType) {
         case ItemType.MUSHROOM:
+        case ItemType.MUSHROOM_TRIPLE:
+        case ItemType.MUSHROOM_GOLDEN:
           itemAttr = colorToAttr(PALETTE.ITEM_MUSHROOM);
           itemChar = 'MUSH';
           break;
         case ItemType.SHELL:
+        case ItemType.SHELL_TRIPLE:
           itemAttr = colorToAttr(PALETTE.ITEM_SHELL);
           itemChar = 'SHEL';
+          break;
+        case ItemType.STAR:
+          itemAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+          itemChar = 'STAR';
+          break;
+        case ItemType.LIGHTNING:
+          itemAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+          itemChar = 'BOLT';
+          break;
+        case ItemType.BULLET:
+          itemAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+          itemChar = 'BULL';
           break;
         default:
           itemAttr = colorToAttr(PALETTE.HUD_VALUE);

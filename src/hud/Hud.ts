@@ -14,7 +14,7 @@ interface HudData {
   lapTime: number;
   bestLapTime: number;
   totalTime: number;
-  heldItem: ItemType | null;
+  heldItem: HeldItemData | null;  // Held item with type and uses count
   raceFinished: boolean;
   countdown: number;       // Seconds until race starts (0 = started)
   raceMode: RaceMode;      // Current race mode

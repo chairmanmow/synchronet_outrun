@@ -3,7 +3,7 @@ var RacerDriver = (function () {
     function RacerDriver(skill, name) {
         this.skill = clamp(skill, 0.3, 1.0);
         this.name = name || this.generateName();
-        this.targetSpeed = 0.35 + (this.skill * 0.30);
+        this.targetSpeed = 0.90 + (this.skill * 0.10);
         this._aggression = 0.3 + (this.skill * 0.5);
         this._reactionDelay = 0.3 - (this.skill * 0.25);
         this.preferredLine = (Math.random() - 0.5) * 0.6;
@@ -11,6 +11,7 @@ var RacerDriver = (function () {
         this.variationTimer = 0;
         this.speedVariation = 0;
         this.canMove = false;
+        this.itemUseCooldown = 0;
     }
     RacerDriver.prototype.setCanMove = function (canMove) {
         this.canMove = canMove;
@@ -35,6 +36,9 @@ var RacerDriver = (function () {
                 steer: 0,
                 useItem: false
             };
+        }
+        if (this.itemUseCooldown > 0) {
+            this.itemUseCooldown -= dt;
         }
         this.variationTimer += dt;
         if (this.variationTimer > 2 + Math.random() * 2) {
@@ -68,10 +72,21 @@ var RacerDriver = (function () {
         else if (currentX > 0.8) {
             this.steerAmount = -0.5;
         }
+        var shouldUseItem = false;
+        if (vehicle.heldItem !== null && this.itemUseCooldown <= 0) {
+            var useChance = 0.05 * dt;
+            if (vehicle.racePosition > 2) {
+                useChance *= 1.5;
+            }
+            if (Math.random() < useChance) {
+                shouldUseItem = true;
+                this.itemUseCooldown = 2 + Math.random() * 3;
+            }
+        }
         return {
             accelerate: clamp(accelerate, 0, 1),
             steer: this.steerAmount,
-            useItem: false
+            useItem: shouldUseItem
         };
     };
     RacerDriver.prototype.getSkill = function () {

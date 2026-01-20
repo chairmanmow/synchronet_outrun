@@ -16,14 +16,7 @@ var DebugLogger = (function () {
     }
     DebugLogger.prototype.init = function () {
         try {
-            var scriptDir = "";
-            if (typeof js !== 'undefined' && js.exec_dir) {
-                scriptDir = js.exec_dir;
-            }
-            else {
-                scriptDir = "./";
-            }
-            this.logPath = scriptDir + DEBUG_LOG_FILE;
+            this.logPath = DEBUG_LOG_FILE;
             this.startTime = Date.now();
             if (typeof console !== 'undefined' && console.print) {
                 console.print("DEBUG: Log path = " + this.logPath + "\r\n");

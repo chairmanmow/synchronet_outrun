@@ -11,9 +11,10 @@ class TrackLoader {
   // private basePath: string;
 
   constructor() {
-    // In Synchronet, js.exec_dir gives us the script directory
+    // Tracks will be loaded from data/tracks/ subdirectory
+    // Synchronet automatically resolves relative paths from script directory
     // TODO: Enable in Iteration 1
-    // this.basePath = typeof js !== 'undefined' ? js.exec_dir + "data/tracks/" : "data/tracks/";
+    // this.basePath = "data/tracks/";
   }
 
   /**

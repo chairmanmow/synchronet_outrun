@@ -43,6 +43,15 @@ var RaceSystem = (function () {
                 vehicle.lap++;
                 debugLog.info("LAP COMPLETE! Vehicle " + vehicle.id + " now on lap " + vehicle.lap + "/" + state.track.laps);
                 debugLog.info("  lastZ=" + lastZ.toFixed(1) + " currentZ=" + currentZ.toFixed(1) + " roadLength=" + roadLength);
+                if (!vehicle.isNPC) {
+                    var lapTime = state.time - state.lapStartTime;
+                    state.lapTimes.push(lapTime);
+                    if (state.bestLapTime < 0 || lapTime < state.bestLapTime) {
+                        state.bestLapTime = lapTime;
+                    }
+                    state.lapStartTime = state.time;
+                    debugLog.info("  Lap time: " + lapTime.toFixed(2) + " (best: " + state.bestLapTime.toFixed(2) + ")");
+                }
                 if (!vehicle.isNPC && vehicle.lap > state.track.laps) {
                     state.finished = true;
                     state.racing = false;
@@ -51,7 +60,7 @@ var RaceSystem = (function () {
             }
             this.lastTrackZ[vehicle.id] = currentZ;
         }
-        PositionIndicator.calculatePositions(state.vehicles, roadLength);
+        PositionIndicator.calculatePositions(state.vehicles);
     };
     return RaceSystem;
 }());

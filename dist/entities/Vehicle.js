@@ -41,23 +41,92 @@ var Vehicle = (function (_super) {
         _this.checkpoint = 0;
         _this.racePosition = 1;
         _this.heldItem = null;
+        _this.activeEffects = [];
         _this.color = YELLOW;
         _this.isOffRoad = false;
         _this.isCrashed = false;
         _this.crashTimer = 0;
         _this.flashTimer = 0;
+        _this.boostTimer = 0;
+        _this.boostMultiplier = 1.0;
+        _this.boostMinSpeed = 0;
         _this.isNPC = false;
         _this.isRacer = false;
         _this.npcType = 'sedan';
         _this.npcColorIndex = 0;
         return _this;
     }
+    Vehicle.prototype.hasEffect = function (type) {
+        for (var i = 0; i < this.activeEffects.length; i++) {
+            if (this.activeEffects[i].type === type)
+                return true;
+        }
+        return false;
+    };
+    Vehicle.prototype.addEffect = function (type, duration, sourceId) {
+        this.removeEffect(type);
+        this.activeEffects.push({ type: type, duration: duration, sourceVehicleId: sourceId });
+    };
+    Vehicle.prototype.removeEffect = function (type) {
+        for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+            if (this.activeEffects[i].type === type) {
+                this.activeEffects.splice(i, 1);
+            }
+        }
+    };
+    Vehicle.prototype.updateEffects = function (dt) {
+        for (var i = this.activeEffects.length - 1; i >= 0; i--) {
+            this.activeEffects[i].duration -= dt;
+            if (this.activeEffects[i].duration <= 0) {
+                var expiredType = this.activeEffects[i].type;
+                this.activeEffects.splice(i, 1);
+                this.onEffectExpired(expiredType);
+            }
+        }
+    };
+    Vehicle.prototype.onEffectExpired = function (type) {
+        switch (type) {
+            case ItemType.STAR:
+                this.boostTimer = 0;
+                this.boostMultiplier = 1.0;
+                this.boostMinSpeed = 0;
+                logInfo("Star effect expired");
+                break;
+            case ItemType.MUSHROOM_GOLDEN:
+            case ItemType.BULLET:
+                this.boostTimer = 0;
+                this.boostMultiplier = 1.0;
+                this.boostMinSpeed = 0;
+                if (this.heldItem !== null && this.heldItem.type === type) {
+                    this.heldItem = null;
+                    logInfo(ItemType[type] + " effect expired - item cleared from slot");
+                }
+                break;
+            case ItemType.LIGHTNING:
+                logInfo("Lightning effect expired");
+                break;
+        }
+    };
     Vehicle.prototype.updatePhysics = function (road, intent, dt) {
+        this.updateEffects(dt);
         if (this.flashTimer > 0) {
             this.flashTimer -= dt;
             if (this.flashTimer < 0)
                 this.flashTimer = 0;
         }
+        if (this.boostTimer > 0) {
+            this.boostTimer -= dt;
+            if (this.boostTimer <= 0) {
+                this.boostTimer = 0;
+                if (!this.hasEffect(ItemType.STAR) &&
+                    !this.hasEffect(ItemType.BULLET) &&
+                    !this.hasEffect(ItemType.MUSHROOM_GOLDEN)) {
+                    this.boostMultiplier = 1.0;
+                    this.boostMinSpeed = 0;
+                }
+            }
+        }
+        var lightningSlowdown = this.hasEffect(ItemType.LIGHTNING) ? 0.5 : 1.0;
         if (this.isCrashed) {
             this.crashTimer -= dt;
             if (this.crashTimer <= 0) {
@@ -90,19 +159,41 @@ var Vehicle = (function (_super) {
                 this.flashTimer = 0.5;
             }
         }
-        this.speed = clamp(this.speed, 0, VEHICLE_PHYSICS.MAX_SPEED);
+        var effectiveMaxSpeed = VEHICLE_PHYSICS.MAX_SPEED * this.boostMultiplier * lightningSlowdown;
+        var minSpeed = this.boostMinSpeed > 0 ? this.boostMinSpeed : 0;
+        this.speed = clamp(this.speed, minSpeed, effectiveMaxSpeed);
         var speedRatio = this.speed / VEHICLE_PHYSICS.MAX_SPEED;
-        if (this.speed >= 5) {
-            var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
-            var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
-            this.playerX += steerDelta;
+        var hasBullet = this.hasEffect(ItemType.BULLET);
+        if (hasBullet) {
+            var autoPilotRate = 3.0;
+            if (this.playerX < -0.05) {
+                this.playerX += autoPilotRate * dt;
+                if (this.playerX > 0)
+                    this.playerX = 0;
+            }
+            else if (this.playerX > 0.05) {
+                this.playerX -= autoPilotRate * dt;
+                if (this.playerX < 0)
+                    this.playerX = 0;
+            }
         }
-        var curve = road.getCurvature(this.trackZ);
-        var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
-        this.playerX += centrifugal;
-        if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT) {
+        else {
+            if (this.speed >= 5) {
+                var steerMult = 1.0 - (speedRatio * VEHICLE_PHYSICS.STEER_SPEED_FACTOR);
+                var steerDelta = intent.steer * VEHICLE_PHYSICS.STEER_RATE * steerMult * dt;
+                this.playerX += steerDelta;
+            }
+            var curve = road.getCurvature(this.trackZ);
+            var centrifugal = curve * speedRatio * VEHICLE_PHYSICS.CENTRIFUGAL * dt;
+            this.playerX += centrifugal;
+        }
+        var isInvincible = this.hasEffect(ItemType.STAR) || hasBullet;
+        if (Math.abs(this.playerX) > VEHICLE_PHYSICS.OFFROAD_LIMIT && !isInvincible) {
             this.triggerCrash();
             return;
+        }
+        if (isInvincible && Math.abs(this.playerX) > VEHICLE_PHYSICS.ROAD_HALF_WIDTH) {
+            this.playerX = clamp(this.playerX, -VEHICLE_PHYSICS.ROAD_HALF_WIDTH, VEHICLE_PHYSICS.ROAD_HALF_WIDTH);
         }
         this.trackZ += this.speed * dt;
         if (this.trackZ >= road.totalLength) {
