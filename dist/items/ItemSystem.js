@@ -62,7 +62,7 @@ var ItemSystem = (function () {
             }
         }
     };
-    ItemSystem.prototype.useItem = function (vehicle, allVehicles) {
+    ItemSystem.prototype.useItem = function (vehicle, allVehicles, fireBackward) {
         if (vehicle.heldItem === null)
             return;
         var itemType = vehicle.heldItem.type;
@@ -102,7 +102,7 @@ var ItemSystem = (function () {
             case ItemType.GREEN_SHELL:
             case ItemType.GREEN_SHELL_TRIPLE:
                 {
-                    var greenShell = Shell.fireGreen(vehicle);
+                    var greenShell = Shell.fireGreen(vehicle, fireBackward === true);
                     this.projectiles.push(greenShell);
                 }
                 consumed = true;
@@ -168,7 +168,7 @@ var ItemSystem = (function () {
             var v = allVehicles[i];
             if (v.id === user.id)
                 continue;
-            if (v.trackZ <= user.trackZ)
+            if (v.racePosition >= user.racePosition)
                 continue;
             if (v.hasEffect && (v.hasEffect(ItemType.STAR) ||
                 v.hasEffect(ItemType.BULLET))) {
@@ -177,7 +177,7 @@ var ItemSystem = (function () {
             v.addEffect(ItemType.LIGHTNING, duration, user.id);
             hitCount++;
         }
-        logInfo("Lightning struck " + hitCount + " opponents ahead!");
+        logInfo("Lightning struck " + hitCount + " opponents ahead (positions 1-" + (user.racePosition - 1) + ")!");
     };
     ItemSystem.prototype.randomItemType = function (position, totalRacers) {
         if (DEBUG_FORCE_ITEM !== null) {

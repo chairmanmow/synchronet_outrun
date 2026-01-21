@@ -20,6 +20,14 @@ var ShellType;
     ShellType[ShellType["RED"] = 1] = "RED";
     ShellType[ShellType["BLUE"] = 2] = "BLUE";
 })(ShellType || (ShellType = {}));
+var SHELL_PHYSICS = {
+    MIN_SPEED: 300,
+    GREEN_TARGET_SPEED: 400,
+    RED_TARGET_SPEED: 550,
+    BLUE_TARGET_SPEED: 700,
+    ACCELERATION: 200,
+    BACKWARD_SPEED: -250
+};
 var Shell = (function (_super) {
     __extends(Shell, _super);
     function Shell(shellType) {
@@ -27,20 +35,34 @@ var Shell = (function (_super) {
         _this.shellType = shellType;
         _this.trackZ = 0;
         _this.playerX = 0;
-        _this.speed = 500;
+        _this.speed = SHELL_PHYSICS.MIN_SPEED;
+        _this.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;
         _this.ownerId = -1;
         _this.targetId = -1;
         _this.ttl = 10;
         _this.isDestroyed = false;
+        _this.isBackward = false;
         return _this;
     }
-    Shell.fireGreen = function (vehicle) {
+    Shell.fireGreen = function (vehicle, backward) {
+        if (backward === void 0) { backward = false; }
         var shell = new Shell(ShellType.GREEN);
-        shell.trackZ = vehicle.trackZ + 15;
-        shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = Math.max(200, vehicle.speed + 100);
-        logInfo("GREEN SHELL fired at speed=" + shell.speed.toFixed(0) + " from playerX=" + shell.playerX.toFixed(2));
+        shell.isBackward = backward;
+        if (backward) {
+            shell.trackZ = vehicle.trackZ - 15;
+            shell.playerX = vehicle.playerX;
+            shell.speed = SHELL_PHYSICS.BACKWARD_SPEED;
+            shell.targetSpeed = SHELL_PHYSICS.BACKWARD_SPEED;
+            logInfo("GREEN SHELL fired BACKWARD at speed=" + shell.speed.toFixed(0));
+        }
+        else {
+            shell.trackZ = vehicle.trackZ + 15;
+            shell.playerX = vehicle.playerX;
+            shell.speed = SHELL_PHYSICS.MIN_SPEED;
+            shell.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;
+            logInfo("GREEN SHELL fired FORWARD, starting at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetSpeed);
+        }
         return shell;
     };
     Shell.fireRed = function (vehicle, vehicles) {
@@ -48,9 +70,10 @@ var Shell = (function (_super) {
         shell.trackZ = vehicle.trackZ + 15;
         shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = Math.max(180, vehicle.speed + 80);
+        shell.speed = SHELL_PHYSICS.MIN_SPEED;
+        shell.targetSpeed = SHELL_PHYSICS.RED_TARGET_SPEED;
         shell.targetId = Shell.findNextVehicleAhead(vehicle, vehicles);
-        logInfo("RED SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        logInfo("RED SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to vehicle " + shell.targetId);
         return shell;
     };
     Shell.fireBlue = function (vehicle, vehicles) {
@@ -58,9 +81,10 @@ var Shell = (function (_super) {
         shell.trackZ = vehicle.trackZ + 15;
         shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = 900;
+        shell.speed = SHELL_PHYSICS.MIN_SPEED;
+        shell.targetSpeed = SHELL_PHYSICS.BLUE_TARGET_SPEED;
         shell.targetId = Shell.findFirstPlace(vehicles);
-        logInfo("BLUE SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        logInfo("BLUE SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to 1st place (vehicle " + shell.targetId + ")");
         return shell;
     };
     Shell.findNextVehicleAhead = function (shooter, vehicles) {
@@ -94,11 +118,20 @@ var Shell = (function (_super) {
             logInfo("Shell despawned (TTL)");
             return true;
         }
+        if (!this.isBackward && this.speed < this.targetSpeed) {
+            this.speed += SHELL_PHYSICS.ACCELERATION * dt;
+            if (this.speed > this.targetSpeed) {
+                this.speed = this.targetSpeed;
+            }
+        }
         this.trackZ += this.speed * dt;
         if (this.trackZ >= roadLength) {
             this.trackZ = this.trackZ % roadLength;
         }
-        if (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE) {
+        else if (this.trackZ < 0) {
+            this.trackZ = roadLength + this.trackZ;
+        }
+        if (!this.isBackward && (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE)) {
             var target = this.findVehicleById(vehicles, this.targetId);
             if (target) {
                 var homingRate = 2.0;
@@ -152,7 +185,8 @@ var Shell = (function (_super) {
         vehicle.playerX = knockDirection * (0.7 + Math.random() * 0.2);
         vehicle.flashTimer = 1.5;
         var shellNames = ['GREEN', 'RED', 'BLUE'];
-        logInfo(shellNames[this.shellType] + " SHELL hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
+        var direction = this.isBackward ? ' (backward)' : '';
+        logInfo(shellNames[this.shellType] + " SHELL" + direction + " hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
     };
     return Shell;
 }(Item));

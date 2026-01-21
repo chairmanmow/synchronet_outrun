@@ -25,6 +25,12 @@ class FrameRenderer implements IRenderer {
   // Parallax state (placeholders for future scrolling)
   private _mountainScrollOffset: number;
   
+  // Sky grid animation phase (only updates when moving)
+  private _skyGridAnimPhase: number;
+  
+  // Fire/lava animation phase (always animates for ambient effect)
+  private _fireAnimPhase: number;
+  
   // Flag to track if static elements need re-rendering
   private _staticElementsDirty: boolean;
   
@@ -43,6 +49,8 @@ class FrameRenderer implements IRenderer {
     
     this._mountainScrollOffset = 0;
     this._staticElementsDirty = true;
+    this._skyGridAnimPhase = 0;
+    this._fireAnimPhase = 0;
     
     // Initialize road cache
     this._currentRoad = null;
@@ -175,6 +183,8 @@ class FrameRenderer implements IRenderer {
       this.renderDualMoons();
     } else if (this.activeTheme.celestial.type === 'monster') {
       this.renderMonsterSilhouette();
+    } else if (this.activeTheme.celestial.type === 'mermaid') {
+      this.renderMermaid();
     }
     
     // Background
@@ -204,6 +214,8 @@ class FrameRenderer implements IRenderer {
       this.renderStadium();
     } else if (this.activeTheme.background.type === 'destroyed_city') {
       this.renderDestroyedCity();
+    } else if (this.activeTheme.background.type === 'underwater') {
+      this.renderUnderwaterBackground();
     }
     
     this._staticElementsDirty = false;
@@ -230,9 +242,12 @@ class FrameRenderer implements IRenderer {
       GlitchState.update(trackPosition, dt || 0.016);
     }
     
+    // Always advance fire animation phase (for lava/fire effects even when stopped)
+    this._fireAnimPhase += (dt || 0.016) * 8;  // Faster animation for more dramatic flames
+    
     // Update sky background based on theme type (grid vs stars vs gradient)
     if (this.activeTheme.sky.type === 'grid') {
-      this.renderSkyGrid(trackPosition);
+      this.renderSkyGrid(speed || 0, dt || 0);
     } else if (this.activeTheme.sky.type === 'stars') {
       this.renderSkyStars(trackPosition);
     } else if (this.activeTheme.sky.type === 'gradient') {
@@ -245,8 +260,8 @@ class FrameRenderer implements IRenderer {
       this.renderOceanWaves(trackPosition);
     }
     
-    // Update parallax (if params provided)
-    if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined) {
+    // Update parallax (if params provided AND car is moving)
+    if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined && speed > 0) {
       this.updateParallax(curvature, playerSteer, speed, dt);
     }
   }
@@ -276,6 +291,8 @@ class FrameRenderer implements IRenderer {
         this.renderJungleGround(trackPosition);
       } else if (this.activeTheme.ground.type === 'dirt') {
         this.renderDirtGround(trackPosition);
+      } else if (this.activeTheme.ground.type === 'water') {
+        this.renderWaterGround(trackPosition);
       }
     }
     
@@ -1355,6 +1372,147 @@ class FrameRenderer implements IRenderer {
   }
 
   /**
+   * Render mermaid silhouette for underwater theme.
+   * Graceful swimming figure with flowing hair and tail.
+   */
+  private renderMermaid(): void {
+    var frame = this.frameManager.getSunFrame();
+    if (!frame) return;
+    
+    var colors = this.activeTheme.colors;
+    var coreAttr = makeAttr(colors.celestialCore.fg, colors.celestialCore.bg);
+    var glowAttr = makeAttr(colors.celestialGlow.fg, colors.celestialGlow.bg);
+    var hairAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+    var tailAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+    var tailGlowAttr = makeAttr(CYAN, BG_BLUE);
+    
+    // Position based on theme settings
+    var posX = Math.floor(this.width * (this.activeTheme.celestial.positionX || 0.7));
+    var posY = Math.floor(this.horizonY * (this.activeTheme.celestial.positionY || 0.4));
+    
+    // Flowing hair (left side, streaming behind)
+    frame.setData(posX - 5, posY - 2, '~', hairAttr);
+    frame.setData(posX - 4, posY - 2, '~', hairAttr);
+    frame.setData(posX - 3, posY - 1, '~', hairAttr);
+    frame.setData(posX - 4, posY - 1, '~', hairAttr);
+    frame.setData(posX - 5, posY, '~', hairAttr);
+    frame.setData(posX - 4, posY, '~', hairAttr);
+    frame.setData(posX - 3, posY, '~', hairAttr);
+    
+    // Head (circular)
+    frame.setData(posX - 2, posY - 1, '(', coreAttr);
+    frame.setData(posX - 1, posY - 1, GLYPH.FULL_BLOCK, coreAttr);
+    frame.setData(posX, posY - 1, ')', coreAttr);
+    
+    // Upper body/torso
+    frame.setData(posX - 1, posY, GLYPH.FULL_BLOCK, coreAttr);
+    frame.setData(posX, posY, GLYPH.FULL_BLOCK, coreAttr);
+    frame.setData(posX + 1, posY, '\\', coreAttr);  // Arm reaching forward
+    
+    // Waist transition
+    frame.setData(posX, posY + 1, GLYPH.FULL_BLOCK, glowAttr);
+    frame.setData(posX + 1, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+    
+    // Tail (curving right and up)
+    frame.setData(posX + 2, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+    frame.setData(posX + 3, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+    frame.setData(posX + 4, posY, GLYPH.FULL_BLOCK, tailAttr);
+    frame.setData(posX + 5, posY, GLYPH.FULL_BLOCK, tailAttr);
+    frame.setData(posX + 6, posY - 1, GLYPH.FULL_BLOCK, tailAttr);
+    
+    // Tail fin (forked)
+    frame.setData(posX + 7, posY - 2, '/', tailGlowAttr);
+    frame.setData(posX + 7, posY - 1, GLYPH.FULL_BLOCK, tailGlowAttr);
+    frame.setData(posX + 7, posY, '\\', tailGlowAttr);
+    frame.setData(posX + 8, posY - 2, '/', tailGlowAttr);
+    frame.setData(posX + 8, posY, '\\', tailGlowAttr);
+    
+    // Glow effect around mermaid
+    frame.setData(posX - 2, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+    frame.setData(posX + 1, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+    frame.setData(posX - 2, posY + 1, GLYPH.LIGHT_SHADE, glowAttr);
+    frame.setData(posX + 2, posY + 2, GLYPH.LIGHT_SHADE, glowAttr);
+  }
+
+  /**
+   * Render underwater background - rock formations, kelp forest, coral.
+   * Creates a deep sea grotto atmosphere.
+   */
+  private renderUnderwaterBackground(): void {
+    var frame = this.frameManager.getMountainsFrame();
+    if (!frame) return;
+    
+    var colors = this.activeTheme.colors;
+    var rockAttr = makeAttr(colors.sceneryPrimary.fg, colors.sceneryPrimary.bg);
+    var rockLightAttr = makeAttr(colors.scenerySecondary.fg, colors.scenerySecondary.bg);
+    var kelpAttr = makeAttr(colors.sceneryTertiary.fg, colors.sceneryTertiary.bg);
+    var coralAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+    var coralYellowAttr = makeAttr(YELLOW, BG_BLUE);
+    
+    // Rock formations/cave walls at sides
+    // Left cave wall
+    for (var y = 0; y < this.horizonY; y++) {
+      var wallWidth = 6 - Math.floor(y * 0.5);
+      for (var x = 0; x < wallWidth && x < 10; x++) {
+        var char = (x === wallWidth - 1) ? GLYPH.RIGHT_HALF : GLYPH.FULL_BLOCK;
+        var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+        frame.setData(x, y, char, attr);
+      }
+    }
+    
+    // Right cave wall
+    for (var y = 0; y < this.horizonY; y++) {
+      var wallWidth = 5 - Math.floor(y * 0.4);
+      for (var x = 0; x < wallWidth && x < 8; x++) {
+        var rx = this.width - 1 - x;
+        var char = (x === wallWidth - 1) ? GLYPH.LEFT_HALF : GLYPH.FULL_BLOCK;
+        var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+        frame.setData(rx, y, char, attr);
+      }
+    }
+    
+    // Kelp forest (swaying plants at mid-ground)
+    var kelpPositions = [12, 18, 25, 55, 62, 68];
+    for (var i = 0; i < kelpPositions.length; i++) {
+      var kx = kelpPositions[i];
+      var kelpHeight = 3 + (i % 3);
+      for (var ky = 0; ky < kelpHeight; ky++) {
+        var y = this.horizonY - 1 - ky;
+        if (y >= 0) {
+          var kchar = (ky % 2 === 0) ? ')' : '(';
+          frame.setData(kx, y, kchar, kelpAttr);
+          // Double kelp strands
+          if (i % 2 === 0 && kx + 1 < this.width) {
+            frame.setData(kx + 1, y, (ky % 2 === 0) ? '(' : ')', kelpAttr);
+          }
+        }
+      }
+    }
+    
+    // Coral clusters at bottom
+    var coralPositions = [8, 22, 35, 48, 58, 72];
+    for (var i = 0; i < coralPositions.length; i++) {
+      var cx = coralPositions[i];
+      var y = this.horizonY - 1;
+      var attr = (i % 2 === 0) ? coralAttr : coralYellowAttr;
+      frame.setData(cx, y, '*', attr);
+      frame.setData(cx + 1, y, 'Y', attr);
+      frame.setData(cx + 2, y, '*', attr);
+      if (y - 1 >= 0) {
+        frame.setData(cx + 1, y - 1, '^', attr);
+      }
+    }
+    
+    // Distant bubbles/particles in the water (static, animated ones are in ground)
+    var bubblePositions = [[30, 2], [45, 3], [50, 1], [15, 4], [65, 2]];
+    for (var i = 0; i < bubblePositions.length; i++) {
+      var bx = bubblePositions[i][0];
+      var by = bubblePositions[i][1];
+      frame.setData(bx, by, 'o', makeAttr(WHITE, BG_BLUE));
+    }
+  }
+
+  /**
    * Render mountains to their frame (can be scrolled for parallax).
    */
   private renderMountains(): void {
@@ -2362,41 +2520,60 @@ class FrameRenderer implements IRenderer {
   
   /**
    * Update sky grid animation (called each frame) - synthwave style.
+   * Grid is always centered - does NOT parallax with steering.
+   * Animation only runs when car is moving (speed > 0).
    */
-  renderSkyGrid(trackPosition: number): void {
+  renderSkyGrid(speed: number, dt: number): void {
     var frame = this.frameManager.getSkyGridFrame();
     if (!frame) return;
     
     frame.clear();
     
+    // Update animation phase ONLY when moving (with threshold to handle float imprecision)
+    if (speed > 1) {
+      // NEGATIVE = lines move TOWARD camera (UP on screen, away from horizon)
+      // When driving forward, horizontal lines emerge from horizon and rush toward you
+      this._skyGridAnimPhase -= speed * dt * 0.004;
+      while (this._skyGridAnimPhase < 0) this._skyGridAnimPhase += 1;
+      while (this._skyGridAnimPhase >= 1) this._skyGridAnimPhase -= 1;
+    }
+    
     var colors = this.activeTheme.colors;
     var gridAttr = makeAttr(colors.skyGrid.fg, colors.skyGrid.bg);
     var glowAttr = makeAttr(colors.skyGridGlow.fg, colors.skyGridGlow.bg);
-    var vanishX = 40 + Math.round(this._mountainScrollOffset * 0.5);  // Slight parallax shift
+    
+    // Grid is ALWAYS centered at screen center - no parallax shift
+    // This keeps it aligned with the road vanishing point
+    var vanishX = 40;
     
     for (var y = this.horizonY - 1; y >= 1; y--) {
       var distFromHorizon = this.horizonY - y;
       var spread = distFromHorizon * 6;
       
-      // Vertical converging lines
+      // Vertical converging lines - extend to screen edges
       if (this.activeTheme.sky.converging) {
-        for (var offset = 0; offset <= spread && offset < 40; offset += 10) {
-          if (offset === 0) {
-            frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
-          } else {
-            var leftX = vanishX - offset;
-            var rightX = vanishX + offset;
-            if (leftX >= 0 && leftX < this.width) frame.setData(leftX, y, '/', glowAttr);
-            if (rightX >= 0 && rightX < this.width) frame.setData(rightX, y, '\\', glowAttr);
+        for (var offset = 0; offset <= 40; offset += 8) {
+          if (offset <= spread) {
+            if (offset === 0) {
+              frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
+            } else {
+              var leftX = vanishX - offset;
+              var rightX = vanishX + offset;
+              if (leftX >= 0 && leftX < this.width) frame.setData(leftX, y, '/', glowAttr);
+              if (rightX >= 0 && rightX < this.width) frame.setData(rightX, y, '\\', glowAttr);
+            }
           }
         }
       }
       
-      // Horizontal lines (animated)
+      // Horizontal lines (animated) - lines emerge from horizon and move toward camera
       if (this.activeTheme.sky.horizontal) {
-        var linePhase = Math.floor(trackPosition / 50 + distFromHorizon) % 4;
-        if (linePhase === 0) {
-          var lineSpread = Math.min(spread, 38);
+        // Phase offset by distance: lines appear at horizon first, then move up
+        var scanlinePhase = (this._skyGridAnimPhase + distFromHorizon * 0.25) % 1;
+        if (scanlinePhase < 0) scanlinePhase += 1;
+        
+        if (scanlinePhase < 0.33) {
+          var lineSpread = Math.min(spread, 39);
           for (var x = vanishX - lineSpread; x <= vanishX + lineSpread; x++) {
             if (x >= 0 && x < this.width) {
               frame.setData(x, y, GLYPH.BOX_H, glowAttr);
@@ -2570,9 +2747,11 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Render flowing lava ground - animated molten rock with cracks.
+   * Render flowing lava ground - dynamic fire and lava animation.
+   * Creates a hellscape of burning flames, glowing lava pools, and molten rivers.
+   * Animates continuously even when the vehicle is stopped.
    */
-  private renderLavaGround(trackPosition: number): void {
+  private renderLavaGround(_trackPosition: number): void {
     var frame = this.frameManager.getGroundGridFrame();
     if (!frame) return;
     
@@ -2581,46 +2760,242 @@ class FrameRenderer implements IRenderer {
     
     frame.clear();
     
-    var rockAttr = makeAttr(ground.primary.fg, ground.primary.bg);
-    var lavaAttr = makeAttr(ground.secondary.fg, ground.secondary.bg);
     var frameHeight = this.height - this.horizonY;
+    var firePhase = this._fireAnimPhase;
     
-    // Fill with dark rock base
+    // Color palette for fire/lava effects
+    var blackAttr = makeAttr(BLACK, BG_BLACK);
+    var darkRockAttr = makeAttr(DARKGRAY, BG_BLACK);
+    var hotRockAttr = makeAttr(RED, BG_BLACK);
+    var lavaAttr = makeAttr(LIGHTRED, BG_RED);
+    var lavaGlowAttr = makeAttr(YELLOW, BG_RED);
+    var lavaBrightAttr = makeAttr(WHITE, BG_RED);
+    var fireAttr = makeAttr(YELLOW, BG_BLACK);
+    var fireBrightAttr = makeAttr(WHITE, BG_RED);
+    var emberAttr = makeAttr(LIGHTRED, BG_BLACK);
+    
+    // Process each cell in the ground area
     for (var y = 0; y < frameHeight - 1; y++) {
+      // Distance from camera (0 = horizon, increases toward bottom)
+      var depthFactor = y / frameHeight;  // 0.0 to 1.0
+      
       for (var x = 0; x < this.width; x++) {
-        frame.setData(x, y, GLYPH.DARK_SHADE, rockAttr);
+        // === LAVA RIVERS (wavy flowing patterns) ===
+        // Multiple rivers with different phases
+        var river1 = Math.sin((x * 0.15) + (y * 0.3) + firePhase * 0.7) * 1.5;
+        var river2 = Math.sin((x * 0.1) - (y * 0.2) + firePhase * 0.5 + 2) * 1.2;
+        var riverIntensity = river1 + river2;
+        
+        // === FIRE/FLAME PILLARS (vertical rising flames) ===
+        // Flames rise upward (decreasing y), so animate against y
+        var flameBase = Math.sin(x * 0.25 + firePhase * 1.5) + 
+                        Math.sin(x * 0.4 - firePhase * 2.0) * 0.5;
+        var flameFlicker = Math.sin(x * 0.8 + y * 0.5 + firePhase * 4) * 0.5;
+        var flameIntensity = flameBase + flameFlicker;
+        
+        // === EMBER SPARKLES (random twinkling embers) ===
+        var emberSeed = (x * 7919 + y * 104729) % 1000;
+        var emberPhase = Math.sin(firePhase * 3 + emberSeed * 0.01);
+        var isEmber = emberSeed < 30 && emberPhase > 0.7;
+        
+        // === LAVA POOLS (large glowing areas) ===
+        var poolCenterX1 = 15 + Math.sin(firePhase * 0.3) * 3;
+        var poolCenterX2 = 55 + Math.sin(firePhase * 0.4 + 1) * 4;
+        var poolCenterX3 = 35 + Math.sin(firePhase * 0.2 + 2) * 2;
+        
+        var dist1 = Math.sqrt(Math.pow(x - poolCenterX1, 2) + Math.pow(y - 8, 2));
+        var dist2 = Math.sqrt(Math.pow(x - poolCenterX2, 2) + Math.pow(y - 12, 2));
+        var dist3 = Math.sqrt(Math.pow(x - poolCenterX3, 2) + Math.pow(y - 5, 2));
+        
+        var poolBubble = Math.sin(firePhase * 2 + x * 0.3 + y * 0.2);
+        var inPool1 = dist1 < 6 + poolBubble;
+        var inPool2 = dist2 < 5 + poolBubble * 0.8;
+        var inPool3 = dist3 < 4 + poolBubble * 0.6;
+        
+        // === DETERMINE CELL APPEARANCE ===
+        var char: string;
+        var attr: number;
+        
+        if (isEmber && depthFactor > 0.3) {
+          // Floating ember sparkle
+          char = '*';
+          attr = emberAttr;
+        } else if (inPool1 || inPool2 || inPool3) {
+          // Inside a lava pool - bubbling molten rock
+          var poolDist = inPool1 ? dist1 : (inPool2 ? dist2 : dist3);
+          var bubblePhase = Math.sin(firePhase * 3 + poolDist * 0.5);
+          
+          if (bubblePhase > 0.7) {
+            char = 'O';  // Bubble
+            attr = lavaBrightAttr;
+          } else if (bubblePhase > 0.3) {
+            char = GLYPH.FULL_BLOCK;
+            attr = lavaGlowAttr;
+          } else if (bubblePhase > -0.2) {
+            char = GLYPH.MEDIUM_SHADE;
+            attr = lavaAttr;
+          } else {
+            char = '~';
+            attr = lavaAttr;
+          }
+        } else if (riverIntensity > 1.5) {
+          // Bright lava river center
+          char = GLYPH.FULL_BLOCK;
+          attr = lavaGlowAttr;
+        } else if (riverIntensity > 0.8) {
+          // Lava river edge
+          char = '~';
+          attr = lavaAttr;
+        } else if (riverIntensity > 0.3) {
+          // Hot rock near lava
+          char = GLYPH.LIGHT_SHADE;
+          attr = hotRockAttr;
+        } else if (flameIntensity > 1.2 && depthFactor < 0.6) {
+          // Bright flame tip
+          char = '^';
+          attr = fireBrightAttr;
+        } else if (flameIntensity > 0.6 && depthFactor < 0.7) {
+          // Flame body
+          var flameChar = ((x + Math.floor(firePhase * 5)) % 3 === 0) ? '^' : '*';
+          char = flameChar;
+          attr = fireAttr;
+        } else if (flameIntensity > 0.2 && depthFactor < 0.8) {
+          // Flame glow
+          char = GLYPH.MEDIUM_SHADE;
+          attr = emberAttr;
+        } else if (Math.random() < 0.02 && depthFactor > 0.4) {
+          // Occasional ember on ground
+          char = '.';
+          attr = emberAttr;
+        } else {
+          // Dark scorched rock base
+          var rockPattern = ((x * 3 + y * 7) % 5);
+          if (rockPattern === 0) {
+            char = GLYPH.DARK_SHADE;
+            attr = darkRockAttr;
+          } else if (rockPattern === 1) {
+            char = GLYPH.MEDIUM_SHADE;
+            attr = blackAttr;
+          } else {
+            char = ' ';
+            attr = blackAttr;
+          }
+        }
+        
+        frame.setData(x, y, char, attr);
       }
     }
+  }
+  
+  /**
+   * Render animated underwater ground - flowing water, bubbles, sandy floor.
+   * Creates a living ocean floor with caustics, ripples, and marine elements.
+   * Animates continuously even when stopped.
+   */
+  private renderWaterGround(_trackPosition: number): void {
+    var frame = this.frameManager.getGroundGridFrame();
+    if (!frame) return;
     
-    // Animated lava veins/cracks
-    var flowPhase = Math.floor(trackPosition / 20) % 8;
+    var ground = this.activeTheme.ground;
+    if (!ground) return;
+    
+    frame.clear();
+    
+    var frameHeight = this.height - this.horizonY;
+    var waterPhase = this._fireAnimPhase;  // Reuse the fire phase for continuous animation
+    
+    // Color palette for water effects
+    var deepBlueAttr = makeAttr(BLUE, BG_BLUE);
+    var mediumBlueAttr = makeAttr(LIGHTBLUE, BG_BLUE);
+    var lightBlueAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+    var cyanAttr = makeAttr(CYAN, BG_CYAN);
+    var whiteAttr = makeAttr(WHITE, BG_BLUE);
+    var sandAttr = makeAttr(YELLOW, BG_BLUE);
+    var sandDarkAttr = makeAttr(BROWN, BG_BLUE);
+    var seaweedAttr = makeAttr(GREEN, BG_BLUE);
+    var bubbleAttr = makeAttr(WHITE, BG_CYAN);
+    
+    // Process each cell
     for (var y = 0; y < frameHeight - 1; y++) {
-      var distFromHorizon = y + 1;
+      var depthFactor = y / frameHeight;  // 0.0 (horizon) to 1.0 (bottom)
       
-      // Lava cracks - wavy lines that animate
-      for (var crack = 0; crack < 4; crack++) {
-        var baseX = crack * 20 + 5;
-        var waveOffset = Math.sin((y + flowPhase + crack * 3) * 0.5) * 3;
-        var x = Math.floor(baseX + waveOffset);
+      for (var x = 0; x < this.width; x++) {
+        // === WATER CAUSTICS (rippling light patterns) ===
+        var caustic1 = Math.sin((x * 0.2) + (y * 0.15) + waterPhase * 0.8);
+        var caustic2 = Math.sin((x * 0.15) - (y * 0.1) + waterPhase * 0.6 + 1.5);
+        var causticIntensity = (caustic1 + caustic2) / 2;
         
-        if (x >= 0 && x < this.width) {
-          var intensity = ((y + flowPhase * 2 + crack) % 4);
-          var char = (intensity < 2) ? '*' : '~';
-          frame.setData(x, y, char, lavaAttr);
-          
-          // Glow around lava
-          if (x > 0) frame.setData(x - 1, y, GLYPH.LIGHT_SHADE, rockAttr);
-          if (x < this.width - 1) frame.setData(x + 1, y, GLYPH.LIGHT_SHADE, rockAttr);
+        // === WATER CURRENT (horizontal flow) ===
+        var currentWave = Math.sin(y * 0.3 + waterPhase * 1.2) * 0.5;
+        var currentIntensity = Math.sin((x + waterPhase * 3) * 0.1 + currentWave);
+        
+        // === BUBBLES (rising particles) ===
+        var bubbleSeed = (x * 7919 + y * 104729) % 1000;
+        var bubblePhase = Math.sin(waterPhase * 2 - y * 0.3 + bubbleSeed * 0.01);
+        var isBubble = bubbleSeed < 20 && bubblePhase > 0.8 && depthFactor > 0.2;
+        
+        // === SAND PATCHES (bottom of ocean) ===
+        var sandNoise = Math.sin(x * 0.4 + y * 0.2) + Math.sin(x * 0.2 - y * 0.3);
+        var isSandy = sandNoise > 0.8 && depthFactor > 0.5;
+        
+        // === SEAWEED PATCHES ===
+        var seaweedSeed = (x * 31 + y * 17) % 100;
+        var seaweedWave = Math.sin(waterPhase * 1.5 + x * 0.5);
+        var isSeaweed = seaweedSeed < 8 && depthFactor > 0.3 && seaweedWave > 0.3;
+        
+        // === DETERMINE CELL APPEARANCE ===
+        var char: string;
+        var attr: number;
+        
+        if (isBubble) {
+          // Rising bubble
+          char = 'o';
+          attr = bubbleAttr;
+        } else if (isSeaweed) {
+          // Swaying seaweed
+          var seaweedChar = seaweedWave > 0.6 ? ')' : '(';
+          char = seaweedChar;
+          attr = seaweedAttr;
+        } else if (isSandy) {
+          // Sandy ocean floor
+          var sandRipple = Math.sin(x * 0.5 + waterPhase * 0.5);
+          if (sandRipple > 0.5) {
+            char = '~';
+            attr = sandAttr;
+          } else if (sandRipple > 0) {
+            char = '.';
+            attr = sandDarkAttr;
+          } else {
+            char = ',';
+            attr = sandAttr;
+          }
+        } else if (causticIntensity > 0.7) {
+          // Bright caustic (light beam through water)
+          char = GLYPH.LIGHT_SHADE;
+          attr = whiteAttr;
+        } else if (causticIntensity > 0.3) {
+          // Medium caustic
+          char = '~';
+          attr = lightBlueAttr;
+        } else if (currentIntensity > 0.6) {
+          // Water current highlight
+          char = '~';
+          attr = cyanAttr;
+        } else if (currentIntensity > 0.2) {
+          // Gentle current
+          char = '~';
+          attr = mediumBlueAttr;
+        } else if (currentIntensity > -0.2) {
+          // Calm water
+          char = GLYPH.MEDIUM_SHADE;
+          attr = mediumBlueAttr;
+        } else {
+          // Deep water
+          char = GLYPH.DARK_SHADE;
+          attr = deepBlueAttr;
         }
-      }
-      
-      // Random pools closer to camera
-      if (distFromHorizon > frameHeight / 2) {
-        var poolChance = ((y * 17 + flowPhase) % 11);
-        if (poolChance === 0) {
-          var poolX = (y * 13 + flowPhase * 5) % this.width;
-          frame.setData(poolX, y, GLYPH.MEDIUM_SHADE, lavaAttr);
-        }
+        
+        frame.setData(x, y, char, attr);
       }
     }
   }
@@ -3100,7 +3475,14 @@ class FrameRenderer implements IRenderer {
     // Determine which type of ground pattern to render
     switch (ground.type) {
       case 'grid':
-        // Grid type is rendered on dedicated layer - leave transparent here
+      case 'lava':
+      case 'candy':
+      case 'void':
+      case 'cobblestone':
+      case 'jungle':
+      case 'dirt':
+      case 'water':
+        // These types are rendered on dedicated ground grid layer - leave transparent here
         // Just don't render anything, let the ground grid layer show through
         return;
       case 'dither':
@@ -3668,6 +4050,6 @@ class FrameRenderer implements IRenderer {
    */
   shutdown(): void {
     this.frameManager.shutdown();
-    console.clear();
+    console.clear(BG_BLACK, false);
   }
 }

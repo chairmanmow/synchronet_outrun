@@ -82,6 +82,10 @@ class HighScoreManager {
       var scores = data[key];
       
       if (scores && Array.isArray(scores)) {
+        // Always sort by time ascending (lowest/fastest time first)
+        scores.sort(function(a: IHighScoreEntry, b: IHighScoreEntry) {
+          return a.time - b.time;
+        });
         return scores;
       }
       
@@ -162,31 +166,31 @@ class HighScoreManager {
       if (trackName) entry.trackName = trackName;
       if (circuitName) entry.circuitName = circuitName;
       
-      // Find insertion position
-      var position = 0;
-      for (var i = 0; i < scores.length; i++) {
-        if (time < scores[i].time) {
-          position = i;
-          break;
-        }
-      }
+      // Add entry to scores
+      scores.push(entry);
       
-      // If didn't beat any scores but list isn't full, append
-      if (position === 0 && scores.length < this.maxEntries) {
-        position = scores.length;
-      }
-      
-      // If position is 0 and list is full, score doesn't qualify
-      if (position === 0 && scores.length >= this.maxEntries) {
-        return 0;
-      }
-      
-      // Insert at position
-      scores.splice(position, 0, entry);
+      // Sort by time ascending (fastest first)
+      scores.sort(function(a: IHighScoreEntry, b: IHighScoreEntry) {
+        return a.time - b.time;
+      });
       
       // Trim to max entries
       if (scores.length > this.maxEntries) {
         scores = scores.slice(0, this.maxEntries);
+      }
+      
+      // Find the position of the new entry (1-based)
+      var position = 0;
+      for (var i = 0; i < scores.length; i++) {
+        if (scores[i].time === time && scores[i].date === entry.date) {
+          position = i + 1;
+          break;
+        }
+      }
+      
+      // If not in the list after trimming, it didn't qualify
+      if (position === 0) {
+        return 0;
       }
       
       // Write back to database

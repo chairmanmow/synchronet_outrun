@@ -67,7 +67,7 @@ var CIRCUITS: Circuit[] = [
       '   DC   '
     ],
     color: LIGHTMAGENTA,
-    trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'pharaohs_tomb'],
+    trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'mermaid_lagoon'],
     description: 'Dangerous & mysterious'
   },
   {
@@ -105,6 +105,8 @@ interface TrackSelectionResult {
   track: TrackDefinition | null;
   isCircuitMode?: boolean;
   circuitTracks?: TrackDefinition[] | null;
+  circuitId?: string;
+  circuitName?: string;
 }
 
 // ============================================================
@@ -130,7 +132,7 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
   };
 
   // Initial draw
-  console.clear(LIGHTGRAY);
+  console.clear(LIGHTGRAY, false);
   drawSelectorUI(state, highScoreManager);
 
   while (true) {
@@ -153,6 +155,18 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
         // Enter circuit - switch to track selection
         state.mode = 'tracks';
         state.trackIndex = 0;
+        needsRedraw = true;
+      }
+      else if (key === 'H' && highScoreManager) {
+        // Show circuit high scores
+        var circuit = CIRCUITS[state.circuitIndex];
+        showHighScoreList(
+          HighScoreType.CIRCUIT_TIME,
+          circuit.id,
+          '=== CIRCUIT HIGH SCORES ===',
+          circuit.name,
+          highScoreManager
+        );
         needsRedraw = true;
       }
       else if (key === 'Q' || key === KEY_ESC) {
@@ -180,7 +194,9 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
             selected: true,
             track: circuitTracks[0],
             isCircuitMode: true,
-            circuitTracks: circuitTracks
+            circuitTracks: circuitTracks,
+            circuitId: circuit.id,
+            circuitName: circuit.name
           };
         } else {
           // Play single track
@@ -200,13 +216,41 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
         state.mode = 'circuit';
         needsRedraw = true;
       }
+      else if (key === 'H' && highScoreManager) {
+        // Show high scores for selected track or circuit
+        var circuit = CIRCUITS[state.circuitIndex];
+        if (state.trackIndex === 4) {
+          // "Play Cup" selected - show circuit high scores
+          showHighScoreList(
+            HighScoreType.CIRCUIT_TIME,
+            circuit.id,
+            '=== CIRCUIT HIGH SCORES ===',
+            circuit.name,
+            highScoreManager
+          );
+        } else {
+          // Individual track selected - show track high scores (two-column)
+          var trackId = circuit.trackIds[state.trackIndex];
+          var trackDef = getTrackDefinition(trackId);
+          if (trackDef) {
+            showTwoColumnHighScores(
+              trackId,
+              trackDef.name,
+              highScoreManager,
+              0,  // No player position highlight
+              0
+            );
+          }
+        }
+        needsRedraw = true;
+      }
       else if (key === 'Q') {
         return { selected: false, track: null };
       }
     }
 
     if (needsRedraw) {
-      console.clear(LIGHTGRAY);
+      console.clear(LIGHTGRAY, false);
       drawSelectorUI(state, highScoreManager);
     }
   }
@@ -1136,37 +1180,41 @@ function drawControls(state: SelectorState): void {
   console.attributes = LIGHTGRAY;
   
   if (state.mode === 'circuit') {
-    console.print('  W/S or ');
+    console.print('  ');
     console.attributes = WHITE;
     console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
     console.attributes = LIGHTGRAY;
-    console.print(' Select Circuit   ');
+    console.print(' Select  ');
     console.attributes = WHITE;
     console.print('ENTER');
     console.attributes = LIGHTGRAY;
-    console.print(' Open   ');
+    console.print(' Open  ');
+    console.attributes = WHITE;
+    console.print('H');
+    console.attributes = LIGHTGRAY;
+    console.print(' Scores  ');
     console.attributes = WHITE;
     console.print('Q');
     console.attributes = LIGHTGRAY;
     console.print(' Quit');
   } else {
-    console.print('  W/S or ');
+    console.print('  ');
     console.attributes = WHITE;
     console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
     console.attributes = LIGHTGRAY;
-    console.print(' Select Track   ');
+    console.print(' Select  ');
     console.attributes = WHITE;
     console.print('ENTER');
     console.attributes = LIGHTGRAY;
-    console.print(' Race!   ');
+    console.print(' Race  ');
+    console.attributes = WHITE;
+    console.print('H');
+    console.attributes = LIGHTGRAY;
+    console.print(' Scores  ');
     console.attributes = WHITE;
     console.print(String.fromCharCode(27));
     console.attributes = LIGHTGRAY;
-    console.print('/');
-    console.attributes = WHITE;
-    console.print('A');
-    console.attributes = LIGHTGRAY;
-    console.print(' Back   ');
+    console.print(' Back  ');
     console.attributes = WHITE;
     console.print('Q');
     console.attributes = LIGHTGRAY;

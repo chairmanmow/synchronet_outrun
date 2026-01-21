@@ -21,6 +21,10 @@ class Controls {
   // Current frame's intent (derived from all active actions)
   private currentAccel: number;
   private currentSteer: number;
+  
+  // Track last accel/decel action for determining shell fire direction
+  // 1 = last was accelerate, -1 = last was brake/decelerate
+  private lastAccelAction: number;
 
   constructor(inputMap: InputMap) {
     this.inputMap = inputMap;
@@ -30,6 +34,7 @@ class Controls {
     this.holdThreshold = 200; // ms before action is released (slightly longer for BBS latency)
     this.currentAccel = 0;
     this.currentSteer = 0;
+    this.lastAccelAction = 1;  // Default to forward (accelerate)
   }
 
   /**
@@ -59,9 +64,11 @@ class Controls {
       // Pure actions
       case GameAction.ACCELERATE:
         this.currentAccel = 1;
+        this.lastAccelAction = 1;  // Track: accelerate was pressed
         break;
       case GameAction.BRAKE:
         this.currentAccel = -1;
+        this.lastAccelAction = -1;  // Track: brake was pressed
         break;
       case GameAction.STEER_LEFT:
         this.currentSteer = -1;
@@ -74,18 +81,22 @@ class Controls {
       case GameAction.ACCEL_LEFT:
         this.currentAccel = 1;
         this.currentSteer = -1;
+        this.lastAccelAction = 1;  // Track: accelerate was pressed
         break;
       case GameAction.ACCEL_RIGHT:
         this.currentAccel = 1;
         this.currentSteer = 1;
+        this.lastAccelAction = 1;  // Track: accelerate was pressed
         break;
       case GameAction.BRAKE_LEFT:
         this.currentAccel = -1;
         this.currentSteer = -1;
+        this.lastAccelAction = -1;  // Track: brake was pressed
         break;
       case GameAction.BRAKE_RIGHT:
         this.currentAccel = -1;
         this.currentSteer = 1;
+        this.lastAccelAction = -1;  // Track: brake was pressed
         break;
     }
   }
@@ -175,5 +186,14 @@ class Controls {
     this.activeActions = {};
     this.justPressedActions = {};
     this.lastKeyTime = {};
+  }
+  
+  /**
+   * Get the last acceleration/deceleration action.
+   * Returns 1 if last was accelerate, -1 if last was brake.
+   * Used to determine if shells should fire forward or backward.
+   */
+  getLastAccelAction(): number {
+    return this.lastAccelAction;
   }
 }

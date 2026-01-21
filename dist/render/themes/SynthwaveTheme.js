@@ -15,26 +15,36 @@ var SynthwaveTheme = {
         sceneryPrimary: { fg: MAGENTA, bg: BG_BLACK },
         scenerySecondary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
         sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
-        roadSurface: { fg: CYAN, bg: BG_BLACK },
-        roadSurfaceAlt: { fg: LIGHTCYAN, bg: BG_BLACK },
-        roadStripe: { fg: WHITE, bg: BG_BLACK },
-        roadEdge: { fg: LIGHTRED, bg: BG_BLACK },
-        roadGrid: { fg: CYAN, bg: BG_BLACK },
-        shoulderPrimary: { fg: BROWN, bg: BG_BLACK },
-        shoulderSecondary: { fg: BROWN, bg: BG_BLACK },
+        roadSurface: { fg: LIGHTCYAN, bg: BG_CYAN },
+        roadSurfaceAlt: { fg: CYAN, bg: BG_CYAN },
+        roadStripe: { fg: WHITE, bg: BG_CYAN },
+        roadEdge: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+        roadGrid: { fg: WHITE, bg: BG_CYAN },
+        shoulderPrimary: { fg: BLUE, bg: BG_BLACK },
+        shoulderSecondary: { fg: MAGENTA, bg: BG_BLACK },
         roadsideColors: {
-            'tree': {
-                primary: { fg: LIGHTGREEN, bg: BG_BLACK },
-                secondary: { fg: GREEN, bg: BG_BLACK },
-                tertiary: { fg: BROWN, bg: BG_BLACK }
+            'neon_pillar': {
+                primary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                secondary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+                tertiary: { fg: BLUE, bg: BG_BLACK }
             },
-            'rock': {
-                primary: { fg: DARKGRAY, bg: BG_BLACK },
-                secondary: { fg: LIGHTGRAY, bg: BG_BLACK }
+            'grid_pylon': {
+                primary: { fg: MAGENTA, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK }
             },
-            'bush': {
-                primary: { fg: GREEN, bg: BG_BLACK },
-                secondary: { fg: LIGHTGREEN, bg: BG_BLACK }
+            'holo_billboard': {
+                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+                secondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                tertiary: { fg: BLUE, bg: BG_BLACK }
+            },
+            'neon_palm': {
+                primary: { fg: MAGENTA, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK },
+                tertiary: { fg: LIGHTCYAN, bg: BG_BLACK }
+            },
+            'laser_beam': {
+                primary: { fg: WHITE, bg: BG_BLACK },
+                secondary: { fg: LIGHTCYAN, bg: BG_BLACK }
             }
         }
     },
@@ -74,9 +84,11 @@ var SynthwaveTheme = {
     },
     roadside: {
         pool: [
-            { sprite: 'tree', weight: 3, side: 'both' },
-            { sprite: 'rock', weight: 2, side: 'both' },
-            { sprite: 'bush', weight: 2, side: 'both' }
+            { sprite: 'neon_pillar', weight: 3, side: 'both' },
+            { sprite: 'grid_pylon', weight: 3, side: 'both' },
+            { sprite: 'holo_billboard', weight: 2, side: 'both' },
+            { sprite: 'neon_palm', weight: 2, side: 'both' },
+            { sprite: 'laser_beam', weight: 1, side: 'both' }
         ],
         spacing: 10,
         density: 1.0

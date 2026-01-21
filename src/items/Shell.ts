@@ -2,10 +2,11 @@
  * Shell - Projectile items using vehicle-like track behavior.
  * 
  * Shells travel along the track like high-speed vehicles:
- * - RED SHELL: Homes toward next vehicle ahead
- * - GREEN SHELL: Travels straight at fixed lateral position
- * - BLUE SHELL: Homes toward 1st place vehicle
+ * - RED SHELL: Homes toward next vehicle ahead, accelerates to ~500-600
+ * - GREEN SHELL: Travels straight, can fire forward or backward
+ * - BLUE SHELL: Homes toward 1st place vehicle, accelerates gradually
  * 
+ * All shells start at minimum speed (300 = car max speed) and accelerate.
  * This reuses our pseudo-3D track system instead of true projectile physics.
  */
 
@@ -15,6 +16,16 @@ enum ShellType {
   RED = 1,    // Homes to next vehicle ahead
   BLUE = 2    // Homes to 1st place
 }
+
+/** Shell speed constants */
+var SHELL_PHYSICS = {
+  MIN_SPEED: 300,           // Minimum shell speed (same as car max)
+  GREEN_TARGET_SPEED: 400,  // Green shell target speed
+  RED_TARGET_SPEED: 550,    // Red shell target speed (needs to catch up)
+  BLUE_TARGET_SPEED: 700,   // Blue shell target speed (must reach 1st place)
+  ACCELERATION: 200,        // How fast shells accelerate (units/sec^2)
+  BACKWARD_SPEED: -250      // Backward shell speed (negative = behind vehicle)
+};
 
 interface IProjectile extends IEntity {
   /** Shell type (green/red/blue) */
@@ -26,8 +37,11 @@ interface IProjectile extends IEntity {
   /** Lateral position (like vehicle.playerX) */
   playerX: number;
 
-  /** Movement speed along track */
+  /** Movement speed along track (negative = backward) */
   speed: number;
+  
+  /** Target speed to accelerate toward (optional, for shells) */
+  targetSpeed?: number;
 
   /** ID of vehicle that fired this */
   ownerId: number;
@@ -40,6 +54,9 @@ interface IProjectile extends IEntity {
 
   /** Has this shell hit something? */
   isDestroyed: boolean;
+  
+  /** Is this shell traveling backward? (optional, for shells) */
+  isBackward?: boolean;
 }
 
 class Shell extends Item implements IProjectile {
@@ -47,59 +64,77 @@ class Shell extends Item implements IProjectile {
   trackZ: number;
   playerX: number;
   speed: number;
+  targetSpeed: number;
   ownerId: number;
   targetId: number;
   ttl: number;
   isDestroyed: boolean;
+  isBackward: boolean;
 
   constructor(shellType: ShellType) {
     super(ItemType.SHELL);
     this.shellType = shellType;
     this.trackZ = 0;
     this.playerX = 0;
-    this.speed = 500;  // Faster than vehicles
+    this.speed = SHELL_PHYSICS.MIN_SPEED;  // Start at minimum speed
+    this.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;  // Default target
     this.ownerId = -1;
     this.targetId = -1;
     this.ttl = 10;  // 10 seconds max lifetime
     this.isDestroyed = false;
+    this.isBackward = false;
   }
 
   /**
-   * Fire a green shell (straight ahead).
-   * Speed is based on vehicle speed + boost (always faster than the firer).
+   * Fire a green shell (straight ahead or behind).
+   * Direction based on whether player was braking (backward) or accelerating (forward).
+   * @param vehicle - The vehicle firing the shell
+   * @param backward - If true, fire behind the vehicle
    */
-  static fireGreen(vehicle: IVehicle): Shell {
+  static fireGreen(vehicle: IVehicle, backward: boolean = false): Shell {
     var shell = new Shell(ShellType.GREEN);
-    shell.trackZ = vehicle.trackZ + 15;  // Start slightly ahead
-    shell.playerX = vehicle.playerX;      // Same lateral position
     shell.ownerId = vehicle.id;
-    // Shell is always faster than the vehicle: base speed + 100, minimum 200
-    shell.speed = Math.max(200, vehicle.speed + 100);
-    logInfo("GREEN SHELL fired at speed=" + shell.speed.toFixed(0) + " from playerX=" + shell.playerX.toFixed(2));
+    shell.isBackward = backward;
+    
+    if (backward) {
+      // Fire behind: start behind vehicle, travel backward
+      shell.trackZ = vehicle.trackZ - 15;
+      shell.playerX = vehicle.playerX;
+      shell.speed = SHELL_PHYSICS.BACKWARD_SPEED;  // Negative = backward
+      shell.targetSpeed = SHELL_PHYSICS.BACKWARD_SPEED;
+      logInfo("GREEN SHELL fired BACKWARD at speed=" + shell.speed.toFixed(0));
+    } else {
+      // Fire forward: start ahead, accelerate forward
+      shell.trackZ = vehicle.trackZ + 15;
+      shell.playerX = vehicle.playerX;
+      shell.speed = SHELL_PHYSICS.MIN_SPEED;
+      shell.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;
+      logInfo("GREEN SHELL fired FORWARD, starting at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetSpeed);
+    }
     return shell;
   }
 
   /**
    * Fire a red shell (homes to next vehicle ahead).
-   * Slightly slower than green but homes to target.
+   * Red shells accelerate from minimum speed to target speed.
    */
   static fireRed(vehicle: IVehicle, vehicles: IVehicle[]): Shell {
     var shell = new Shell(ShellType.RED);
     shell.trackZ = vehicle.trackZ + 15;
     shell.playerX = vehicle.playerX;
     shell.ownerId = vehicle.id;
-    // Red shell: vehicle speed + 80, minimum 180 (slightly slower than green but homes)
-    shell.speed = Math.max(180, vehicle.speed + 80);
+    shell.speed = SHELL_PHYSICS.MIN_SPEED;  // Start at minimum
+    shell.targetSpeed = SHELL_PHYSICS.RED_TARGET_SPEED;  // Accelerate to this
     
     // Find next vehicle ahead
     shell.targetId = Shell.findNextVehicleAhead(vehicle, vehicles);
-    logInfo("RED SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+    logInfo("RED SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to vehicle " + shell.targetId);
     return shell;
   }
 
   /**
    * Fire a blue shell (homes to 1st place).
-   * Very fast - needs to catch up to leader from anywhere on track.
+   * Blue shell accelerates gradually to stay visible longer.
    * Does not despawn until hitting 1st place.
    */
   static fireBlue(vehicle: IVehicle, vehicles: IVehicle[]): Shell {
@@ -107,12 +142,12 @@ class Shell extends Item implements IProjectile {
     shell.trackZ = vehicle.trackZ + 15;
     shell.playerX = vehicle.playerX;
     shell.ownerId = vehicle.id;
-    // Blue shell: ~3x max vehicle speed to guarantee it catches leader
-    shell.speed = 900;
+    shell.speed = SHELL_PHYSICS.MIN_SPEED;  // Start at minimum, accelerate gradually
+    shell.targetSpeed = SHELL_PHYSICS.BLUE_TARGET_SPEED;
     
     // Find 1st place vehicle
     shell.targetId = Shell.findFirstPlace(vehicles);
-    logInfo("BLUE SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+    logInfo("BLUE SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to 1st place (vehicle " + shell.targetId + ")");
     return shell;
   }
 
@@ -163,16 +198,27 @@ class Shell extends Item implements IProjectile {
       return true;
     }
     
-    // Move forward along track
-    this.trackZ += this.speed * dt;
-    
-    // Wrap around track
-    if (this.trackZ >= roadLength) {
-      this.trackZ = this.trackZ % roadLength;
+    // --- ACCELERATION ---
+    // Shells accelerate toward their target speed
+    if (!this.isBackward && this.speed < this.targetSpeed) {
+      this.speed += SHELL_PHYSICS.ACCELERATION * dt;
+      if (this.speed > this.targetSpeed) {
+        this.speed = this.targetSpeed;
+      }
     }
     
-    // Homing behavior for red/blue shells
-    if (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE) {
+    // Move along track (speed can be negative for backward shells)
+    this.trackZ += this.speed * dt;
+    
+    // Wrap around track (handle both forward and backward)
+    if (this.trackZ >= roadLength) {
+      this.trackZ = this.trackZ % roadLength;
+    } else if (this.trackZ < 0) {
+      this.trackZ = roadLength + this.trackZ;
+    }
+    
+    // Homing behavior for red/blue shells (only when moving forward)
+    if (!this.isBackward && (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE)) {
       var target = this.findVehicleById(vehicles, this.targetId);
       if (target) {
         // Steer toward target's lateral position
@@ -247,7 +293,8 @@ class Shell extends Item implements IProjectile {
     vehicle.flashTimer = 1.5;
     
     var shellNames = ['GREEN', 'RED', 'BLUE'];
-    logInfo(shellNames[this.shellType] + " SHELL hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
+    var direction = this.isBackward ? ' (backward)' : '';
+    logInfo(shellNames[this.shellType] + " SHELL" + direction + " hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
   }
 }
 

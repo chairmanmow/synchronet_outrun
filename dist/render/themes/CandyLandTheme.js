@@ -3,49 +3,49 @@ var CandyLandTheme = {
     name: 'candy_land',
     description: 'Race through a magical world made entirely of sweets and candy',
     colors: {
-        skyTop: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyMid: { fg: LIGHTCYAN, bg: BG_BLACK },
-        skyHorizon: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyGrid: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyGridGlow: { fg: WHITE, bg: BG_BLACK },
+        skyTop: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        skyMid: { fg: WHITE, bg: BG_MAGENTA },
+        skyHorizon: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        skyGrid: { fg: WHITE, bg: BG_MAGENTA },
+        skyGridGlow: { fg: LIGHTCYAN, bg: BG_MAGENTA },
         celestialCore: { fg: YELLOW, bg: BG_MAGENTA },
-        celestialGlow: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        starBright: { fg: WHITE, bg: BG_BLACK },
-        starDim: { fg: LIGHTCYAN, bg: BG_BLACK },
-        sceneryPrimary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        scenerySecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
-        sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
-        roadSurface: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        roadSurfaceAlt: { fg: MAGENTA, bg: BG_BLACK },
-        roadStripe: { fg: WHITE, bg: BG_BLACK },
-        roadEdge: { fg: LIGHTCYAN, bg: BG_BLACK },
-        roadGrid: { fg: MAGENTA, bg: BG_BLACK },
-        shoulderPrimary: { fg: LIGHTGREEN, bg: BG_BLACK },
-        shoulderSecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+        celestialGlow: { fg: WHITE, bg: BG_MAGENTA },
+        starBright: { fg: WHITE, bg: BG_MAGENTA },
+        starDim: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        sceneryPrimary: { fg: WHITE, bg: BG_MAGENTA },
+        scenerySecondary: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        sceneryTertiary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        roadSurface: { fg: WHITE, bg: BG_MAGENTA },
+        roadSurfaceAlt: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
+        roadStripe: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        roadEdge: { fg: WHITE, bg: BG_CYAN },
+        roadGrid: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
+        shoulderPrimary: { fg: WHITE, bg: BG_MAGENTA },
+        shoulderSecondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
         roadsideColors: {
             'lollipop': {
-                primary: { fg: LIGHTRED, bg: BG_BLACK },
-                secondary: { fg: WHITE, bg: BG_BLACK }
+                primary: { fg: LIGHTRED, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             },
             'candy_cane': {
-                primary: { fg: LIGHTRED, bg: BG_BLACK },
-                secondary: { fg: WHITE, bg: BG_BLACK }
+                primary: { fg: LIGHTRED, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             },
             'gummy_bear': {
-                primary: { fg: LIGHTGREEN, bg: BG_BLACK },
-                secondary: { fg: GREEN, bg: BG_BLACK }
+                primary: { fg: LIGHTGREEN, bg: BG_CYAN },
+                secondary: { fg: GREEN, bg: BG_CYAN }
             },
             'cupcake': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: LIGHTRED, bg: BG_BLACK }
+                primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+                secondary: { fg: LIGHTRED, bg: BG_CYAN }
             },
             'ice_cream': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: BROWN, bg: BG_BLACK }
+                primary: { fg: WHITE, bg: BG_CYAN },
+                secondary: { fg: BROWN, bg: BG_CYAN }
             },
             'cotton_candy': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: LIGHTCYAN, bg: BG_BLACK }
+                primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             }
         }
     },
@@ -74,8 +74,8 @@ var CandyLandTheme = {
     },
     ground: {
         type: 'candy',
-        primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        secondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+        primary: { fg: WHITE, bg: BG_CYAN },
+        secondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
         pattern: {
             ditherDensity: 0.4,
             ditherChars: ['*', '@', '.', '~']

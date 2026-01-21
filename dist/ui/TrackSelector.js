@@ -39,7 +39,7 @@ var CIRCUITS = [
             '   DC   '
         ],
         color: LIGHTMAGENTA,
-        trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'pharaohs_tomb'],
+        trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'mermaid_lagoon'],
         description: 'Dangerous & mysterious'
     },
     {
@@ -66,7 +66,7 @@ function showTrackSelector(highScoreManager) {
         circuitIndex: 0,
         trackIndex: 0
     };
-    console.clear(LIGHTGRAY);
+    console.clear(LIGHTGRAY, false);
     drawSelectorUI(state, highScoreManager);
     while (true) {
         var key = console.inkey(K_UPPER, 100);
@@ -85,6 +85,11 @@ function showTrackSelector(highScoreManager) {
             else if (key === '\r' || key === '\n' || key === ' ' || key === KEY_RIGHT || key === 'D' || key === '6') {
                 state.mode = 'tracks';
                 state.trackIndex = 0;
+                needsRedraw = true;
+            }
+            else if (key === 'H' && highScoreManager) {
+                var circuit = CIRCUITS[state.circuitIndex];
+                showHighScoreList(HighScoreType.CIRCUIT_TIME, circuit.id, '=== CIRCUIT HIGH SCORES ===', circuit.name, highScoreManager);
                 needsRedraw = true;
             }
             else if (key === 'Q' || key === KEY_ESC) {
@@ -112,7 +117,9 @@ function showTrackSelector(highScoreManager) {
                         selected: true,
                         track: circuitTracks[0],
                         isCircuitMode: true,
-                        circuitTracks: circuitTracks
+                        circuitTracks: circuitTracks,
+                        circuitId: circuit.id,
+                        circuitName: circuit.name
                     };
                 }
                 else {
@@ -131,12 +138,26 @@ function showTrackSelector(highScoreManager) {
                 state.mode = 'circuit';
                 needsRedraw = true;
             }
+            else if (key === 'H' && highScoreManager) {
+                var circuit = CIRCUITS[state.circuitIndex];
+                if (state.trackIndex === 4) {
+                    showHighScoreList(HighScoreType.CIRCUIT_TIME, circuit.id, '=== CIRCUIT HIGH SCORES ===', circuit.name, highScoreManager);
+                }
+                else {
+                    var trackId = circuit.trackIds[state.trackIndex];
+                    var trackDef = getTrackDefinition(trackId);
+                    if (trackDef) {
+                        showTwoColumnHighScores(trackId, trackDef.name, highScoreManager, 0, 0);
+                    }
+                }
+                needsRedraw = true;
+            }
             else if (key === 'Q') {
                 return { selected: false, track: null };
             }
         }
         if (needsRedraw) {
-            console.clear(LIGHTGRAY);
+            console.clear(LIGHTGRAY, false);
             drawSelectorUI(state, highScoreManager);
         }
     }
@@ -786,38 +807,42 @@ function drawControls(state) {
     console.gotoxy(1, 24);
     console.attributes = LIGHTGRAY;
     if (state.mode === 'circuit') {
-        console.print('  W/S or ');
+        console.print('  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
         console.attributes = LIGHTGRAY;
-        console.print(' Select Circuit   ');
+        console.print(' Select  ');
         console.attributes = WHITE;
         console.print('ENTER');
         console.attributes = LIGHTGRAY;
-        console.print(' Open   ');
+        console.print(' Open  ');
+        console.attributes = WHITE;
+        console.print('H');
+        console.attributes = LIGHTGRAY;
+        console.print(' Scores  ');
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;
         console.print(' Quit');
     }
     else {
-        console.print('  W/S or ');
+        console.print('  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
         console.attributes = LIGHTGRAY;
-        console.print(' Select Track   ');
+        console.print(' Select  ');
         console.attributes = WHITE;
         console.print('ENTER');
         console.attributes = LIGHTGRAY;
-        console.print(' Race!   ');
+        console.print(' Race  ');
+        console.attributes = WHITE;
+        console.print('H');
+        console.attributes = LIGHTGRAY;
+        console.print(' Scores  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(27));
         console.attributes = LIGHTGRAY;
-        console.print('/');
-        console.attributes = WHITE;
-        console.print('A');
-        console.attributes = LIGHTGRAY;
-        console.print(' Back   ');
+        console.print(' Back  ');
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;

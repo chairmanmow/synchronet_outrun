@@ -127,8 +127,11 @@ class ItemSystem {
 
   /**
    * Use a vehicle's held item.
+   * @param vehicle - The vehicle using the item
+   * @param allVehicles - All vehicles (for targeting/collision)
+   * @param fireBackward - If true, fire projectiles backward (for green shells)
    */
-  useItem(vehicle: IVehicle, allVehicles?: IVehicle[]): void {
+  useItem(vehicle: IVehicle, allVehicles?: IVehicle[], fireBackward?: boolean): void {
     if (vehicle.heldItem === null) return;
     
     var itemType = vehicle.heldItem.type;
@@ -181,11 +184,11 @@ class ItemSystem {
         // Item stays in slot until effect expires
         return;
         
-      // Green Shells - fire straight ahead
+      // Green Shells - fire straight (forward or backward based on last input)
       case ItemType.GREEN_SHELL:
       case ItemType.GREEN_SHELL_TRIPLE:
         {
-          var greenShell = Shell.fireGreen(vehicle);
+          var greenShell = Shell.fireGreen(vehicle, fireBackward === true);
           this.projectiles.push(greenShell);
         }
         consumed = true;
@@ -265,8 +268,8 @@ class ItemSystem {
   }
   
   /**
-   * Apply lightning effect to opponents ahead of the user.
-   * Does not affect: the user, anyone behind them, or invincible/invisible players.
+   * Apply lightning effect to opponents ahead of the user in race position.
+   * Does not affect: the user, anyone behind them in race position, or invincible players.
    */
   private applyLightning(user: IVehicle, allVehicles: IVehicle[]): void {
     var duration = getItemDuration(ItemType.LIGHTNING);
@@ -276,8 +279,9 @@ class ItemSystem {
       var v = allVehicles[i] as Vehicle;
       if (v.id === user.id) continue;  // Don't affect self
       
-      // Only affect racers AHEAD of the user (further along the track)
-      if (v.trackZ <= user.trackZ) continue;
+      // Only affect racers AHEAD of the user in RACE POSITION (lower position number = ahead)
+      // e.g., if user is in 5th place, hit positions 1-4
+      if (v.racePosition >= user.racePosition) continue;
       
       // Check for immunity: Star or Bullet
       if (v.hasEffect && (
@@ -289,7 +293,7 @@ class ItemSystem {
       v.addEffect(ItemType.LIGHTNING, duration, user.id);
       hitCount++;
     }
-    logInfo("Lightning struck " + hitCount + " opponents ahead!");
+    logInfo("Lightning struck " + hitCount + " opponents ahead (positions 1-" + (user.racePosition - 1) + ")!");
   }
 
   /**

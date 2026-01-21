@@ -1,6 +1,7 @@
 /**
  * CandyLandTheme.ts - Sweet fantasy racing through a world of candy.
  * Pastel skies, candy cane forests, and sugary treats everywhere.
+ * Cotton candy aesthetic with fluffy pastels, whites, and soft pinks.
  */
 
 var CandyLandTheme: Theme = {
@@ -8,64 +9,64 @@ var CandyLandTheme: Theme = {
   description: 'Race through a magical world made entirely of sweets and candy',
   
   colors: {
-    // Cotton candy sky
-    skyTop: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-    skyMid: { fg: LIGHTCYAN, bg: BG_BLACK },
-    skyHorizon: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+    // Cotton candy sky - fluffy pastels
+    skyTop: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+    skyMid: { fg: WHITE, bg: BG_MAGENTA },
+    skyHorizon: { fg: LIGHTMAGENTA, bg: BG_CYAN },
     
     // Sparkly candy atmosphere
-    skyGrid: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-    skyGridGlow: { fg: WHITE, bg: BG_BLACK },
+    skyGrid: { fg: WHITE, bg: BG_MAGENTA },
+    skyGridGlow: { fg: LIGHTCYAN, bg: BG_MAGENTA },
     
     // Gumdrop sun
     celestialCore: { fg: YELLOW, bg: BG_MAGENTA },
-    celestialGlow: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+    celestialGlow: { fg: WHITE, bg: BG_MAGENTA },
     
     // Sparkle stars
-    starBright: { fg: WHITE, bg: BG_BLACK },
-    starDim: { fg: LIGHTCYAN, bg: BG_BLACK },
+    starBright: { fg: WHITE, bg: BG_MAGENTA },
+    starDim: { fg: LIGHTCYAN, bg: BG_MAGENTA },
     
-    // Candy mountain background
-    sceneryPrimary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-    scenerySecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
-    sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
+    // Candy mountain background - soft pastels
+    sceneryPrimary: { fg: WHITE, bg: BG_MAGENTA },
+    scenerySecondary: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+    sceneryTertiary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
     
-    // Frosting road
-    roadSurface: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-    roadSurfaceAlt: { fg: MAGENTA, bg: BG_BLACK },
-    roadStripe: { fg: WHITE, bg: BG_BLACK },
-    roadEdge: { fg: LIGHTCYAN, bg: BG_BLACK },
-    roadGrid: { fg: MAGENTA, bg: BG_BLACK },
+    // Magenta frosting road
+    roadSurface: { fg: WHITE, bg: BG_MAGENTA },
+    roadSurfaceAlt: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
+    roadStripe: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+    roadEdge: { fg: WHITE, bg: BG_CYAN },
+    roadGrid: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
     
-    // Sugar grass
-    shoulderPrimary: { fg: LIGHTGREEN, bg: BG_BLACK },
-    shoulderSecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+    // Cotton candy road shoulders - pink and white
+    shoulderPrimary: { fg: WHITE, bg: BG_MAGENTA },
+    shoulderSecondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
     
-    // Roadside colors - candy palette
+    // Roadside colors - candy palette with pastel backgrounds
     roadsideColors: {
       'lollipop': {
-        primary: { fg: LIGHTRED, bg: BG_BLACK },
-        secondary: { fg: WHITE, bg: BG_BLACK }
+        primary: { fg: LIGHTRED, bg: BG_CYAN },
+        secondary: { fg: WHITE, bg: BG_CYAN }
       },
       'candy_cane': {
-        primary: { fg: LIGHTRED, bg: BG_BLACK },
-        secondary: { fg: WHITE, bg: BG_BLACK }
+        primary: { fg: LIGHTRED, bg: BG_CYAN },
+        secondary: { fg: WHITE, bg: BG_CYAN }
       },
       'gummy_bear': {
-        primary: { fg: LIGHTGREEN, bg: BG_BLACK },
-        secondary: { fg: GREEN, bg: BG_BLACK }
+        primary: { fg: LIGHTGREEN, bg: BG_CYAN },
+        secondary: { fg: GREEN, bg: BG_CYAN }
       },
       'cupcake': {
-        primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        secondary: { fg: LIGHTRED, bg: BG_BLACK }
+        primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        secondary: { fg: LIGHTRED, bg: BG_CYAN }
       },
       'ice_cream': {
-        primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        secondary: { fg: BROWN, bg: BG_BLACK }
+        primary: { fg: WHITE, bg: BG_CYAN },
+        secondary: { fg: BROWN, bg: BG_CYAN }
       },
       'cotton_candy': {
-        primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        secondary: { fg: LIGHTCYAN, bg: BG_BLACK }
+        primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        secondary: { fg: WHITE, bg: BG_CYAN }
       }
     }
   },
@@ -101,11 +102,11 @@ var CandyLandTheme: Theme = {
     twinkle: true
   },
   
-  // Frosted candy ground with sprinkles
+  // Fluffy cotton candy ground - pastels with sprinkles
   ground: {
     type: 'candy',
-    primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-    secondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+    primary: { fg: WHITE, bg: BG_CYAN },
+    secondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
     pattern: {
       ditherDensity: 0.4,
       ditherChars: ['*', '@', '.', '~']

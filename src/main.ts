@@ -104,7 +104,7 @@ if (typeof console === 'undefined' || console === null) {
  * Tries to load custom ANSI art from title.ans, falls back to built-in ASCII art.
  */
 function showTitleScreen(): void {
-  console.clear();
+  console.clear(BG_BLACK, false);
   
   // Try to load custom title screen (.bin preferred, .ans fallback)
   var titleFile = "";
@@ -215,7 +215,7 @@ function waitForTitleInput(): boolean {
  * Waits for user to press a key before returning.
  */
 function showRaceEndScreen(): void {
-  console.clear();
+  console.clear(BG_BLACK, false);
   
   console.attributes = LIGHTMAGENTA;
   console.print("\r\n\r\n");
@@ -290,7 +290,13 @@ function main(): void {
       // Check if this is a cup (circuit) race
       if (trackSelection.isCircuitMode && trackSelection.circuitTracks) {
         // Cup mode - run multiple races
-        runCupMode(trackSelection.circuitTracks, cupManager, highScoreManager);
+        runCupMode(
+          trackSelection.circuitTracks,
+          cupManager,
+          highScoreManager,
+          trackSelection.circuitId || 'custom_cup',
+          trackSelection.circuitName || 'Circuit Cup'
+        );
       } else {
         // Single race mode
         runSingleRace(trackSelection.track, highScoreManager);
@@ -301,7 +307,7 @@ function main(): void {
     }
 
     // Final exit
-    console.clear();
+    console.clear(BG_BLACK, false);
     console.attributes = LIGHTGRAY;
     console.print("Thanks for playing OutRun ANSI!\r\n");
 
@@ -310,7 +316,7 @@ function main(): void {
     debugLog.separator("FATAL ERROR");
     debugLog.exception("Uncaught exception in main()", e);
     
-    console.clear();
+    console.clear(BG_BLACK, false);
     console.attributes = LIGHTRED;
     console.print("An error occurred: " + e + "\r\n");
     console.attributes = LIGHTGRAY;
@@ -354,20 +360,22 @@ function runSingleRace(track: TrackDefinition, highScoreManager: HighScoreManage
 function runCupMode(
   tracks: TrackDefinition[],
   cupManager: CupManager,
-  highScoreManager: HighScoreManager
+  highScoreManager: HighScoreManager,
+  circuitId: string,
+  circuitName: string
 ): void {
   debugLog.separator("CUP MODE START");
-  debugLog.info("Starting cup with " + tracks.length + " tracks");
+  debugLog.info("Starting cup with " + tracks.length + " tracks: " + circuitId);
   
   // Generate AI racer names
   var aiNames = ['MAX', 'LUNA', 'BLAZE', 'NOVA', 'TURBO', 'DASH', 'FLASH'];
   
-  // Create a custom cup definition from the selected tracks
+  // Create cup definition using the actual circuit ID and name
   var cupDef: CupDefinition = {
-    id: 'custom_cup',
-    name: 'Circuit Cup',
+    id: circuitId,
+    name: circuitName,
     trackIds: [],
-    description: 'Custom circuit'
+    description: circuitName + ' circuit'
   };
   for (var t = 0; t < tracks.length; t++) {
     cupDef.trackIds.push(tracks[t].id);

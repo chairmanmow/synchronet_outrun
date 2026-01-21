@@ -6,6 +6,8 @@ var FrameRenderer = (function () {
         this.horizonY = 8;
         this._mountainScrollOffset = 0;
         this._staticElementsDirty = true;
+        this._skyGridAnimPhase = 0;
+        this._fireAnimPhase = 0;
         this._currentRoad = null;
         this._currentTrackPosition = 0;
         this._currentCameraX = 0;
@@ -90,6 +92,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.celestial.type === 'monster') {
             this.renderMonsterSilhouette();
         }
+        else if (this.activeTheme.celestial.type === 'mermaid') {
+            this.renderMermaid();
+        }
         if (this.activeTheme.background.type === 'mountains') {
             this.renderMountains();
         }
@@ -129,6 +134,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'destroyed_city') {
             this.renderDestroyedCity();
         }
+        else if (this.activeTheme.background.type === 'underwater') {
+            this.renderUnderwaterBackground();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -138,8 +146,9 @@ var FrameRenderer = (function () {
         if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined') {
             GlitchState.update(trackPosition, dt || 0.016);
         }
+        this._fireAnimPhase += (dt || 0.016) * 8;
         if (this.activeTheme.sky.type === 'grid') {
-            this.renderSkyGrid(trackPosition);
+            this.renderSkyGrid(speed || 0, dt || 0);
         }
         else if (this.activeTheme.sky.type === 'stars') {
             this.renderSkyStars(trackPosition);
@@ -150,7 +159,7 @@ var FrameRenderer = (function () {
         if (this.activeTheme.background.type === 'ocean') {
             this.renderOceanWaves(trackPosition);
         }
-        if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined) {
+        if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined && speed > 0) {
             this.updateParallax(curvature, playerSteer, speed, dt);
         }
     };
@@ -179,6 +188,9 @@ var FrameRenderer = (function () {
             }
             else if (this.activeTheme.ground.type === 'dirt') {
                 this.renderDirtGround(trackPosition);
+            }
+            else if (this.activeTheme.ground.type === 'water') {
+                this.renderWaterGround(trackPosition);
             }
         }
         this.renderRoadSurface(trackPosition, cameraX, road);
@@ -905,6 +917,109 @@ var FrameRenderer = (function () {
         frame.setData(godzillaX + 5, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
         frame.setData(godzillaX + 6, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
         frame.setData(godzillaX + 7, baseY - 1, GLYPH.RIGHT_HALF, godzBody);
+    };
+    FrameRenderer.prototype.renderMermaid = function () {
+        var frame = this.frameManager.getSunFrame();
+        if (!frame)
+            return;
+        var colors = this.activeTheme.colors;
+        var coreAttr = makeAttr(colors.celestialCore.fg, colors.celestialCore.bg);
+        var glowAttr = makeAttr(colors.celestialGlow.fg, colors.celestialGlow.bg);
+        var hairAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var tailAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var tailGlowAttr = makeAttr(CYAN, BG_BLUE);
+        var posX = Math.floor(this.width * (this.activeTheme.celestial.positionX || 0.7));
+        var posY = Math.floor(this.horizonY * (this.activeTheme.celestial.positionY || 0.4));
+        frame.setData(posX - 5, posY - 2, '~', hairAttr);
+        frame.setData(posX - 4, posY - 2, '~', hairAttr);
+        frame.setData(posX - 3, posY - 1, '~', hairAttr);
+        frame.setData(posX - 4, posY - 1, '~', hairAttr);
+        frame.setData(posX - 5, posY, '~', hairAttr);
+        frame.setData(posX - 4, posY, '~', hairAttr);
+        frame.setData(posX - 3, posY, '~', hairAttr);
+        frame.setData(posX - 2, posY - 1, '(', coreAttr);
+        frame.setData(posX - 1, posY - 1, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX, posY - 1, ')', coreAttr);
+        frame.setData(posX - 1, posY, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX, posY, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX + 1, posY, '\\', coreAttr);
+        frame.setData(posX, posY + 1, GLYPH.FULL_BLOCK, glowAttr);
+        frame.setData(posX + 1, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 2, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 3, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 4, posY, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 5, posY, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 6, posY - 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 7, posY - 2, '/', tailGlowAttr);
+        frame.setData(posX + 7, posY - 1, GLYPH.FULL_BLOCK, tailGlowAttr);
+        frame.setData(posX + 7, posY, '\\', tailGlowAttr);
+        frame.setData(posX + 8, posY - 2, '/', tailGlowAttr);
+        frame.setData(posX + 8, posY, '\\', tailGlowAttr);
+        frame.setData(posX - 2, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX + 1, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX - 2, posY + 1, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX + 2, posY + 2, GLYPH.LIGHT_SHADE, glowAttr);
+    };
+    FrameRenderer.prototype.renderUnderwaterBackground = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var colors = this.activeTheme.colors;
+        var rockAttr = makeAttr(colors.sceneryPrimary.fg, colors.sceneryPrimary.bg);
+        var rockLightAttr = makeAttr(colors.scenerySecondary.fg, colors.scenerySecondary.bg);
+        var kelpAttr = makeAttr(colors.sceneryTertiary.fg, colors.sceneryTertiary.bg);
+        var coralAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var coralYellowAttr = makeAttr(YELLOW, BG_BLUE);
+        for (var y = 0; y < this.horizonY; y++) {
+            var wallWidth = 6 - Math.floor(y * 0.5);
+            for (var x = 0; x < wallWidth && x < 10; x++) {
+                var char = (x === wallWidth - 1) ? GLYPH.RIGHT_HALF : GLYPH.FULL_BLOCK;
+                var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+                frame.setData(x, y, char, attr);
+            }
+        }
+        for (var y = 0; y < this.horizonY; y++) {
+            var wallWidth = 5 - Math.floor(y * 0.4);
+            for (var x = 0; x < wallWidth && x < 8; x++) {
+                var rx = this.width - 1 - x;
+                var char = (x === wallWidth - 1) ? GLYPH.LEFT_HALF : GLYPH.FULL_BLOCK;
+                var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+                frame.setData(rx, y, char, attr);
+            }
+        }
+        var kelpPositions = [12, 18, 25, 55, 62, 68];
+        for (var i = 0; i < kelpPositions.length; i++) {
+            var kx = kelpPositions[i];
+            var kelpHeight = 3 + (i % 3);
+            for (var ky = 0; ky < kelpHeight; ky++) {
+                var y = this.horizonY - 1 - ky;
+                if (y >= 0) {
+                    var kchar = (ky % 2 === 0) ? ')' : '(';
+                    frame.setData(kx, y, kchar, kelpAttr);
+                    if (i % 2 === 0 && kx + 1 < this.width) {
+                        frame.setData(kx + 1, y, (ky % 2 === 0) ? '(' : ')', kelpAttr);
+                    }
+                }
+            }
+        }
+        var coralPositions = [8, 22, 35, 48, 58, 72];
+        for (var i = 0; i < coralPositions.length; i++) {
+            var cx = coralPositions[i];
+            var y = this.horizonY - 1;
+            var attr = (i % 2 === 0) ? coralAttr : coralYellowAttr;
+            frame.setData(cx, y, '*', attr);
+            frame.setData(cx + 1, y, 'Y', attr);
+            frame.setData(cx + 2, y, '*', attr);
+            if (y - 1 >= 0) {
+                frame.setData(cx + 1, y - 1, '^', attr);
+            }
+        }
+        var bubblePositions = [[30, 2], [45, 3], [50, 1], [15, 4], [65, 2]];
+        for (var i = 0; i < bubblePositions.length; i++) {
+            var bx = bubblePositions[i][0];
+            var by = bubblePositions[i][1];
+            frame.setData(bx, by, 'o', makeAttr(WHITE, BG_BLUE));
+        }
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -1659,37 +1774,48 @@ var FrameRenderer = (function () {
             }
         }
     };
-    FrameRenderer.prototype.renderSkyGrid = function (trackPosition) {
+    FrameRenderer.prototype.renderSkyGrid = function (speed, dt) {
         var frame = this.frameManager.getSkyGridFrame();
         if (!frame)
             return;
         frame.clear();
+        if (speed > 1) {
+            this._skyGridAnimPhase -= speed * dt * 0.004;
+            while (this._skyGridAnimPhase < 0)
+                this._skyGridAnimPhase += 1;
+            while (this._skyGridAnimPhase >= 1)
+                this._skyGridAnimPhase -= 1;
+        }
         var colors = this.activeTheme.colors;
         var gridAttr = makeAttr(colors.skyGrid.fg, colors.skyGrid.bg);
         var glowAttr = makeAttr(colors.skyGridGlow.fg, colors.skyGridGlow.bg);
-        var vanishX = 40 + Math.round(this._mountainScrollOffset * 0.5);
+        var vanishX = 40;
         for (var y = this.horizonY - 1; y >= 1; y--) {
             var distFromHorizon = this.horizonY - y;
             var spread = distFromHorizon * 6;
             if (this.activeTheme.sky.converging) {
-                for (var offset = 0; offset <= spread && offset < 40; offset += 10) {
-                    if (offset === 0) {
-                        frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
-                    }
-                    else {
-                        var leftX = vanishX - offset;
-                        var rightX = vanishX + offset;
-                        if (leftX >= 0 && leftX < this.width)
-                            frame.setData(leftX, y, '/', glowAttr);
-                        if (rightX >= 0 && rightX < this.width)
-                            frame.setData(rightX, y, '\\', glowAttr);
+                for (var offset = 0; offset <= 40; offset += 8) {
+                    if (offset <= spread) {
+                        if (offset === 0) {
+                            frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
+                        }
+                        else {
+                            var leftX = vanishX - offset;
+                            var rightX = vanishX + offset;
+                            if (leftX >= 0 && leftX < this.width)
+                                frame.setData(leftX, y, '/', glowAttr);
+                            if (rightX >= 0 && rightX < this.width)
+                                frame.setData(rightX, y, '\\', glowAttr);
+                        }
                     }
                 }
             }
             if (this.activeTheme.sky.horizontal) {
-                var linePhase = Math.floor(trackPosition / 50 + distFromHorizon) % 4;
-                if (linePhase === 0) {
-                    var lineSpread = Math.min(spread, 38);
+                var scanlinePhase = (this._skyGridAnimPhase + distFromHorizon * 0.25) % 1;
+                if (scanlinePhase < 0)
+                    scanlinePhase += 1;
+                if (scanlinePhase < 0.33) {
+                    var lineSpread = Math.min(spread, 39);
                     for (var x = vanishX - lineSpread; x <= vanishX + lineSpread; x++) {
                         if (x >= 0 && x < this.width) {
                             frame.setData(x, y, GLYPH.BOX_H, glowAttr);
@@ -1802,7 +1928,7 @@ var FrameRenderer = (function () {
             }
         }
     };
-    FrameRenderer.prototype.renderLavaGround = function (trackPosition) {
+    FrameRenderer.prototype.renderLavaGround = function (_trackPosition) {
         var frame = this.frameManager.getGroundGridFrame();
         if (!frame)
             return;
@@ -1810,37 +1936,200 @@ var FrameRenderer = (function () {
         if (!ground)
             return;
         frame.clear();
-        var rockAttr = makeAttr(ground.primary.fg, ground.primary.bg);
-        var lavaAttr = makeAttr(ground.secondary.fg, ground.secondary.bg);
         var frameHeight = this.height - this.horizonY;
+        var firePhase = this._fireAnimPhase;
+        var blackAttr = makeAttr(BLACK, BG_BLACK);
+        var darkRockAttr = makeAttr(DARKGRAY, BG_BLACK);
+        var hotRockAttr = makeAttr(RED, BG_BLACK);
+        var lavaAttr = makeAttr(LIGHTRED, BG_RED);
+        var lavaGlowAttr = makeAttr(YELLOW, BG_RED);
+        var lavaBrightAttr = makeAttr(WHITE, BG_RED);
+        var fireAttr = makeAttr(YELLOW, BG_BLACK);
+        var fireBrightAttr = makeAttr(WHITE, BG_RED);
+        var emberAttr = makeAttr(LIGHTRED, BG_BLACK);
         for (var y = 0; y < frameHeight - 1; y++) {
+            var depthFactor = y / frameHeight;
             for (var x = 0; x < this.width; x++) {
-                frame.setData(x, y, GLYPH.DARK_SHADE, rockAttr);
+                var river1 = Math.sin((x * 0.15) + (y * 0.3) + firePhase * 0.7) * 1.5;
+                var river2 = Math.sin((x * 0.1) - (y * 0.2) + firePhase * 0.5 + 2) * 1.2;
+                var riverIntensity = river1 + river2;
+                var flameBase = Math.sin(x * 0.25 + firePhase * 1.5) +
+                    Math.sin(x * 0.4 - firePhase * 2.0) * 0.5;
+                var flameFlicker = Math.sin(x * 0.8 + y * 0.5 + firePhase * 4) * 0.5;
+                var flameIntensity = flameBase + flameFlicker;
+                var emberSeed = (x * 7919 + y * 104729) % 1000;
+                var emberPhase = Math.sin(firePhase * 3 + emberSeed * 0.01);
+                var isEmber = emberSeed < 30 && emberPhase > 0.7;
+                var poolCenterX1 = 15 + Math.sin(firePhase * 0.3) * 3;
+                var poolCenterX2 = 55 + Math.sin(firePhase * 0.4 + 1) * 4;
+                var poolCenterX3 = 35 + Math.sin(firePhase * 0.2 + 2) * 2;
+                var dist1 = Math.sqrt(Math.pow(x - poolCenterX1, 2) + Math.pow(y - 8, 2));
+                var dist2 = Math.sqrt(Math.pow(x - poolCenterX2, 2) + Math.pow(y - 12, 2));
+                var dist3 = Math.sqrt(Math.pow(x - poolCenterX3, 2) + Math.pow(y - 5, 2));
+                var poolBubble = Math.sin(firePhase * 2 + x * 0.3 + y * 0.2);
+                var inPool1 = dist1 < 6 + poolBubble;
+                var inPool2 = dist2 < 5 + poolBubble * 0.8;
+                var inPool3 = dist3 < 4 + poolBubble * 0.6;
+                var char;
+                var attr;
+                if (isEmber && depthFactor > 0.3) {
+                    char = '*';
+                    attr = emberAttr;
+                }
+                else if (inPool1 || inPool2 || inPool3) {
+                    var poolDist = inPool1 ? dist1 : (inPool2 ? dist2 : dist3);
+                    var bubblePhase = Math.sin(firePhase * 3 + poolDist * 0.5);
+                    if (bubblePhase > 0.7) {
+                        char = 'O';
+                        attr = lavaBrightAttr;
+                    }
+                    else if (bubblePhase > 0.3) {
+                        char = GLYPH.FULL_BLOCK;
+                        attr = lavaGlowAttr;
+                    }
+                    else if (bubblePhase > -0.2) {
+                        char = GLYPH.MEDIUM_SHADE;
+                        attr = lavaAttr;
+                    }
+                    else {
+                        char = '~';
+                        attr = lavaAttr;
+                    }
+                }
+                else if (riverIntensity > 1.5) {
+                    char = GLYPH.FULL_BLOCK;
+                    attr = lavaGlowAttr;
+                }
+                else if (riverIntensity > 0.8) {
+                    char = '~';
+                    attr = lavaAttr;
+                }
+                else if (riverIntensity > 0.3) {
+                    char = GLYPH.LIGHT_SHADE;
+                    attr = hotRockAttr;
+                }
+                else if (flameIntensity > 1.2 && depthFactor < 0.6) {
+                    char = '^';
+                    attr = fireBrightAttr;
+                }
+                else if (flameIntensity > 0.6 && depthFactor < 0.7) {
+                    var flameChar = ((x + Math.floor(firePhase * 5)) % 3 === 0) ? '^' : '*';
+                    char = flameChar;
+                    attr = fireAttr;
+                }
+                else if (flameIntensity > 0.2 && depthFactor < 0.8) {
+                    char = GLYPH.MEDIUM_SHADE;
+                    attr = emberAttr;
+                }
+                else if (Math.random() < 0.02 && depthFactor > 0.4) {
+                    char = '.';
+                    attr = emberAttr;
+                }
+                else {
+                    var rockPattern = ((x * 3 + y * 7) % 5);
+                    if (rockPattern === 0) {
+                        char = GLYPH.DARK_SHADE;
+                        attr = darkRockAttr;
+                    }
+                    else if (rockPattern === 1) {
+                        char = GLYPH.MEDIUM_SHADE;
+                        attr = blackAttr;
+                    }
+                    else {
+                        char = ' ';
+                        attr = blackAttr;
+                    }
+                }
+                frame.setData(x, y, char, attr);
             }
         }
-        var flowPhase = Math.floor(trackPosition / 20) % 8;
+    };
+    FrameRenderer.prototype.renderWaterGround = function (_trackPosition) {
+        var frame = this.frameManager.getGroundGridFrame();
+        if (!frame)
+            return;
+        var ground = this.activeTheme.ground;
+        if (!ground)
+            return;
+        frame.clear();
+        var frameHeight = this.height - this.horizonY;
+        var waterPhase = this._fireAnimPhase;
+        var deepBlueAttr = makeAttr(BLUE, BG_BLUE);
+        var mediumBlueAttr = makeAttr(LIGHTBLUE, BG_BLUE);
+        var lightBlueAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var cyanAttr = makeAttr(CYAN, BG_CYAN);
+        var whiteAttr = makeAttr(WHITE, BG_BLUE);
+        var sandAttr = makeAttr(YELLOW, BG_BLUE);
+        var sandDarkAttr = makeAttr(BROWN, BG_BLUE);
+        var seaweedAttr = makeAttr(GREEN, BG_BLUE);
+        var bubbleAttr = makeAttr(WHITE, BG_CYAN);
         for (var y = 0; y < frameHeight - 1; y++) {
-            var distFromHorizon = y + 1;
-            for (var crack = 0; crack < 4; crack++) {
-                var baseX = crack * 20 + 5;
-                var waveOffset = Math.sin((y + flowPhase + crack * 3) * 0.5) * 3;
-                var x = Math.floor(baseX + waveOffset);
-                if (x >= 0 && x < this.width) {
-                    var intensity = ((y + flowPhase * 2 + crack) % 4);
-                    var char = (intensity < 2) ? '*' : '~';
-                    frame.setData(x, y, char, lavaAttr);
-                    if (x > 0)
-                        frame.setData(x - 1, y, GLYPH.LIGHT_SHADE, rockAttr);
-                    if (x < this.width - 1)
-                        frame.setData(x + 1, y, GLYPH.LIGHT_SHADE, rockAttr);
+            var depthFactor = y / frameHeight;
+            for (var x = 0; x < this.width; x++) {
+                var caustic1 = Math.sin((x * 0.2) + (y * 0.15) + waterPhase * 0.8);
+                var caustic2 = Math.sin((x * 0.15) - (y * 0.1) + waterPhase * 0.6 + 1.5);
+                var causticIntensity = (caustic1 + caustic2) / 2;
+                var currentWave = Math.sin(y * 0.3 + waterPhase * 1.2) * 0.5;
+                var currentIntensity = Math.sin((x + waterPhase * 3) * 0.1 + currentWave);
+                var bubbleSeed = (x * 7919 + y * 104729) % 1000;
+                var bubblePhase = Math.sin(waterPhase * 2 - y * 0.3 + bubbleSeed * 0.01);
+                var isBubble = bubbleSeed < 20 && bubblePhase > 0.8 && depthFactor > 0.2;
+                var sandNoise = Math.sin(x * 0.4 + y * 0.2) + Math.sin(x * 0.2 - y * 0.3);
+                var isSandy = sandNoise > 0.8 && depthFactor > 0.5;
+                var seaweedSeed = (x * 31 + y * 17) % 100;
+                var seaweedWave = Math.sin(waterPhase * 1.5 + x * 0.5);
+                var isSeaweed = seaweedSeed < 8 && depthFactor > 0.3 && seaweedWave > 0.3;
+                var char;
+                var attr;
+                if (isBubble) {
+                    char = 'o';
+                    attr = bubbleAttr;
                 }
-            }
-            if (distFromHorizon > frameHeight / 2) {
-                var poolChance = ((y * 17 + flowPhase) % 11);
-                if (poolChance === 0) {
-                    var poolX = (y * 13 + flowPhase * 5) % this.width;
-                    frame.setData(poolX, y, GLYPH.MEDIUM_SHADE, lavaAttr);
+                else if (isSeaweed) {
+                    var seaweedChar = seaweedWave > 0.6 ? ')' : '(';
+                    char = seaweedChar;
+                    attr = seaweedAttr;
                 }
+                else if (isSandy) {
+                    var sandRipple = Math.sin(x * 0.5 + waterPhase * 0.5);
+                    if (sandRipple > 0.5) {
+                        char = '~';
+                        attr = sandAttr;
+                    }
+                    else if (sandRipple > 0) {
+                        char = '.';
+                        attr = sandDarkAttr;
+                    }
+                    else {
+                        char = ',';
+                        attr = sandAttr;
+                    }
+                }
+                else if (causticIntensity > 0.7) {
+                    char = GLYPH.LIGHT_SHADE;
+                    attr = whiteAttr;
+                }
+                else if (causticIntensity > 0.3) {
+                    char = '~';
+                    attr = lightBlueAttr;
+                }
+                else if (currentIntensity > 0.6) {
+                    char = '~';
+                    attr = cyanAttr;
+                }
+                else if (currentIntensity > 0.2) {
+                    char = '~';
+                    attr = mediumBlueAttr;
+                }
+                else if (currentIntensity > -0.2) {
+                    char = GLYPH.MEDIUM_SHADE;
+                    attr = mediumBlueAttr;
+                }
+                else {
+                    char = GLYPH.DARK_SHADE;
+                    attr = deepBlueAttr;
+                }
+                frame.setData(x, y, char, attr);
             }
         }
     };
@@ -2196,6 +2485,13 @@ var FrameRenderer = (function () {
         }
         switch (ground.type) {
             case 'grid':
+            case 'lava':
+            case 'candy':
+            case 'void':
+            case 'cobblestone':
+            case 'jungle':
+            case 'dirt':
+            case 'water':
                 return;
             case 'dither':
                 this.renderDitherGround(frame, x, y, distFromRoad, distance, ground);
@@ -2594,7 +2890,7 @@ var FrameRenderer = (function () {
     };
     FrameRenderer.prototype.shutdown = function () {
         this.frameManager.shutdown();
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     return FrameRenderer;
 }());

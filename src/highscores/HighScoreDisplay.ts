@@ -4,6 +4,7 @@
 
 /**
  * Display high scores in a formatted box.
+ * Uses fixed 80x24 viewport for consistent layout.
  * @param scores - Array of high score entries
  * @param title - Title of the display
  * @param trackOrCircuitName - Track or circuit name
@@ -15,10 +16,11 @@ function displayHighScores(
   trackOrCircuitName: string,
   playerPosition?: number
 ): void {
-  console.clear();
+  console.clear(LIGHTGRAY, false);
   
-  var screenWidth = console.screen_columns;
-  var screenHeight = console.screen_rows;
+  // Fixed 80x24 viewport
+  var screenWidth = 80;
+  var screenHeight = 24;
   
   // Colors
   var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
@@ -158,7 +160,9 @@ function showHighScoreList(
 ): void {
   var scores = highScoreManager.getScores(type, identifier);
   displayHighScores(scores, title, trackOrCircuitName, playerPosition);
-  console.inkey(K_NONE);
+  // Reset line counter to prevent auto-pause, then wait for key with long timeout
+  console.line_counter = 0;
+  console.inkey(K_NONE, 300000);  // Wait up to 5 minutes
 }
 
 /**
@@ -182,4 +186,205 @@ function displayTopScoreLine(
   } else {
     console.print("--:--.-- (No record)");
   }
+}
+
+/**
+ * Display track high scores in a two-column layout (Track Time | Lap Time).
+ * Uses fixed 80x24 viewport for consistent layout.
+ * @param trackId - Track identifier
+ * @param trackName - Track display name
+ * @param highScoreManager - HighScoreManager instance
+ * @param trackTimePosition - Player's position in track time list (0 = not on list)
+ * @param lapTimePosition - Player's position in lap time list (0 = not on list)
+ */
+function showTwoColumnHighScores(
+  trackId: string,
+  trackName: string,
+  highScoreManager: HighScoreManager,
+  trackTimePosition: number,
+  lapTimePosition: number
+): void {
+  console.clear(LIGHTGRAY, false);
+  
+  // Fixed 80x24 viewport
+  var viewWidth = 80;
+  var viewHeight = 24;
+  
+  // Get scores
+  var trackScores = highScoreManager.getScores(HighScoreType.TRACK_TIME, trackId);
+  var lapScores = highScoreManager.getScores(HighScoreType.LAP_TIME, trackId);
+  
+  // Colors
+  var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+  var headerAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+  var colHeaderAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+  var rankAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+  var nameAttr = colorToAttr({ fg: LIGHTGRAY, bg: BG_BLACK });
+  var timeAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+  var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+  var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+  var highlightAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLUE });
+  var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+  var newScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+  
+  // Box dimensions - full width for two columns
+  var boxWidth = 76;
+  var boxHeight = 20;
+  var boxX = Math.floor((viewWidth - boxWidth) / 2);
+  var topY = Math.floor((viewHeight - boxHeight) / 2);
+  
+  // Draw box border
+  console.gotoxy(boxX, topY);
+  console.attributes = boxAttr;
+  console.print(GLYPH.DBOX_TL);
+  for (var i = 1; i < boxWidth - 1; i++) {
+    console.print(GLYPH.DBOX_H);
+  }
+  console.print(GLYPH.DBOX_TR);
+  
+  for (var j = 1; j < boxHeight - 1; j++) {
+    console.gotoxy(boxX, topY + j);
+    console.print(GLYPH.DBOX_V);
+    console.gotoxy(boxX + boxWidth - 1, topY + j);
+    console.print(GLYPH.DBOX_V);
+  }
+  
+  console.gotoxy(boxX, topY + boxHeight - 1);
+  console.print(GLYPH.DBOX_BL);
+  for (var i = 1; i < boxWidth - 1; i++) {
+    console.print(GLYPH.DBOX_H);
+  }
+  console.print(GLYPH.DBOX_BR);
+  
+  // Title
+  var title = "=== HIGH SCORES ===";
+  console.gotoxy(boxX + Math.floor((boxWidth - title.length) / 2), topY + 1);
+  console.attributes = titleAttr;
+  console.print(title);
+  
+  // Track name
+  console.gotoxy(boxX + Math.floor((boxWidth - trackName.length) / 2), topY + 2);
+  console.attributes = headerAttr;
+  console.print(trackName);
+  
+  // Column headers
+  var leftColX = boxX + 3;
+  var rightColX = boxX + 40;
+  
+  console.gotoxy(leftColX, topY + 4);
+  console.attributes = colHeaderAttr;
+  console.print("TRACK TIME");
+  
+  console.gotoxy(rightColX, topY + 4);
+  console.print("BEST LAP");
+  
+  // Divider line
+  console.gotoxy(boxX + 37, topY + 4);
+  console.attributes = boxAttr;
+  console.print(GLYPH.BOX_V);
+  for (var j = 5; j < boxHeight - 3; j++) {
+    console.gotoxy(boxX + 37, topY + j);
+    console.print(GLYPH.BOX_V);
+  }
+  
+  // Draw scores - 10 rows, two columns
+  var startY = topY + 5;
+  for (var i = 0; i < 10; i++) {
+    // Left column - Track Time
+    console.gotoxy(leftColX, startY + i);
+    var trackHighlighted = (trackTimePosition > 0 && trackTimePosition === i + 1);
+    
+    if (i < trackScores.length) {
+      var score = trackScores[i];
+      var rank = (i + 1) + ".";
+      if (i < 9) rank = " " + rank;
+      
+      console.attributes = trackHighlighted ? highlightAttr : rankAttr;
+      console.print(rank + " ");
+      
+      // Name (truncated to 11 chars)
+      var name = score.playerName;
+      if (name.length > 11) name = name.substring(0, 10) + ".";
+      while (name.length < 11) name += " ";
+      console.attributes = trackHighlighted ? highlightAttr : nameAttr;
+      console.print(name + " ");
+      
+      // Time
+      console.attributes = trackHighlighted ? highlightAttr : timeAttr;
+      console.print(LapTimer.format(score.time));
+      
+      // Date (M/D/YYYY)
+      var d = new Date(score.date);
+      var dateStr = " " + (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear();
+      console.attributes = trackHighlighted ? highlightAttr : emptyAttr;
+      console.print(dateStr);
+      
+      if (trackHighlighted) {
+        console.attributes = newScoreAttr;
+        console.print("*");
+      }
+    } else {
+      console.attributes = emptyAttr;
+      var rank = (i + 1) + ".";
+      if (i < 9) rank = " " + rank;
+      console.print(rank + " ---");
+    }
+    
+    // Right column - Lap Time
+    console.gotoxy(rightColX, startY + i);
+    var lapHighlighted = (lapTimePosition > 0 && lapTimePosition === i + 1);
+    
+    if (i < lapScores.length) {
+      var score = lapScores[i];
+      var rank = (i + 1) + ".";
+      if (i < 9) rank = " " + rank;
+      
+      console.attributes = lapHighlighted ? highlightAttr : rankAttr;
+      console.print(rank + " ");
+      
+      // Name (truncated to 11 chars)
+      var name = score.playerName;
+      if (name.length > 11) name = name.substring(0, 10) + ".";
+      while (name.length < 11) name += " ";
+      console.attributes = lapHighlighted ? highlightAttr : nameAttr;
+      console.print(name + " ");
+      
+      // Time
+      console.attributes = lapHighlighted ? highlightAttr : timeAttr;
+      console.print(LapTimer.format(score.time));
+      
+      // Date (M/D/YYYY)
+      var d = new Date(score.date);
+      var dateStr = " " + (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear();
+      console.attributes = lapHighlighted ? highlightAttr : emptyAttr;
+      console.print(dateStr);
+      
+      if (lapHighlighted) {
+        console.attributes = newScoreAttr;
+        console.print(" *");
+      }
+    } else {
+      console.attributes = emptyAttr;
+      var rank = (i + 1) + ".";
+      if (i < 9) rank = " " + rank;
+      console.print(rank + " ---");
+    }
+  }
+  
+  // Legend for new scores
+  if (trackTimePosition > 0 || lapTimePosition > 0) {
+    console.gotoxy(boxX + 3, topY + boxHeight - 3);
+    console.attributes = newScoreAttr;
+    console.print("* = Your new high score!");
+  }
+  
+  // Footer prompt
+  var prompt = "Press any key to continue";
+  console.gotoxy(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + boxHeight - 2);
+  console.attributes = promptAttr;
+  console.print(prompt);
+  
+  // Reset line counter to prevent auto-pause, then wait for key with long timeout
+  console.line_counter = 0;
+  console.inkey(K_NONE, 300000);  // Wait up to 5 minutes
 }

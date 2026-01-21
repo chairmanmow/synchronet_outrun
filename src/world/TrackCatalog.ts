@@ -100,6 +100,9 @@ interface TrackDefinition {
   
   /** Number of NPC vehicles (commuters/traffic) on track */
   npcCount?: number;
+  
+  /** If true, hidden from normal selection (accessible via hotkey) */
+  hidden?: boolean;
 }
 
 /**
@@ -906,6 +909,7 @@ var TRACK_CATALOG: TrackDefinition[] = [
     themeId: 'ancient_ruins',
     estimatedLapTime: 40,
     npcCount: 5,
+    hidden: true,  // Hidden from normal selection, accessible via hotkey
     sections: [
       { type: 'straight', length: 5 },
       { type: 'ease_in', length: 2, targetCurve: 0.45 },
@@ -918,6 +922,34 @@ var TRACK_CATALOG: TrackDefinition[] = [
       { type: 'straight', length: 4 },
       { type: 'ease_in', length: 2, targetCurve: 0.4 },
       { type: 'curve', length: 4, curve: 0.4 },
+      { type: 'ease_out', length: 2 }
+    ]
+  },
+
+  // ---- MERMAID LAGOON (underwater grotto) ----
+  {
+    id: 'mermaid_lagoon',
+    name: 'Mermaid Lagoon',
+    description: 'Race through a magical underwater grotto',
+    difficulty: 3,
+    laps: 3,
+    themeId: 'underwater_grotto',
+    estimatedLapTime: 42,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 5 },
+      { type: 'ease_in', length: 2, targetCurve: 0.4 },
+      { type: 'curve', length: 5, curve: 0.4 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 4 },
+      { type: 'ease_in', length: 2, targetCurve: -0.5 },
+      { type: 'curve', length: 6, curve: -0.5 },
+      { type: 'ease_out', length: 2 },
+      { type: 'straight', length: 3 },
+      { type: 'ease_in', length: 2, targetCurve: 0.45 },
+      { type: 'curve', length: 5, curve: 0.45 },
+      { type: 'ease_in', length: 2, targetCurve: -0.35 },
+      { type: 'curve', length: 4, curve: -0.35 },
       { type: 'ease_out', length: 2 }
     ]
   },

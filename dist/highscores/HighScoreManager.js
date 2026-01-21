@@ -35,6 +35,9 @@ var HighScoreManager = (function () {
             var data = this.db.masterData.data || {};
             var scores = data[key];
             if (scores && Array.isArray(scores)) {
+                scores.sort(function (a, b) {
+                    return a.time - b.time;
+                });
                 return scores;
             }
             return [];
@@ -84,22 +87,22 @@ var HighScoreManager = (function () {
                 entry.trackName = trackName;
             if (circuitName)
                 entry.circuitName = circuitName;
+            scores.push(entry);
+            scores.sort(function (a, b) {
+                return a.time - b.time;
+            });
+            if (scores.length > this.maxEntries) {
+                scores = scores.slice(0, this.maxEntries);
+            }
             var position = 0;
             for (var i = 0; i < scores.length; i++) {
-                if (time < scores[i].time) {
-                    position = i;
+                if (scores[i].time === time && scores[i].date === entry.date) {
+                    position = i + 1;
                     break;
                 }
             }
-            if (position === 0 && scores.length < this.maxEntries) {
-                position = scores.length;
-            }
-            if (position === 0 && scores.length >= this.maxEntries) {
+            if (position === 0) {
                 return 0;
-            }
-            scores.splice(position, 0, entry);
-            if (scores.length > this.maxEntries) {
-                scores = scores.slice(0, this.maxEntries);
             }
             var data = this.db.masterData.data || {};
             data[key] = scores;

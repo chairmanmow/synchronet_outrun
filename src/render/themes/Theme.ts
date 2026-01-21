@@ -61,7 +61,7 @@ interface ThemeColors {
 interface ThemeBackgroundElement {
   type: 'mountains' | 'skyscrapers' | 'dunes' | 'forest' | 'hills' | 'ocean' | 
         'jungle_canopy' | 'candy_hills' | 'nebula' | 'castle_fortress' | 
-        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city';
+        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city' | 'underwater';
   // Configuration varies by type
   config: {
     // Mountains/hills
@@ -88,13 +88,16 @@ interface ThemeBackgroundElement {
     // Pyramids
     pyramidCount?: number;
     hasSphinx?: boolean;
+    // Underwater
+    kelp?: boolean;
+    bubbles?: boolean;
     // General
     parallaxSpeed?: number;
   };
 }
 
 interface ThemeCelestialBody {
-  type: 'sun' | 'moon' | 'dual_moons' | 'monster' | 'none';
+  type: 'sun' | 'moon' | 'dual_moons' | 'monster' | 'mermaid' | 'none';
   size: number;           // 1-5 scale
   positionX: number;      // 0=left, 0.5=center, 1=right
   positionY: number;      // 0=top of sky, 1=at horizon
@@ -142,7 +145,7 @@ interface ThemeRoadsideConfig {
  */
 interface ThemeGroundConfig {
   // Type of ground pattern
-  type: 'solid' | 'grid' | 'dither' | 'grass' | 'sand' | 'lava' | 'candy' | 'void' | 'cobblestone' | 'jungle' | 'dirt';
+  type: 'solid' | 'grid' | 'dither' | 'grass' | 'sand' | 'lava' | 'candy' | 'void' | 'cobblestone' | 'jungle' | 'dirt' | 'water';
   
   // Colors for ground (primary = main, secondary = pattern/accent)
   primary: ColorPair;

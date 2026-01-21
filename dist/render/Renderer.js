@@ -24,7 +24,7 @@ var Renderer = (function () {
             logWarning("Renderer: frame.js not available, using direct console");
             this.useFrame = false;
         }
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     Renderer.prototype.beginFrame = function () {
         this.composer.clear();
@@ -95,7 +95,7 @@ var Renderer = (function () {
             this.frame = null;
         }
         console.attributes = LIGHTGRAY;
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     return Renderer;
 }());

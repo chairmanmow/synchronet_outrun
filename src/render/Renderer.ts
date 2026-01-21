@@ -68,7 +68,7 @@ class Renderer implements IRenderer {
     }
 
     // Clear screen
-    console.clear();
+    console.clear(BG_BLACK, false);
   }
 
   /**
@@ -179,6 +179,6 @@ class Renderer implements IRenderer {
 
     // Restore terminal state
     console.attributes = LIGHTGRAY;
-    console.clear();
+    console.clear(BG_BLACK, false);
   }
 }

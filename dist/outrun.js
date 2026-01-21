@@ -367,28 +367,10 @@ var InputMap = (function () {
         this.setupDefaultBindings();
     }
     InputMap.prototype.setupDefaultBindings = function () {
-        this.bind('Q', GameAction.ACCEL_LEFT);
-        this.bind('U', GameAction.ACCEL_LEFT);
-        this.bind('W', GameAction.ACCELERATE);
-        this.bind('I', GameAction.ACCELERATE);
-        this.bind('E', GameAction.ACCEL_RIGHT);
-        this.bind('P', GameAction.ACCEL_RIGHT);
-        this.bind('q', GameAction.STEER_LEFT);
-        this.bind('u', GameAction.STEER_LEFT);
-        this.bind('w', GameAction.ACCELERATE);
-        this.bind('i', GameAction.ACCELERATE);
-        this.bind('e', GameAction.STEER_RIGHT);
-        this.bind('p', GameAction.STEER_RIGHT);
-        this.bind('A', GameAction.BRAKE_LEFT);
-        this.bind('a', GameAction.BRAKE_LEFT);
-        this.bind('S', GameAction.BRAKE);
-        this.bind('s', GameAction.BRAKE);
-        this.bind('D', GameAction.BRAKE_RIGHT);
-        this.bind('d', GameAction.BRAKE_RIGHT);
-        this.bind('Z', GameAction.ACCELERATE);
-        this.bind('z', GameAction.ACCELERATE);
-        this.bind('C', GameAction.BRAKE);
-        this.bind('c', GameAction.BRAKE);
+        this.bind(KEY_UP, GameAction.ACCELERATE);
+        this.bind(KEY_DOWN, GameAction.BRAKE);
+        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
+        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind('7', GameAction.ACCEL_LEFT);
         this.bind('8', GameAction.ACCELERATE);
         this.bind('9', GameAction.ACCEL_RIGHT);
@@ -398,15 +380,15 @@ var InputMap = (function () {
         this.bind('1', GameAction.BRAKE_LEFT);
         this.bind('2', GameAction.BRAKE);
         this.bind('3', GameAction.BRAKE_RIGHT);
-        this.bind(KEY_UP, GameAction.ACCELERATE);
-        this.bind(KEY_DOWN, GameAction.BRAKE);
-        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
-        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind(' ', GameAction.USE_ITEM);
-        this.bind('\r', GameAction.USE_ITEM);
-        this.bind('x', GameAction.PAUSE);
-        this.bind('X', GameAction.PAUSE);
-        this.bind('0', GameAction.QUIT);
+        this.bind('p', GameAction.PAUSE);
+        this.bind('P', GameAction.PAUSE);
+        this.bind('\r', GameAction.PAUSE);
+        this.bind('q', GameAction.QUIT);
+        this.bind('Q', GameAction.QUIT);
+        this.bind('x', GameAction.QUIT);
+        this.bind('X', GameAction.QUIT);
+        this.bind('\x1b', GameAction.QUIT);
     };
     InputMap.prototype.bind = function (key, action) {
         this.bindings[key] = action;
@@ -427,6 +409,7 @@ var Controls = (function () {
         this.holdThreshold = 200;
         this.currentAccel = 0;
         this.currentSteer = 0;
+        this.lastAccelAction = 1;
     }
     Controls.prototype.handleKey = function (key, now) {
         var action = this.inputMap.getAction(key);
@@ -443,9 +426,11 @@ var Controls = (function () {
         switch (action) {
             case GameAction.ACCELERATE:
                 this.currentAccel = 1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.BRAKE:
                 this.currentAccel = -1;
+                this.lastAccelAction = -1;
                 break;
             case GameAction.STEER_LEFT:
                 this.currentSteer = -1;
@@ -456,18 +441,22 @@ var Controls = (function () {
             case GameAction.ACCEL_LEFT:
                 this.currentAccel = 1;
                 this.currentSteer = -1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.ACCEL_RIGHT:
                 this.currentAccel = 1;
                 this.currentSteer = 1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.BRAKE_LEFT:
                 this.currentAccel = -1;
                 this.currentSteer = -1;
+                this.lastAccelAction = -1;
                 break;
             case GameAction.BRAKE_RIGHT:
                 this.currentAccel = -1;
                 this.currentSteer = 1;
+                this.lastAccelAction = -1;
                 break;
         }
     };
@@ -515,6 +504,9 @@ var Controls = (function () {
         this.activeActions = {};
         this.justPressedActions = {};
         this.lastKeyTime = {};
+    };
+    Controls.prototype.getLastAccelAction = function () {
+        return this.lastAccelAction;
     };
     return Controls;
 }());
@@ -1812,6 +1804,7 @@ var TRACK_CATALOG = [
         themeId: 'ancient_ruins',
         estimatedLapTime: 40,
         npcCount: 5,
+        hidden: true,
         sections: [
             { type: 'straight', length: 5 },
             { type: 'ease_in', length: 2, targetCurve: 0.45 },
@@ -1824,6 +1817,32 @@ var TRACK_CATALOG = [
             { type: 'straight', length: 4 },
             { type: 'ease_in', length: 2, targetCurve: 0.4 },
             { type: 'curve', length: 4, curve: 0.4 },
+            { type: 'ease_out', length: 2 }
+        ]
+    },
+    {
+        id: 'mermaid_lagoon',
+        name: 'Mermaid Lagoon',
+        description: 'Race through a magical underwater grotto',
+        difficulty: 3,
+        laps: 3,
+        themeId: 'underwater_grotto',
+        estimatedLapTime: 42,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 5 },
+            { type: 'ease_in', length: 2, targetCurve: 0.4 },
+            { type: 'curve', length: 5, curve: 0.4 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 4 },
+            { type: 'ease_in', length: 2, targetCurve: -0.5 },
+            { type: 'curve', length: 6, curve: -0.5 },
+            { type: 'ease_out', length: 2 },
+            { type: 'straight', length: 3 },
+            { type: 'ease_in', length: 2, targetCurve: 0.45 },
+            { type: 'curve', length: 5, curve: 0.45 },
+            { type: 'ease_in', length: 2, targetCurve: -0.35 },
+            { type: 'curve', length: 4, curve: -0.35 },
             { type: 'ease_out', length: 2 }
         ]
     },
@@ -2573,6 +2592,14 @@ var ShellType;
     ShellType[ShellType["RED"] = 1] = "RED";
     ShellType[ShellType["BLUE"] = 2] = "BLUE";
 })(ShellType || (ShellType = {}));
+var SHELL_PHYSICS = {
+    MIN_SPEED: 300,
+    GREEN_TARGET_SPEED: 400,
+    RED_TARGET_SPEED: 550,
+    BLUE_TARGET_SPEED: 700,
+    ACCELERATION: 200,
+    BACKWARD_SPEED: -250
+};
 var Shell = (function (_super) {
     __extends(Shell, _super);
     function Shell(shellType) {
@@ -2580,20 +2607,34 @@ var Shell = (function (_super) {
         _this.shellType = shellType;
         _this.trackZ = 0;
         _this.playerX = 0;
-        _this.speed = 500;
+        _this.speed = SHELL_PHYSICS.MIN_SPEED;
+        _this.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;
         _this.ownerId = -1;
         _this.targetId = -1;
         _this.ttl = 10;
         _this.isDestroyed = false;
+        _this.isBackward = false;
         return _this;
     }
-    Shell.fireGreen = function (vehicle) {
+    Shell.fireGreen = function (vehicle, backward) {
+        if (backward === void 0) { backward = false; }
         var shell = new Shell(ShellType.GREEN);
-        shell.trackZ = vehicle.trackZ + 15;
-        shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = Math.max(200, vehicle.speed + 100);
-        logInfo("GREEN SHELL fired at speed=" + shell.speed.toFixed(0) + " from playerX=" + shell.playerX.toFixed(2));
+        shell.isBackward = backward;
+        if (backward) {
+            shell.trackZ = vehicle.trackZ - 15;
+            shell.playerX = vehicle.playerX;
+            shell.speed = SHELL_PHYSICS.BACKWARD_SPEED;
+            shell.targetSpeed = SHELL_PHYSICS.BACKWARD_SPEED;
+            logInfo("GREEN SHELL fired BACKWARD at speed=" + shell.speed.toFixed(0));
+        }
+        else {
+            shell.trackZ = vehicle.trackZ + 15;
+            shell.playerX = vehicle.playerX;
+            shell.speed = SHELL_PHYSICS.MIN_SPEED;
+            shell.targetSpeed = SHELL_PHYSICS.GREEN_TARGET_SPEED;
+            logInfo("GREEN SHELL fired FORWARD, starting at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetSpeed);
+        }
         return shell;
     };
     Shell.fireRed = function (vehicle, vehicles) {
@@ -2601,9 +2642,10 @@ var Shell = (function (_super) {
         shell.trackZ = vehicle.trackZ + 15;
         shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = Math.max(180, vehicle.speed + 80);
+        shell.speed = SHELL_PHYSICS.MIN_SPEED;
+        shell.targetSpeed = SHELL_PHYSICS.RED_TARGET_SPEED;
         shell.targetId = Shell.findNextVehicleAhead(vehicle, vehicles);
-        logInfo("RED SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        logInfo("RED SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to vehicle " + shell.targetId);
         return shell;
     };
     Shell.fireBlue = function (vehicle, vehicles) {
@@ -2611,9 +2653,10 @@ var Shell = (function (_super) {
         shell.trackZ = vehicle.trackZ + 15;
         shell.playerX = vehicle.playerX;
         shell.ownerId = vehicle.id;
-        shell.speed = 900;
+        shell.speed = SHELL_PHYSICS.MIN_SPEED;
+        shell.targetSpeed = SHELL_PHYSICS.BLUE_TARGET_SPEED;
         shell.targetId = Shell.findFirstPlace(vehicles);
-        logInfo("BLUE SHELL fired at speed=" + shell.speed.toFixed(0) + ", target=" + shell.targetId);
+        logInfo("BLUE SHELL fired, starting at speed=" + shell.speed.toFixed(0) + ", target speed=" + shell.targetSpeed + ", homing to 1st place (vehicle " + shell.targetId + ")");
         return shell;
     };
     Shell.findNextVehicleAhead = function (shooter, vehicles) {
@@ -2647,11 +2690,20 @@ var Shell = (function (_super) {
             logInfo("Shell despawned (TTL)");
             return true;
         }
+        if (!this.isBackward && this.speed < this.targetSpeed) {
+            this.speed += SHELL_PHYSICS.ACCELERATION * dt;
+            if (this.speed > this.targetSpeed) {
+                this.speed = this.targetSpeed;
+            }
+        }
         this.trackZ += this.speed * dt;
         if (this.trackZ >= roadLength) {
             this.trackZ = this.trackZ % roadLength;
         }
-        if (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE) {
+        else if (this.trackZ < 0) {
+            this.trackZ = roadLength + this.trackZ;
+        }
+        if (!this.isBackward && (this.shellType === ShellType.RED || this.shellType === ShellType.BLUE)) {
             var target = this.findVehicleById(vehicles, this.targetId);
             if (target) {
                 var homingRate = 2.0;
@@ -2705,7 +2757,8 @@ var Shell = (function (_super) {
         vehicle.playerX = knockDirection * (0.7 + Math.random() * 0.2);
         vehicle.flashTimer = 1.5;
         var shellNames = ['GREEN', 'RED', 'BLUE'];
-        logInfo(shellNames[this.shellType] + " SHELL hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
+        var direction = this.isBackward ? ' (backward)' : '';
+        logInfo(shellNames[this.shellType] + " SHELL" + direction + " hit vehicle " + vehicle.id + " - knocked to edge at playerX=" + vehicle.playerX.toFixed(2) + "!");
     };
     return Shell;
 }(Item));
@@ -2860,7 +2913,7 @@ var ItemSystem = (function () {
             }
         }
     };
-    ItemSystem.prototype.useItem = function (vehicle, allVehicles) {
+    ItemSystem.prototype.useItem = function (vehicle, allVehicles, fireBackward) {
         if (vehicle.heldItem === null)
             return;
         var itemType = vehicle.heldItem.type;
@@ -2900,7 +2953,7 @@ var ItemSystem = (function () {
             case ItemType.GREEN_SHELL:
             case ItemType.GREEN_SHELL_TRIPLE:
                 {
-                    var greenShell = Shell.fireGreen(vehicle);
+                    var greenShell = Shell.fireGreen(vehicle, fireBackward === true);
                     this.projectiles.push(greenShell);
                 }
                 consumed = true;
@@ -2966,7 +3019,7 @@ var ItemSystem = (function () {
             var v = allVehicles[i];
             if (v.id === user.id)
                 continue;
-            if (v.trackZ <= user.trackZ)
+            if (v.racePosition >= user.racePosition)
                 continue;
             if (v.hasEffect && (v.hasEffect(ItemType.STAR) ||
                 v.hasEffect(ItemType.BULLET))) {
@@ -2975,7 +3028,7 @@ var ItemSystem = (function () {
             v.addEffect(ItemType.LIGHTNING, duration, user.id);
             hitCount++;
         }
-        logInfo("Lightning struck " + hitCount + " opponents ahead!");
+        logInfo("Lightning struck " + hitCount + " opponents ahead (positions 1-" + (user.racePosition - 1) + ")!");
     };
     ItemSystem.prototype.randomItemType = function (position, totalRacers) {
         if (DEBUG_FORCE_ITEM !== null) {
@@ -3309,6 +3362,9 @@ var HighScoreManager = (function () {
             var data = this.db.masterData.data || {};
             var scores = data[key];
             if (scores && Array.isArray(scores)) {
+                scores.sort(function (a, b) {
+                    return a.time - b.time;
+                });
                 return scores;
             }
             return [];
@@ -3358,22 +3414,22 @@ var HighScoreManager = (function () {
                 entry.trackName = trackName;
             if (circuitName)
                 entry.circuitName = circuitName;
+            scores.push(entry);
+            scores.sort(function (a, b) {
+                return a.time - b.time;
+            });
+            if (scores.length > this.maxEntries) {
+                scores = scores.slice(0, this.maxEntries);
+            }
             var position = 0;
             for (var i = 0; i < scores.length; i++) {
-                if (time < scores[i].time) {
-                    position = i;
+                if (scores[i].time === time && scores[i].date === entry.date) {
+                    position = i + 1;
                     break;
                 }
             }
-            if (position === 0 && scores.length < this.maxEntries) {
-                position = scores.length;
-            }
-            if (position === 0 && scores.length >= this.maxEntries) {
+            if (position === 0) {
                 return 0;
-            }
-            scores.splice(position, 0, entry);
-            if (scores.length > this.maxEntries) {
-                scores = scores.slice(0, this.maxEntries);
             }
             var data = this.db.masterData.data || {};
             data[key] = scores;
@@ -3416,9 +3472,9 @@ var HighScoreManager = (function () {
 }());
 "use strict";
 function displayHighScores(scores, title, trackOrCircuitName, playerPosition) {
-    console.clear();
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
+    console.clear(LIGHTGRAY, false);
+    var screenWidth = 80;
+    var screenHeight = 24;
     var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
     var headerAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
     var nameAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
@@ -3512,7 +3568,8 @@ function displayHighScores(scores, title, trackOrCircuitName, playerPosition) {
 function showHighScoreList(type, identifier, title, trackOrCircuitName, highScoreManager, playerPosition) {
     var scores = highScoreManager.getScores(type, identifier);
     displayHighScores(scores, title, trackOrCircuitName, playerPosition);
-    console.inkey(K_NONE);
+    console.line_counter = 0;
+    console.inkey(K_NONE, 300000);
 }
 function displayTopScoreLine(label, score, x, y, labelAttr, valueAttr) {
     console.gotoxy(x, y);
@@ -3525,6 +3582,150 @@ function displayTopScoreLine(label, score, x, y, labelAttr, valueAttr) {
     else {
         console.print("--:--.-- (No record)");
     }
+}
+function showTwoColumnHighScores(trackId, trackName, highScoreManager, trackTimePosition, lapTimePosition) {
+    console.clear(LIGHTGRAY, false);
+    var viewWidth = 80;
+    var viewHeight = 24;
+    var trackScores = highScoreManager.getScores(HighScoreType.TRACK_TIME, trackId);
+    var lapScores = highScoreManager.getScores(HighScoreType.LAP_TIME, trackId);
+    var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+    var headerAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var colHeaderAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+    var rankAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+    var nameAttr = colorToAttr({ fg: LIGHTGRAY, bg: BG_BLACK });
+    var timeAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
+    var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+    var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
+    var highlightAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLUE });
+    var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+    var newScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
+    var boxWidth = 76;
+    var boxHeight = 20;
+    var boxX = Math.floor((viewWidth - boxWidth) / 2);
+    var topY = Math.floor((viewHeight - boxHeight) / 2);
+    console.gotoxy(boxX, topY);
+    console.attributes = boxAttr;
+    console.print(GLYPH.DBOX_TL);
+    for (var i = 1; i < boxWidth - 1; i++) {
+        console.print(GLYPH.DBOX_H);
+    }
+    console.print(GLYPH.DBOX_TR);
+    for (var j = 1; j < boxHeight - 1; j++) {
+        console.gotoxy(boxX, topY + j);
+        console.print(GLYPH.DBOX_V);
+        console.gotoxy(boxX + boxWidth - 1, topY + j);
+        console.print(GLYPH.DBOX_V);
+    }
+    console.gotoxy(boxX, topY + boxHeight - 1);
+    console.print(GLYPH.DBOX_BL);
+    for (var i = 1; i < boxWidth - 1; i++) {
+        console.print(GLYPH.DBOX_H);
+    }
+    console.print(GLYPH.DBOX_BR);
+    var title = "=== HIGH SCORES ===";
+    console.gotoxy(boxX + Math.floor((boxWidth - title.length) / 2), topY + 1);
+    console.attributes = titleAttr;
+    console.print(title);
+    console.gotoxy(boxX + Math.floor((boxWidth - trackName.length) / 2), topY + 2);
+    console.attributes = headerAttr;
+    console.print(trackName);
+    var leftColX = boxX + 3;
+    var rightColX = boxX + 40;
+    console.gotoxy(leftColX, topY + 4);
+    console.attributes = colHeaderAttr;
+    console.print("TRACK TIME");
+    console.gotoxy(rightColX, topY + 4);
+    console.print("BEST LAP");
+    console.gotoxy(boxX + 37, topY + 4);
+    console.attributes = boxAttr;
+    console.print(GLYPH.BOX_V);
+    for (var j = 5; j < boxHeight - 3; j++) {
+        console.gotoxy(boxX + 37, topY + j);
+        console.print(GLYPH.BOX_V);
+    }
+    var startY = topY + 5;
+    for (var i = 0; i < 10; i++) {
+        console.gotoxy(leftColX, startY + i);
+        var trackHighlighted = (trackTimePosition > 0 && trackTimePosition === i + 1);
+        if (i < trackScores.length) {
+            var score = trackScores[i];
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.attributes = trackHighlighted ? highlightAttr : rankAttr;
+            console.print(rank + " ");
+            var name = score.playerName;
+            if (name.length > 11)
+                name = name.substring(0, 10) + ".";
+            while (name.length < 11)
+                name += " ";
+            console.attributes = trackHighlighted ? highlightAttr : nameAttr;
+            console.print(name + " ");
+            console.attributes = trackHighlighted ? highlightAttr : timeAttr;
+            console.print(LapTimer.format(score.time));
+            var d = new Date(score.date);
+            var dateStr = " " + (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear();
+            console.attributes = trackHighlighted ? highlightAttr : emptyAttr;
+            console.print(dateStr);
+            if (trackHighlighted) {
+                console.attributes = newScoreAttr;
+                console.print("*");
+            }
+        }
+        else {
+            console.attributes = emptyAttr;
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.print(rank + " ---");
+        }
+        console.gotoxy(rightColX, startY + i);
+        var lapHighlighted = (lapTimePosition > 0 && lapTimePosition === i + 1);
+        if (i < lapScores.length) {
+            var score = lapScores[i];
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.attributes = lapHighlighted ? highlightAttr : rankAttr;
+            console.print(rank + " ");
+            var name = score.playerName;
+            if (name.length > 11)
+                name = name.substring(0, 10) + ".";
+            while (name.length < 11)
+                name += " ";
+            console.attributes = lapHighlighted ? highlightAttr : nameAttr;
+            console.print(name + " ");
+            console.attributes = lapHighlighted ? highlightAttr : timeAttr;
+            console.print(LapTimer.format(score.time));
+            var d = new Date(score.date);
+            var dateStr = " " + (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear();
+            console.attributes = lapHighlighted ? highlightAttr : emptyAttr;
+            console.print(dateStr);
+            if (lapHighlighted) {
+                console.attributes = newScoreAttr;
+                console.print(" *");
+            }
+        }
+        else {
+            console.attributes = emptyAttr;
+            var rank = (i + 1) + ".";
+            if (i < 9)
+                rank = " " + rank;
+            console.print(rank + " ---");
+        }
+    }
+    if (trackTimePosition > 0 || lapTimePosition > 0) {
+        console.gotoxy(boxX + 3, topY + boxHeight - 3);
+        console.attributes = newScoreAttr;
+        console.print("* = Your new high score!");
+    }
+    var prompt = "Press any key to continue";
+    console.gotoxy(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + boxHeight - 2);
+    console.attributes = promptAttr;
+    console.print(prompt);
+    console.line_counter = 0;
+    console.inkey(K_NONE, 300000);
 }
 "use strict";
 var PALETTE = {
@@ -4164,14 +4365,22 @@ var SkylineRenderer = (function () {
         this.horizonY = horizonY;
         this.parallax = new ParallaxBackground(80, horizonY);
         this.parallax.resetScroll();
+        this.gridAnimPhase = 0;
     }
-    SkylineRenderer.prototype.render = function (trackPosition, curvature, playerSteer, speed, dt) {
+    SkylineRenderer.prototype.render = function (_trackPosition, curvature, playerSteer, speed, dt) {
         this.renderSkyBackground();
-        if (curvature !== undefined && speed !== undefined && dt !== undefined) {
+        if (curvature !== undefined && speed !== undefined && dt !== undefined && speed > 0) {
             this.parallax.updateScroll(curvature, playerSteer || 0, speed, dt);
         }
+        if (speed !== undefined && dt !== undefined && speed > 0) {
+            this.gridAnimPhase += speed * dt * 0.003;
+            while (this.gridAnimPhase >= 1)
+                this.gridAnimPhase -= 1;
+            while (this.gridAnimPhase < 0)
+                this.gridAnimPhase += 1;
+        }
+        this.renderSkyGrid();
         this.parallax.render(this.composer);
-        this.renderSkyGrid(trackPosition);
     };
     SkylineRenderer.prototype.renderSkyBackground = function () {
         var bgAttr = makeAttr(BLACK, BG_BLACK);
@@ -4181,48 +4390,45 @@ var SkylineRenderer = (function () {
             }
         }
     };
-    SkylineRenderer.prototype.renderSkyGrid = function (trackPosition) {
+    SkylineRenderer.prototype.renderSkyGrid = function () {
         var gridAttr = colorToAttr(PALETTE.SKY_GRID);
         var glowAttr = colorToAttr(PALETTE.SKY_GRID_GLOW);
         var vanishX = 40;
-        for (var y = this.horizonY - 1; y >= 2; y--) {
+        var screenWidth = 80;
+        for (var y = this.horizonY - 1; y >= 1; y--) {
             var distFromHorizon = this.horizonY - y;
             var spread = distFromHorizon * 6;
-            for (var offset = 0; offset <= spread && offset < 40; offset += 10) {
-                var leftX = vanishX - offset;
-                var rightX = vanishX + offset;
-                if (offset === 0) {
-                    this.safePutCell(vanishX, y, GLYPH.BOX_V, gridAttr);
-                }
-                else {
-                    if (leftX >= 0 && leftX < 80) {
-                        this.safePutCell(leftX, y, '/', glowAttr);
+            for (var offset = 0; offset <= 40; offset += 8) {
+                if (offset <= spread) {
+                    var leftX = vanishX - offset;
+                    var rightX = vanishX + offset;
+                    if (offset === 0) {
+                        this.composer.setCell(vanishX, y, GLYPH.BOX_V, gridAttr);
                     }
-                    if (rightX >= 0 && rightX < 80) {
-                        this.safePutCell(rightX, y, '\\', glowAttr);
+                    else {
+                        if (leftX >= 0 && leftX < screenWidth) {
+                            this.composer.setCell(leftX, y, '/', glowAttr);
+                        }
+                        if (rightX >= 0 && rightX < screenWidth) {
+                            this.composer.setCell(rightX, y, '\\', glowAttr);
+                        }
                     }
                 }
             }
-            var linePhase = Math.floor(trackPosition / 50 + distFromHorizon) % 4;
-            if (linePhase === 0) {
-                var lineSpread = Math.min(spread, 38);
+            var lineSpacing = 3;
+            var scanlinePhase = (this.gridAnimPhase * lineSpacing + (this.horizonY - y) * 0.3) % 1;
+            if (scanlinePhase < 0.33) {
+                var lineSpread = Math.min(spread, 39);
                 for (var x = vanishX - lineSpread; x <= vanishX + lineSpread; x++) {
-                    if (x >= 0 && x < 80) {
-                        this.safePutCell(x, y, GLYPH.BOX_H, glowAttr);
+                    if (x >= 0 && x < screenWidth) {
+                        var buffer = this.composer.getBuffer();
+                        var cell = buffer[y][x];
+                        if (cell.char === ' ') {
+                            this.composer.setCell(x, y, GLYPH.BOX_H, glowAttr);
+                        }
                     }
                 }
             }
-        }
-    };
-    SkylineRenderer.prototype.safePutCell = function (x, y, char, attr) {
-        if (x < 0 || x >= 80 || y < 0 || y >= 24)
-            return;
-        var buffer = this.composer.getBuffer();
-        if (!buffer[y] || !buffer[y][x])
-            return;
-        var cell = buffer[y][x];
-        if (cell.char === ' ') {
-            this.composer.setCell(x, y, char, attr);
         }
     };
     return SkylineRenderer;
@@ -7885,6 +8091,218 @@ registerRoadsideSprite('fleeing_person', KaijuSprites.createFleeingPerson);
 registerRoadsideSprite('burning_barrel', KaijuSprites.createBurningBarrel);
 registerRoadsideSprite('broken_streetlamp', KaijuSprites.createBrokenStreetLamp);
 "use strict";
+var UnderwaterSprites = {
+    createFish: function () {
+        var body1 = makeAttr(YELLOW, BG_BLUE);
+        var body2 = makeAttr(LIGHTCYAN, BG_BLUE);
+        var eye = makeAttr(WHITE, BG_BLUE);
+        var fin = makeAttr(LIGHTRED, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_fish',
+            variants: [
+                [
+                    [{ char: '<', attr: body1 }, { char: '>', attr: body1 }]
+                ],
+                [
+                    [{ char: '-', attr: fin }, { char: '<', attr: body2 }, { char: '>', attr: body2 }]
+                ],
+                [
+                    [U, { char: '/', attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: 'o', attr: eye }, { char: '>', attr: body1 }]
+                ],
+                [
+                    [U, { char: '/', attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: 'O', attr: eye }, { char: '>', attr: body2 }]
+                ],
+                [
+                    [U, U, { char: '/', attr: fin }, { char: '_', attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body1 }, { char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: 'O', attr: eye }, { char: '>', attr: body1 }],
+                    [U, U, { char: '\\', attr: fin }, { char: '-', attr: fin }, { char: '/', attr: fin }, U]
+                ]
+            ]
+        };
+    },
+    createCoral: function () {
+        var coral1 = makeAttr(LIGHTRED, BG_BLUE);
+        var coral2 = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var coral3 = makeAttr(YELLOW, BG_BLUE);
+        var base = makeAttr(DARKGRAY, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_coral',
+            variants: [
+                [
+                    [{ char: '*', attr: coral1 }]
+                ],
+                [
+                    [{ char: 'Y', attr: coral1 }, { char: 'Y', attr: coral2 }],
+                    [{ char: '|', attr: base }, { char: '|', attr: base }]
+                ],
+                [
+                    [{ char: '*', attr: coral1 }, { char: '*', attr: coral2 }, { char: '*', attr: coral1 }],
+                    [{ char: 'Y', attr: coral1 }, { char: '|', attr: coral2 }, { char: 'Y', attr: coral1 }],
+                    [U, { char: '|', attr: base }, U]
+                ],
+                [
+                    [U, { char: '*', attr: coral1 }, { char: '*', attr: coral3 }, U],
+                    [{ char: 'Y', attr: coral1 }, { char: '|', attr: coral1 }, { char: '|', attr: coral3 }, { char: 'Y', attr: coral3 }],
+                    [{ char: '|', attr: coral1 }, { char: '/', attr: coral1 }, { char: '\\', attr: coral3 }, { char: '|', attr: coral3 }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, U]
+                ],
+                [
+                    [U, { char: '*', attr: coral1 }, { char: '*', attr: coral2 }, { char: '*', attr: coral3 }, U],
+                    [{ char: '*', attr: coral1 }, { char: 'Y', attr: coral1 }, { char: '|', attr: coral2 }, { char: 'Y', attr: coral3 }, { char: '*', attr: coral3 }],
+                    [{ char: '|', attr: coral1 }, { char: '/', attr: coral1 }, { char: '|', attr: coral2 }, { char: '\\', attr: coral3 }, { char: '|', attr: coral3 }],
+                    [U, { char: '|', attr: base }, { char: '|', attr: base }, { char: '|', attr: base }, U],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, U]
+                ]
+            ]
+        };
+    },
+    createSeaweed: function () {
+        var leaf1 = makeAttr(LIGHTGREEN, BG_BLUE);
+        var leaf2 = makeAttr(GREEN, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_seaweed',
+            variants: [
+                [
+                    [{ char: '|', attr: leaf2 }]
+                ],
+                [
+                    [{ char: ')', attr: leaf1 }],
+                    [{ char: '|', attr: leaf2 }]
+                ],
+                [
+                    [{ char: '(', attr: leaf1 }, { char: ')', attr: leaf1 }],
+                    [{ char: ')', attr: leaf2 }, { char: '(', attr: leaf2 }],
+                    [{ char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }]
+                ],
+                [
+                    [U, { char: '~', attr: leaf1 }, U],
+                    [{ char: '(', attr: leaf1 }, { char: ')', attr: leaf1 }, { char: '(', attr: leaf1 }],
+                    [{ char: ')', attr: leaf2 }, { char: '(', attr: leaf2 }, { char: ')', attr: leaf2 }],
+                    [{ char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }]
+                ],
+                [
+                    [U, { char: '~', attr: leaf1 }, { char: '~', attr: leaf1 }, U],
+                    [{ char: '(', attr: leaf1 }, { char: ')', attr: leaf1 }, { char: '(', attr: leaf1 }, { char: ')', attr: leaf1 }],
+                    [{ char: ')', attr: leaf2 }, { char: '(', attr: leaf2 }, { char: ')', attr: leaf2 }, { char: '(', attr: leaf2 }],
+                    [{ char: '(', attr: leaf2 }, { char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }, { char: ')', attr: leaf2 }],
+                    [{ char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }, { char: '|', attr: leaf2 }]
+                ]
+            ]
+        };
+    },
+    createRock: function () {
+        var rock1 = makeAttr(LIGHTGRAY, BG_BLUE);
+        var rock2 = makeAttr(DARKGRAY, BG_BLUE);
+        var moss = makeAttr(GREEN, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_rock',
+            variants: [
+                [
+                    [{ char: 'o', attr: rock2 }]
+                ],
+                [
+                    [{ char: '(', attr: rock1 }, { char: ')', attr: rock1 }]
+                ],
+                [
+                    [U, { char: '^', attr: moss }, U],
+                    [{ char: '(', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock1 }]
+                ],
+                [
+                    [U, { char: '"', attr: moss }, { char: '"', attr: moss }, U],
+                    [{ char: '/', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: '\\', attr: rock1 }],
+                    [{ char: '(', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock2 }]
+                ],
+                [
+                    [U, { char: '"', attr: moss }, { char: '~', attr: moss }, { char: '"', attr: moss }, U],
+                    [{ char: '/', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock1 }, { char: '\\', attr: rock1 }],
+                    [{ char: '|', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: '|', attr: rock2 }],
+                    [{ char: '(', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock2 }]
+                ]
+            ]
+        };
+    },
+    createJellyfish: function () {
+        var body = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var glow = makeAttr(LIGHTCYAN, BG_BLUE);
+        var tent = makeAttr(MAGENTA, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_jellyfish',
+            variants: [
+                [
+                    [{ char: 'o', attr: body }]
+                ],
+                [
+                    [{ char: '(', attr: body }, { char: ')', attr: body }],
+                    [{ char: '|', attr: tent }, { char: '|', attr: tent }]
+                ],
+                [
+                    [U, { char: '_', attr: glow }, U],
+                    [{ char: '(', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ')', attr: body }],
+                    [{ char: '~', attr: tent }, { char: '|', attr: tent }, { char: '~', attr: tent }]
+                ],
+                [
+                    [U, { char: '_', attr: glow }, { char: '_', attr: glow }, U],
+                    [{ char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }],
+                    [{ char: '(', attr: tent }, { char: '~', attr: tent }, { char: '~', attr: tent }, { char: ')', attr: tent }],
+                    [{ char: '|', attr: tent }, { char: '|', attr: tent }, { char: '|', attr: tent }, { char: '|', attr: tent }]
+                ],
+                [
+                    [U, { char: '_', attr: glow }, { char: '_', attr: glow }, { char: '_', attr: glow }, U],
+                    [{ char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }],
+                    [{ char: '|', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '|', attr: body }],
+                    [{ char: '(', attr: tent }, { char: '~', attr: tent }, { char: '|', attr: tent }, { char: '~', attr: tent }, { char: ')', attr: tent }],
+                    [{ char: '|', attr: tent }, U, { char: '|', attr: tent }, U, { char: '|', attr: tent }]
+                ]
+            ]
+        };
+    },
+    createTreasure: function () {
+        var chest = makeAttr(BROWN, BG_BLUE);
+        var gold = makeAttr(YELLOW, BG_BLUE);
+        var shine = makeAttr(WHITE, BG_BLUE);
+        var U = null;
+        return {
+            name: 'underwater_treasure',
+            variants: [
+                [
+                    [{ char: '#', attr: chest }]
+                ],
+                [
+                    [{ char: '[', attr: chest }, { char: ']', attr: chest }]
+                ],
+                [
+                    [{ char: '*', attr: gold }, { char: '*', attr: gold }, { char: '*', attr: gold }],
+                    [{ char: '[', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: ']', attr: chest }]
+                ],
+                [
+                    [U, { char: '$', attr: gold }, { char: '$', attr: gold }, U],
+                    [{ char: '/', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: gold }, { char: GLYPH.FULL_BLOCK, attr: gold }, { char: '\\', attr: chest }],
+                    [{ char: '[', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: ']', attr: chest }]
+                ],
+                [
+                    [U, { char: '$', attr: gold }, { char: '*', attr: shine }, { char: '$', attr: gold }, U],
+                    [{ char: '/', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: gold }, { char: GLYPH.FULL_BLOCK, attr: gold }, { char: GLYPH.FULL_BLOCK, attr: gold }, { char: '\\', attr: chest }],
+                    [{ char: '[', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: 'O', attr: gold }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: ']', attr: chest }],
+                    [{ char: '[', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: ']', attr: chest }]
+                ]
+            ]
+        };
+    }
+};
+registerRoadsideSprite('underwater_fish', function () { return UnderwaterSprites.createFish(); });
+registerRoadsideSprite('underwater_coral', function () { return UnderwaterSprites.createCoral(); });
+registerRoadsideSprite('underwater_seaweed', function () { return UnderwaterSprites.createSeaweed(); });
+registerRoadsideSprite('underwater_rock', function () { return UnderwaterSprites.createRock(); });
+registerRoadsideSprite('underwater_jellyfish', function () { return UnderwaterSprites.createJellyfish(); });
+registerRoadsideSprite('underwater_treasure', function () { return UnderwaterSprites.createTreasure(); });
+"use strict";
 var NPC_VEHICLE_TYPES = ['sedan', 'truck', 'sportscar'];
 var NPC_VEHICLE_COLORS = [
     { body: RED, trim: LIGHTRED, name: 'red' },
@@ -8022,6 +8440,200 @@ function getRandomNPCSprite() {
     };
 }
 "use strict";
+var SynthwaveSprites = {
+    createNeonPillar: function () {
+        var neonCyan = makeAttr(LIGHTCYAN, BG_BLACK);
+        var neonMagenta = makeAttr(LIGHTMAGENTA, BG_BLACK);
+        var glowCyan = makeAttr(CYAN, BG_BLACK);
+        var glowMagenta = makeAttr(MAGENTA, BG_BLACK);
+        var base = makeAttr(BLUE, BG_BLACK);
+        var U = null;
+        return {
+            name: 'neon_pillar',
+            variants: [
+                [
+                    [{ char: GLYPH.BOX_V, attr: neonCyan }]
+                ],
+                [
+                    [{ char: GLYPH.BOX_V, attr: neonCyan }],
+                    [{ char: GLYPH.BOX_V, attr: neonMagenta }]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: neonCyan }, { char: GLYPH.UPPER_HALF, attr: glowCyan }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: neonMagenta }, { char: GLYPH.DARK_SHADE, attr: glowMagenta }],
+                    [{ char: GLYPH.LOWER_HALF, attr: base }, { char: GLYPH.LOWER_HALF, attr: base }]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: neonCyan }, U],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowCyan }, { char: GLYPH.FULL_BLOCK, attr: neonCyan }, { char: GLYPH.DARK_SHADE, attr: glowCyan }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowMagenta }, { char: GLYPH.FULL_BLOCK, attr: neonMagenta }, { char: GLYPH.DARK_SHADE, attr: glowMagenta }],
+                    [U, { char: GLYPH.LOWER_HALF, attr: base }, U]
+                ],
+                [
+                    [U, { char: GLYPH.UPPER_HALF, attr: neonCyan }, U],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowCyan }, { char: GLYPH.FULL_BLOCK, attr: neonCyan }, { char: GLYPH.DARK_SHADE, attr: glowCyan }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowCyan }, { char: GLYPH.FULL_BLOCK, attr: neonCyan }, { char: GLYPH.DARK_SHADE, attr: glowCyan }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowMagenta }, { char: GLYPH.FULL_BLOCK, attr: neonMagenta }, { char: GLYPH.DARK_SHADE, attr: glowMagenta }],
+                    [U, { char: GLYPH.LOWER_HALF, attr: base }, U]
+                ]
+            ]
+        };
+    },
+    createGridPylon: function () {
+        var frame = makeAttr(MAGENTA, BG_BLACK);
+        var frameBright = makeAttr(LIGHTMAGENTA, BG_BLACK);
+        var accent = makeAttr(CYAN, BG_BLACK);
+        var accentBright = makeAttr(LIGHTCYAN, BG_BLACK);
+        var U = null;
+        return {
+            name: 'grid_pylon',
+            variants: [
+                [
+                    [{ char: GLYPH.TRIANGLE_UP, attr: frame }]
+                ],
+                [
+                    [{ char: GLYPH.TRIANGLE_UP, attr: frameBright }],
+                    [{ char: GLYPH.BOX_V, attr: frame }]
+                ],
+                [
+                    [U, { char: GLYPH.TRIANGLE_UP, attr: accentBright }, U],
+                    [{ char: '/', attr: frame }, { char: GLYPH.BOX_V, attr: frameBright }, { char: '\\', attr: frame }],
+                    [{ char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_CROSS, attr: accentBright }, { char: GLYPH.BOX_H, attr: accent }]
+                ],
+                [
+                    [U, { char: GLYPH.TRIANGLE_UP, attr: accentBright }, U],
+                    [{ char: '/', attr: frame }, { char: GLYPH.BOX_V, attr: frameBright }, { char: '\\', attr: frame }],
+                    [{ char: GLYPH.BOX_V, attr: frame }, { char: GLYPH.BOX_V, attr: frameBright }, { char: GLYPH.BOX_V, attr: frame }],
+                    [{ char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_CROSS, attr: accentBright }, { char: GLYPH.BOX_H, attr: accent }]
+                ],
+                [
+                    [U, U, { char: GLYPH.TRIANGLE_UP, attr: accentBright }, U, U],
+                    [U, { char: '/', attr: frameBright }, { char: GLYPH.BOX_V, attr: frameBright }, { char: '\\', attr: frameBright }, U],
+                    [{ char: '/', attr: frame }, { char: ' ', attr: frame }, { char: GLYPH.BOX_V, attr: frameBright }, { char: ' ', attr: frame }, { char: '\\', attr: frame }],
+                    [{ char: GLYPH.BOX_V, attr: frame }, { char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_CROSS, attr: accentBright }, { char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_V, attr: frame }],
+                    [{ char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_CROSS, attr: accentBright }, { char: GLYPH.BOX_H, attr: accent }, { char: GLYPH.BOX_H, attr: accent }]
+                ]
+            ]
+        };
+    },
+    createHoloBillboard: function () {
+        var border = makeAttr(LIGHTMAGENTA, BG_BLACK);
+        var borderDim = makeAttr(MAGENTA, BG_BLACK);
+        var text = makeAttr(LIGHTCYAN, BG_BLACK);
+        var support = makeAttr(BLUE, BG_BLACK);
+        var U = null;
+        return {
+            name: 'holo_billboard',
+            variants: [
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: border }, { char: GLYPH.FULL_BLOCK, attr: borderDim }]
+                ],
+                [
+                    [{ char: GLYPH.FULL_BLOCK, attr: border }, { char: '-', attr: text }, { char: GLYPH.FULL_BLOCK, attr: borderDim }],
+                    [U, { char: GLYPH.BOX_V, attr: support }, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.UPPER_HALF, attr: borderDim }],
+                    [{ char: GLYPH.BOX_V, attr: border }, { char: 'N', attr: text }, { char: 'E', attr: text }, { char: 'O', attr: text }, { char: GLYPH.BOX_V, attr: borderDim }],
+                    [U, U, { char: GLYPH.BOX_V, attr: support }, U, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.UPPER_HALF, attr: borderDim }],
+                    [{ char: GLYPH.BOX_V, attr: border }, { char: 'N', attr: text }, { char: 'E', attr: text }, { char: 'O', attr: text }, { char: 'N', attr: text }, { char: GLYPH.BOX_V, attr: borderDim }],
+                    [{ char: GLYPH.LOWER_HALF, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.LOWER_HALF, attr: borderDim }],
+                    [U, U, { char: GLYPH.BOX_V, attr: support }, { char: GLYPH.BOX_V, attr: support }, U, U]
+                ],
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.BOX_H, attr: border }, { char: GLYPH.UPPER_HALF, attr: borderDim }],
+                    [{ char: GLYPH.BOX_V, attr: border }, { char: ' ', attr: text }, { char: 'N', attr: text }, { char: 'E', attr: text }, { char: 'O', attr: text }, { char: ' ', attr: text }, { char: GLYPH.BOX_V, attr: borderDim }],
+                    [{ char: GLYPH.BOX_V, attr: border }, { char: ' ', attr: text }, { char: '8', attr: text }, { char: '0', attr: text }, { char: 's', attr: text }, { char: ' ', attr: text }, { char: GLYPH.BOX_V, attr: borderDim }],
+                    [{ char: GLYPH.LOWER_HALF, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.BOX_H, attr: borderDim }, { char: GLYPH.LOWER_HALF, attr: borderDim }],
+                    [U, U, { char: GLYPH.BOX_V, attr: support }, U, { char: GLYPH.BOX_V, attr: support }, U, U]
+                ]
+            ]
+        };
+    },
+    createNeonPalm: function () {
+        var trunk = makeAttr(MAGENTA, BG_BLACK);
+        var trunkBright = makeAttr(LIGHTMAGENTA, BG_BLACK);
+        var frond = makeAttr(CYAN, BG_BLACK);
+        var frondBright = makeAttr(LIGHTCYAN, BG_BLACK);
+        var glow = makeAttr(BLUE, BG_BLACK);
+        var U = null;
+        return {
+            name: 'neon_palm',
+            variants: [
+                [
+                    [{ char: GLYPH.UPPER_HALF, attr: frondBright }]
+                ],
+                [
+                    [{ char: '/', attr: frond }, { char: '\\', attr: frond }],
+                    [U, { char: GLYPH.BOX_V, attr: trunk }]
+                ],
+                [
+                    [{ char: '/', attr: frondBright }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: '\\', attr: frondBright }],
+                    [U, { char: '\\', attr: frond }, { char: '/', attr: frond }, U],
+                    [U, { char: GLYPH.BOX_V, attr: trunk }, { char: GLYPH.BOX_V, attr: trunkBright }, U]
+                ],
+                [
+                    [{ char: '-', attr: glow }, { char: '/', attr: frondBright }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: '\\', attr: frondBright }, { char: '-', attr: glow }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: '*', attr: frondBright }, { char: GLYPH.FULL_BLOCK, attr: frond }, U],
+                    [U, { char: '/', attr: frond }, { char: GLYPH.BOX_V, attr: trunkBright }, { char: '\\', attr: frond }, U],
+                    [U, U, { char: GLYPH.FULL_BLOCK, attr: trunk }, U, U]
+                ],
+                [
+                    [{ char: '-', attr: glow }, { char: '/', attr: frondBright }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: '\\', attr: frondBright }, { char: '-', attr: glow }],
+                    [{ char: '/', attr: frond }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: ' ', attr: frond }, { char: '*', attr: frondBright }, { char: GLYPH.FULL_BLOCK, attr: frond }, { char: '\\', attr: frond }],
+                    [U, { char: '\\', attr: frond }, { char: '/', attr: frond }, { char: '\\', attr: frond }, { char: '/', attr: frond }, U],
+                    [U, U, { char: GLYPH.FULL_BLOCK, attr: trunk }, { char: GLYPH.FULL_BLOCK, attr: trunkBright }, U, U],
+                    [U, U, { char: GLYPH.LOWER_HALF, attr: trunk }, { char: GLYPH.LOWER_HALF, attr: trunk }, U, U]
+                ]
+            ]
+        };
+    },
+    createLaserBeam: function () {
+        var beamCore = makeAttr(WHITE, BG_BLACK);
+        var beamMid = makeAttr(LIGHTCYAN, BG_BLACK);
+        var beamOuter = makeAttr(CYAN, BG_BLACK);
+        var glowDim = makeAttr(BLUE, BG_BLACK);
+        return {
+            name: 'laser_beam',
+            variants: [
+                [
+                    [{ char: GLYPH.BOX_V, attr: beamMid }]
+                ],
+                [
+                    [{ char: GLYPH.BOX_V, attr: beamCore }],
+                    [{ char: GLYPH.BOX_V, attr: beamMid }]
+                ],
+                [
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamMid }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }]
+                ],
+                [
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamMid }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamMid }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }]
+                ],
+                [
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamMid }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamCore }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.LIGHT_SHADE, attr: beamOuter }, { char: GLYPH.FULL_BLOCK, attr: beamMid }, { char: GLYPH.LIGHT_SHADE, attr: beamOuter }],
+                    [{ char: GLYPH.DARK_SHADE, attr: glowDim }, { char: GLYPH.BOX_V, attr: beamCore }, { char: GLYPH.DARK_SHADE, attr: glowDim }]
+                ]
+            ]
+        };
+    }
+};
+registerRoadsideSprite('neon_pillar', SynthwaveSprites.createNeonPillar);
+registerRoadsideSprite('grid_pylon', SynthwaveSprites.createGridPylon);
+registerRoadsideSprite('holo_billboard', SynthwaveSprites.createHoloBillboard);
+registerRoadsideSprite('neon_palm', SynthwaveSprites.createNeonPalm);
+registerRoadsideSprite('laser_beam', SynthwaveSprites.createLaserBeam);
+"use strict";
 var SynthwaveTheme = {
     name: 'synthwave',
     description: 'Classic 80s synthwave with magenta sky, purple mountains, and setting sun',
@@ -8038,26 +8650,36 @@ var SynthwaveTheme = {
         sceneryPrimary: { fg: MAGENTA, bg: BG_BLACK },
         scenerySecondary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
         sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
-        roadSurface: { fg: CYAN, bg: BG_BLACK },
-        roadSurfaceAlt: { fg: LIGHTCYAN, bg: BG_BLACK },
-        roadStripe: { fg: WHITE, bg: BG_BLACK },
-        roadEdge: { fg: LIGHTRED, bg: BG_BLACK },
-        roadGrid: { fg: CYAN, bg: BG_BLACK },
-        shoulderPrimary: { fg: BROWN, bg: BG_BLACK },
-        shoulderSecondary: { fg: BROWN, bg: BG_BLACK },
+        roadSurface: { fg: LIGHTCYAN, bg: BG_CYAN },
+        roadSurfaceAlt: { fg: CYAN, bg: BG_CYAN },
+        roadStripe: { fg: WHITE, bg: BG_CYAN },
+        roadEdge: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+        roadGrid: { fg: WHITE, bg: BG_CYAN },
+        shoulderPrimary: { fg: BLUE, bg: BG_BLACK },
+        shoulderSecondary: { fg: MAGENTA, bg: BG_BLACK },
         roadsideColors: {
-            'tree': {
-                primary: { fg: LIGHTGREEN, bg: BG_BLACK },
-                secondary: { fg: GREEN, bg: BG_BLACK },
-                tertiary: { fg: BROWN, bg: BG_BLACK }
+            'neon_pillar': {
+                primary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                secondary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+                tertiary: { fg: BLUE, bg: BG_BLACK }
             },
-            'rock': {
-                primary: { fg: DARKGRAY, bg: BG_BLACK },
-                secondary: { fg: LIGHTGRAY, bg: BG_BLACK }
+            'grid_pylon': {
+                primary: { fg: MAGENTA, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK }
             },
-            'bush': {
-                primary: { fg: GREEN, bg: BG_BLACK },
-                secondary: { fg: LIGHTGREEN, bg: BG_BLACK }
+            'holo_billboard': {
+                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+                secondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                tertiary: { fg: BLUE, bg: BG_BLACK }
+            },
+            'neon_palm': {
+                primary: { fg: MAGENTA, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK },
+                tertiary: { fg: LIGHTCYAN, bg: BG_BLACK }
+            },
+            'laser_beam': {
+                primary: { fg: WHITE, bg: BG_BLACK },
+                secondary: { fg: LIGHTCYAN, bg: BG_BLACK }
             }
         }
     },
@@ -8097,9 +8719,11 @@ var SynthwaveTheme = {
     },
     roadside: {
         pool: [
-            { sprite: 'tree', weight: 3, side: 'both' },
-            { sprite: 'rock', weight: 2, side: 'both' },
-            { sprite: 'bush', weight: 2, side: 'both' }
+            { sprite: 'neon_pillar', weight: 3, side: 'both' },
+            { sprite: 'grid_pylon', weight: 3, side: 'both' },
+            { sprite: 'holo_billboard', weight: 2, side: 'both' },
+            { sprite: 'neon_palm', weight: 2, side: 'both' },
+            { sprite: 'laser_beam', weight: 1, side: 'both' }
         ],
         spacing: 10,
         density: 1.0
@@ -8771,49 +9395,49 @@ var CandyLandTheme = {
     name: 'candy_land',
     description: 'Race through a magical world made entirely of sweets and candy',
     colors: {
-        skyTop: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyMid: { fg: LIGHTCYAN, bg: BG_BLACK },
-        skyHorizon: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyGrid: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        skyGridGlow: { fg: WHITE, bg: BG_BLACK },
+        skyTop: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        skyMid: { fg: WHITE, bg: BG_MAGENTA },
+        skyHorizon: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        skyGrid: { fg: WHITE, bg: BG_MAGENTA },
+        skyGridGlow: { fg: LIGHTCYAN, bg: BG_MAGENTA },
         celestialCore: { fg: YELLOW, bg: BG_MAGENTA },
-        celestialGlow: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        starBright: { fg: WHITE, bg: BG_BLACK },
-        starDim: { fg: LIGHTCYAN, bg: BG_BLACK },
-        sceneryPrimary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        scenerySecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
-        sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
-        roadSurface: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        roadSurfaceAlt: { fg: MAGENTA, bg: BG_BLACK },
-        roadStripe: { fg: WHITE, bg: BG_BLACK },
-        roadEdge: { fg: LIGHTCYAN, bg: BG_BLACK },
-        roadGrid: { fg: MAGENTA, bg: BG_BLACK },
-        shoulderPrimary: { fg: LIGHTGREEN, bg: BG_BLACK },
-        shoulderSecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+        celestialGlow: { fg: WHITE, bg: BG_MAGENTA },
+        starBright: { fg: WHITE, bg: BG_MAGENTA },
+        starDim: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        sceneryPrimary: { fg: WHITE, bg: BG_MAGENTA },
+        scenerySecondary: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        sceneryTertiary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        roadSurface: { fg: WHITE, bg: BG_MAGENTA },
+        roadSurfaceAlt: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
+        roadStripe: { fg: LIGHTCYAN, bg: BG_MAGENTA },
+        roadEdge: { fg: WHITE, bg: BG_CYAN },
+        roadGrid: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
+        shoulderPrimary: { fg: WHITE, bg: BG_MAGENTA },
+        shoulderSecondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
         roadsideColors: {
             'lollipop': {
-                primary: { fg: LIGHTRED, bg: BG_BLACK },
-                secondary: { fg: WHITE, bg: BG_BLACK }
+                primary: { fg: LIGHTRED, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             },
             'candy_cane': {
-                primary: { fg: LIGHTRED, bg: BG_BLACK },
-                secondary: { fg: WHITE, bg: BG_BLACK }
+                primary: { fg: LIGHTRED, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             },
             'gummy_bear': {
-                primary: { fg: LIGHTGREEN, bg: BG_BLACK },
-                secondary: { fg: GREEN, bg: BG_BLACK }
+                primary: { fg: LIGHTGREEN, bg: BG_CYAN },
+                secondary: { fg: GREEN, bg: BG_CYAN }
             },
             'cupcake': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: LIGHTRED, bg: BG_BLACK }
+                primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+                secondary: { fg: LIGHTRED, bg: BG_CYAN }
             },
             'ice_cream': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: BROWN, bg: BG_BLACK }
+                primary: { fg: WHITE, bg: BG_CYAN },
+                secondary: { fg: BROWN, bg: BG_CYAN }
             },
             'cotton_candy': {
-                primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-                secondary: { fg: LIGHTCYAN, bg: BG_BLACK }
+                primary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+                secondary: { fg: WHITE, bg: BG_CYAN }
             }
         }
     },
@@ -8842,8 +9466,8 @@ var CandyLandTheme = {
     },
     ground: {
         type: 'candy',
-        primary: { fg: LIGHTMAGENTA, bg: BG_BLACK },
-        secondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+        primary: { fg: WHITE, bg: BG_CYAN },
+        secondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
         pattern: {
             ditherDensity: 0.4,
             ditherChars: ['*', '@', '.', '~']
@@ -9744,6 +10368,104 @@ function getKaijuSprite(type) {
     }
 }
 "use strict";
+var UnderwaterTheme = {
+    name: 'underwater_grotto',
+    description: 'Race through a magical underwater world filled with marine life',
+    colors: {
+        skyTop: { fg: BLUE, bg: BG_BLUE },
+        skyMid: { fg: LIGHTBLUE, bg: BG_BLUE },
+        skyHorizon: { fg: LIGHTCYAN, bg: BG_CYAN },
+        skyGrid: { fg: LIGHTCYAN, bg: BG_BLUE },
+        skyGridGlow: { fg: WHITE, bg: BG_BLUE },
+        celestialCore: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+        celestialGlow: { fg: LIGHTCYAN, bg: BG_BLUE },
+        starBright: { fg: LIGHTCYAN, bg: BG_BLUE },
+        starDim: { fg: CYAN, bg: BG_BLUE },
+        sceneryPrimary: { fg: DARKGRAY, bg: BG_BLUE },
+        scenerySecondary: { fg: LIGHTGRAY, bg: BG_BLUE },
+        sceneryTertiary: { fg: GREEN, bg: BG_BLUE },
+        roadSurface: { fg: LIGHTBLUE, bg: BG_BLUE },
+        roadSurfaceAlt: { fg: CYAN, bg: BG_CYAN },
+        roadStripe: { fg: WHITE, bg: BG_BLUE },
+        roadEdge: { fg: LIGHTCYAN, bg: BG_CYAN },
+        roadGrid: { fg: BLUE, bg: BG_BLUE },
+        shoulderPrimary: { fg: YELLOW, bg: BG_BLUE },
+        shoulderSecondary: { fg: BROWN, bg: BG_CYAN },
+        roadsideColors: {
+            'underwater_fish': {
+                primary: { fg: YELLOW, bg: BG_BLUE },
+                secondary: { fg: LIGHTRED, bg: BG_BLUE }
+            },
+            'underwater_coral': {
+                primary: { fg: LIGHTRED, bg: BG_BLUE },
+                secondary: { fg: LIGHTMAGENTA, bg: BG_BLUE }
+            },
+            'underwater_seaweed': {
+                primary: { fg: LIGHTGREEN, bg: BG_BLUE },
+                secondary: { fg: GREEN, bg: BG_BLUE }
+            },
+            'underwater_rock': {
+                primary: { fg: LIGHTGRAY, bg: BG_BLUE },
+                secondary: { fg: DARKGRAY, bg: BG_BLUE }
+            },
+            'underwater_jellyfish': {
+                primary: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+                secondary: { fg: LIGHTCYAN, bg: BG_BLUE }
+            },
+            'underwater_treasure': {
+                primary: { fg: YELLOW, bg: BG_BLUE },
+                secondary: { fg: BROWN, bg: BG_BLUE }
+            }
+        }
+    },
+    sky: {
+        type: 'grid',
+        converging: false,
+        horizontal: true
+    },
+    background: {
+        type: 'underwater',
+        config: {
+            kelp: true,
+            bubbles: true,
+            parallaxSpeed: 0.08
+        }
+    },
+    celestial: {
+        type: 'mermaid',
+        size: 4,
+        positionX: 0.7,
+        positionY: 0.3
+    },
+    stars: {
+        enabled: true,
+        density: 0.5,
+        twinkle: true
+    },
+    ground: {
+        type: 'water',
+        primary: { fg: LIGHTBLUE, bg: BG_BLUE },
+        secondary: { fg: LIGHTCYAN, bg: BG_CYAN },
+        pattern: {
+            ditherDensity: 0.4,
+            ditherChars: ['~', GLYPH.LIGHT_SHADE, '.', 'o']
+        }
+    },
+    roadside: {
+        pool: [
+            { sprite: 'underwater_fish', weight: 5, side: 'both' },
+            { sprite: 'underwater_coral', weight: 4, side: 'both' },
+            { sprite: 'underwater_seaweed', weight: 4, side: 'both' },
+            { sprite: 'underwater_rock', weight: 3, side: 'both' },
+            { sprite: 'underwater_jellyfish', weight: 3, side: 'both' },
+            { sprite: 'underwater_treasure', weight: 1, side: 'both' }
+        ],
+        spacing: 35,
+        density: 1.3
+    }
+};
+registerTheme(UnderwaterTheme);
+"use strict";
 var FrameManager = (function () {
     function FrameManager(width, height, horizonY) {
         this.width = width;
@@ -10081,6 +10803,8 @@ var FrameRenderer = (function () {
         this.horizonY = 8;
         this._mountainScrollOffset = 0;
         this._staticElementsDirty = true;
+        this._skyGridAnimPhase = 0;
+        this._fireAnimPhase = 0;
         this._currentRoad = null;
         this._currentTrackPosition = 0;
         this._currentCameraX = 0;
@@ -10165,6 +10889,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.celestial.type === 'monster') {
             this.renderMonsterSilhouette();
         }
+        else if (this.activeTheme.celestial.type === 'mermaid') {
+            this.renderMermaid();
+        }
         if (this.activeTheme.background.type === 'mountains') {
             this.renderMountains();
         }
@@ -10204,6 +10931,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'destroyed_city') {
             this.renderDestroyedCity();
         }
+        else if (this.activeTheme.background.type === 'underwater') {
+            this.renderUnderwaterBackground();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -10213,8 +10943,9 @@ var FrameRenderer = (function () {
         if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined') {
             GlitchState.update(trackPosition, dt || 0.016);
         }
+        this._fireAnimPhase += (dt || 0.016) * 8;
         if (this.activeTheme.sky.type === 'grid') {
-            this.renderSkyGrid(trackPosition);
+            this.renderSkyGrid(speed || 0, dt || 0);
         }
         else if (this.activeTheme.sky.type === 'stars') {
             this.renderSkyStars(trackPosition);
@@ -10225,7 +10956,7 @@ var FrameRenderer = (function () {
         if (this.activeTheme.background.type === 'ocean') {
             this.renderOceanWaves(trackPosition);
         }
-        if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined) {
+        if (curvature !== undefined && playerSteer !== undefined && speed !== undefined && dt !== undefined && speed > 0) {
             this.updateParallax(curvature, playerSteer, speed, dt);
         }
     };
@@ -10254,6 +10985,9 @@ var FrameRenderer = (function () {
             }
             else if (this.activeTheme.ground.type === 'dirt') {
                 this.renderDirtGround(trackPosition);
+            }
+            else if (this.activeTheme.ground.type === 'water') {
+                this.renderWaterGround(trackPosition);
             }
         }
         this.renderRoadSurface(trackPosition, cameraX, road);
@@ -10980,6 +11714,109 @@ var FrameRenderer = (function () {
         frame.setData(godzillaX + 5, baseY - 2, GLYPH.FULL_BLOCK, godzBody);
         frame.setData(godzillaX + 6, baseY - 1, GLYPH.FULL_BLOCK, godzBody);
         frame.setData(godzillaX + 7, baseY - 1, GLYPH.RIGHT_HALF, godzBody);
+    };
+    FrameRenderer.prototype.renderMermaid = function () {
+        var frame = this.frameManager.getSunFrame();
+        if (!frame)
+            return;
+        var colors = this.activeTheme.colors;
+        var coreAttr = makeAttr(colors.celestialCore.fg, colors.celestialCore.bg);
+        var glowAttr = makeAttr(colors.celestialGlow.fg, colors.celestialGlow.bg);
+        var hairAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var tailAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var tailGlowAttr = makeAttr(CYAN, BG_BLUE);
+        var posX = Math.floor(this.width * (this.activeTheme.celestial.positionX || 0.7));
+        var posY = Math.floor(this.horizonY * (this.activeTheme.celestial.positionY || 0.4));
+        frame.setData(posX - 5, posY - 2, '~', hairAttr);
+        frame.setData(posX - 4, posY - 2, '~', hairAttr);
+        frame.setData(posX - 3, posY - 1, '~', hairAttr);
+        frame.setData(posX - 4, posY - 1, '~', hairAttr);
+        frame.setData(posX - 5, posY, '~', hairAttr);
+        frame.setData(posX - 4, posY, '~', hairAttr);
+        frame.setData(posX - 3, posY, '~', hairAttr);
+        frame.setData(posX - 2, posY - 1, '(', coreAttr);
+        frame.setData(posX - 1, posY - 1, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX, posY - 1, ')', coreAttr);
+        frame.setData(posX - 1, posY, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX, posY, GLYPH.FULL_BLOCK, coreAttr);
+        frame.setData(posX + 1, posY, '\\', coreAttr);
+        frame.setData(posX, posY + 1, GLYPH.FULL_BLOCK, glowAttr);
+        frame.setData(posX + 1, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 2, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 3, posY + 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 4, posY, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 5, posY, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 6, posY - 1, GLYPH.FULL_BLOCK, tailAttr);
+        frame.setData(posX + 7, posY - 2, '/', tailGlowAttr);
+        frame.setData(posX + 7, posY - 1, GLYPH.FULL_BLOCK, tailGlowAttr);
+        frame.setData(posX + 7, posY, '\\', tailGlowAttr);
+        frame.setData(posX + 8, posY - 2, '/', tailGlowAttr);
+        frame.setData(posX + 8, posY, '\\', tailGlowAttr);
+        frame.setData(posX - 2, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX + 1, posY - 2, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX - 2, posY + 1, GLYPH.LIGHT_SHADE, glowAttr);
+        frame.setData(posX + 2, posY + 2, GLYPH.LIGHT_SHADE, glowAttr);
+    };
+    FrameRenderer.prototype.renderUnderwaterBackground = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var colors = this.activeTheme.colors;
+        var rockAttr = makeAttr(colors.sceneryPrimary.fg, colors.sceneryPrimary.bg);
+        var rockLightAttr = makeAttr(colors.scenerySecondary.fg, colors.scenerySecondary.bg);
+        var kelpAttr = makeAttr(colors.sceneryTertiary.fg, colors.sceneryTertiary.bg);
+        var coralAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var coralYellowAttr = makeAttr(YELLOW, BG_BLUE);
+        for (var y = 0; y < this.horizonY; y++) {
+            var wallWidth = 6 - Math.floor(y * 0.5);
+            for (var x = 0; x < wallWidth && x < 10; x++) {
+                var char = (x === wallWidth - 1) ? GLYPH.RIGHT_HALF : GLYPH.FULL_BLOCK;
+                var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+                frame.setData(x, y, char, attr);
+            }
+        }
+        for (var y = 0; y < this.horizonY; y++) {
+            var wallWidth = 5 - Math.floor(y * 0.4);
+            for (var x = 0; x < wallWidth && x < 8; x++) {
+                var rx = this.width - 1 - x;
+                var char = (x === wallWidth - 1) ? GLYPH.LEFT_HALF : GLYPH.FULL_BLOCK;
+                var attr = ((x + y) % 3 === 0) ? rockLightAttr : rockAttr;
+                frame.setData(rx, y, char, attr);
+            }
+        }
+        var kelpPositions = [12, 18, 25, 55, 62, 68];
+        for (var i = 0; i < kelpPositions.length; i++) {
+            var kx = kelpPositions[i];
+            var kelpHeight = 3 + (i % 3);
+            for (var ky = 0; ky < kelpHeight; ky++) {
+                var y = this.horizonY - 1 - ky;
+                if (y >= 0) {
+                    var kchar = (ky % 2 === 0) ? ')' : '(';
+                    frame.setData(kx, y, kchar, kelpAttr);
+                    if (i % 2 === 0 && kx + 1 < this.width) {
+                        frame.setData(kx + 1, y, (ky % 2 === 0) ? '(' : ')', kelpAttr);
+                    }
+                }
+            }
+        }
+        var coralPositions = [8, 22, 35, 48, 58, 72];
+        for (var i = 0; i < coralPositions.length; i++) {
+            var cx = coralPositions[i];
+            var y = this.horizonY - 1;
+            var attr = (i % 2 === 0) ? coralAttr : coralYellowAttr;
+            frame.setData(cx, y, '*', attr);
+            frame.setData(cx + 1, y, 'Y', attr);
+            frame.setData(cx + 2, y, '*', attr);
+            if (y - 1 >= 0) {
+                frame.setData(cx + 1, y - 1, '^', attr);
+            }
+        }
+        var bubblePositions = [[30, 2], [45, 3], [50, 1], [15, 4], [65, 2]];
+        for (var i = 0; i < bubblePositions.length; i++) {
+            var bx = bubblePositions[i][0];
+            var by = bubblePositions[i][1];
+            frame.setData(bx, by, 'o', makeAttr(WHITE, BG_BLUE));
+        }
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -11734,37 +12571,48 @@ var FrameRenderer = (function () {
             }
         }
     };
-    FrameRenderer.prototype.renderSkyGrid = function (trackPosition) {
+    FrameRenderer.prototype.renderSkyGrid = function (speed, dt) {
         var frame = this.frameManager.getSkyGridFrame();
         if (!frame)
             return;
         frame.clear();
+        if (speed > 1) {
+            this._skyGridAnimPhase -= speed * dt * 0.004;
+            while (this._skyGridAnimPhase < 0)
+                this._skyGridAnimPhase += 1;
+            while (this._skyGridAnimPhase >= 1)
+                this._skyGridAnimPhase -= 1;
+        }
         var colors = this.activeTheme.colors;
         var gridAttr = makeAttr(colors.skyGrid.fg, colors.skyGrid.bg);
         var glowAttr = makeAttr(colors.skyGridGlow.fg, colors.skyGridGlow.bg);
-        var vanishX = 40 + Math.round(this._mountainScrollOffset * 0.5);
+        var vanishX = 40;
         for (var y = this.horizonY - 1; y >= 1; y--) {
             var distFromHorizon = this.horizonY - y;
             var spread = distFromHorizon * 6;
             if (this.activeTheme.sky.converging) {
-                for (var offset = 0; offset <= spread && offset < 40; offset += 10) {
-                    if (offset === 0) {
-                        frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
-                    }
-                    else {
-                        var leftX = vanishX - offset;
-                        var rightX = vanishX + offset;
-                        if (leftX >= 0 && leftX < this.width)
-                            frame.setData(leftX, y, '/', glowAttr);
-                        if (rightX >= 0 && rightX < this.width)
-                            frame.setData(rightX, y, '\\', glowAttr);
+                for (var offset = 0; offset <= 40; offset += 8) {
+                    if (offset <= spread) {
+                        if (offset === 0) {
+                            frame.setData(vanishX, y, GLYPH.BOX_V, gridAttr);
+                        }
+                        else {
+                            var leftX = vanishX - offset;
+                            var rightX = vanishX + offset;
+                            if (leftX >= 0 && leftX < this.width)
+                                frame.setData(leftX, y, '/', glowAttr);
+                            if (rightX >= 0 && rightX < this.width)
+                                frame.setData(rightX, y, '\\', glowAttr);
+                        }
                     }
                 }
             }
             if (this.activeTheme.sky.horizontal) {
-                var linePhase = Math.floor(trackPosition / 50 + distFromHorizon) % 4;
-                if (linePhase === 0) {
-                    var lineSpread = Math.min(spread, 38);
+                var scanlinePhase = (this._skyGridAnimPhase + distFromHorizon * 0.25) % 1;
+                if (scanlinePhase < 0)
+                    scanlinePhase += 1;
+                if (scanlinePhase < 0.33) {
+                    var lineSpread = Math.min(spread, 39);
                     for (var x = vanishX - lineSpread; x <= vanishX + lineSpread; x++) {
                         if (x >= 0 && x < this.width) {
                             frame.setData(x, y, GLYPH.BOX_H, glowAttr);
@@ -11877,7 +12725,7 @@ var FrameRenderer = (function () {
             }
         }
     };
-    FrameRenderer.prototype.renderLavaGround = function (trackPosition) {
+    FrameRenderer.prototype.renderLavaGround = function (_trackPosition) {
         var frame = this.frameManager.getGroundGridFrame();
         if (!frame)
             return;
@@ -11885,37 +12733,200 @@ var FrameRenderer = (function () {
         if (!ground)
             return;
         frame.clear();
-        var rockAttr = makeAttr(ground.primary.fg, ground.primary.bg);
-        var lavaAttr = makeAttr(ground.secondary.fg, ground.secondary.bg);
         var frameHeight = this.height - this.horizonY;
+        var firePhase = this._fireAnimPhase;
+        var blackAttr = makeAttr(BLACK, BG_BLACK);
+        var darkRockAttr = makeAttr(DARKGRAY, BG_BLACK);
+        var hotRockAttr = makeAttr(RED, BG_BLACK);
+        var lavaAttr = makeAttr(LIGHTRED, BG_RED);
+        var lavaGlowAttr = makeAttr(YELLOW, BG_RED);
+        var lavaBrightAttr = makeAttr(WHITE, BG_RED);
+        var fireAttr = makeAttr(YELLOW, BG_BLACK);
+        var fireBrightAttr = makeAttr(WHITE, BG_RED);
+        var emberAttr = makeAttr(LIGHTRED, BG_BLACK);
         for (var y = 0; y < frameHeight - 1; y++) {
+            var depthFactor = y / frameHeight;
             for (var x = 0; x < this.width; x++) {
-                frame.setData(x, y, GLYPH.DARK_SHADE, rockAttr);
+                var river1 = Math.sin((x * 0.15) + (y * 0.3) + firePhase * 0.7) * 1.5;
+                var river2 = Math.sin((x * 0.1) - (y * 0.2) + firePhase * 0.5 + 2) * 1.2;
+                var riverIntensity = river1 + river2;
+                var flameBase = Math.sin(x * 0.25 + firePhase * 1.5) +
+                    Math.sin(x * 0.4 - firePhase * 2.0) * 0.5;
+                var flameFlicker = Math.sin(x * 0.8 + y * 0.5 + firePhase * 4) * 0.5;
+                var flameIntensity = flameBase + flameFlicker;
+                var emberSeed = (x * 7919 + y * 104729) % 1000;
+                var emberPhase = Math.sin(firePhase * 3 + emberSeed * 0.01);
+                var isEmber = emberSeed < 30 && emberPhase > 0.7;
+                var poolCenterX1 = 15 + Math.sin(firePhase * 0.3) * 3;
+                var poolCenterX2 = 55 + Math.sin(firePhase * 0.4 + 1) * 4;
+                var poolCenterX3 = 35 + Math.sin(firePhase * 0.2 + 2) * 2;
+                var dist1 = Math.sqrt(Math.pow(x - poolCenterX1, 2) + Math.pow(y - 8, 2));
+                var dist2 = Math.sqrt(Math.pow(x - poolCenterX2, 2) + Math.pow(y - 12, 2));
+                var dist3 = Math.sqrt(Math.pow(x - poolCenterX3, 2) + Math.pow(y - 5, 2));
+                var poolBubble = Math.sin(firePhase * 2 + x * 0.3 + y * 0.2);
+                var inPool1 = dist1 < 6 + poolBubble;
+                var inPool2 = dist2 < 5 + poolBubble * 0.8;
+                var inPool3 = dist3 < 4 + poolBubble * 0.6;
+                var char;
+                var attr;
+                if (isEmber && depthFactor > 0.3) {
+                    char = '*';
+                    attr = emberAttr;
+                }
+                else if (inPool1 || inPool2 || inPool3) {
+                    var poolDist = inPool1 ? dist1 : (inPool2 ? dist2 : dist3);
+                    var bubblePhase = Math.sin(firePhase * 3 + poolDist * 0.5);
+                    if (bubblePhase > 0.7) {
+                        char = 'O';
+                        attr = lavaBrightAttr;
+                    }
+                    else if (bubblePhase > 0.3) {
+                        char = GLYPH.FULL_BLOCK;
+                        attr = lavaGlowAttr;
+                    }
+                    else if (bubblePhase > -0.2) {
+                        char = GLYPH.MEDIUM_SHADE;
+                        attr = lavaAttr;
+                    }
+                    else {
+                        char = '~';
+                        attr = lavaAttr;
+                    }
+                }
+                else if (riverIntensity > 1.5) {
+                    char = GLYPH.FULL_BLOCK;
+                    attr = lavaGlowAttr;
+                }
+                else if (riverIntensity > 0.8) {
+                    char = '~';
+                    attr = lavaAttr;
+                }
+                else if (riverIntensity > 0.3) {
+                    char = GLYPH.LIGHT_SHADE;
+                    attr = hotRockAttr;
+                }
+                else if (flameIntensity > 1.2 && depthFactor < 0.6) {
+                    char = '^';
+                    attr = fireBrightAttr;
+                }
+                else if (flameIntensity > 0.6 && depthFactor < 0.7) {
+                    var flameChar = ((x + Math.floor(firePhase * 5)) % 3 === 0) ? '^' : '*';
+                    char = flameChar;
+                    attr = fireAttr;
+                }
+                else if (flameIntensity > 0.2 && depthFactor < 0.8) {
+                    char = GLYPH.MEDIUM_SHADE;
+                    attr = emberAttr;
+                }
+                else if (Math.random() < 0.02 && depthFactor > 0.4) {
+                    char = '.';
+                    attr = emberAttr;
+                }
+                else {
+                    var rockPattern = ((x * 3 + y * 7) % 5);
+                    if (rockPattern === 0) {
+                        char = GLYPH.DARK_SHADE;
+                        attr = darkRockAttr;
+                    }
+                    else if (rockPattern === 1) {
+                        char = GLYPH.MEDIUM_SHADE;
+                        attr = blackAttr;
+                    }
+                    else {
+                        char = ' ';
+                        attr = blackAttr;
+                    }
+                }
+                frame.setData(x, y, char, attr);
             }
         }
-        var flowPhase = Math.floor(trackPosition / 20) % 8;
+    };
+    FrameRenderer.prototype.renderWaterGround = function (_trackPosition) {
+        var frame = this.frameManager.getGroundGridFrame();
+        if (!frame)
+            return;
+        var ground = this.activeTheme.ground;
+        if (!ground)
+            return;
+        frame.clear();
+        var frameHeight = this.height - this.horizonY;
+        var waterPhase = this._fireAnimPhase;
+        var deepBlueAttr = makeAttr(BLUE, BG_BLUE);
+        var mediumBlueAttr = makeAttr(LIGHTBLUE, BG_BLUE);
+        var lightBlueAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var cyanAttr = makeAttr(CYAN, BG_CYAN);
+        var whiteAttr = makeAttr(WHITE, BG_BLUE);
+        var sandAttr = makeAttr(YELLOW, BG_BLUE);
+        var sandDarkAttr = makeAttr(BROWN, BG_BLUE);
+        var seaweedAttr = makeAttr(GREEN, BG_BLUE);
+        var bubbleAttr = makeAttr(WHITE, BG_CYAN);
         for (var y = 0; y < frameHeight - 1; y++) {
-            var distFromHorizon = y + 1;
-            for (var crack = 0; crack < 4; crack++) {
-                var baseX = crack * 20 + 5;
-                var waveOffset = Math.sin((y + flowPhase + crack * 3) * 0.5) * 3;
-                var x = Math.floor(baseX + waveOffset);
-                if (x >= 0 && x < this.width) {
-                    var intensity = ((y + flowPhase * 2 + crack) % 4);
-                    var char = (intensity < 2) ? '*' : '~';
-                    frame.setData(x, y, char, lavaAttr);
-                    if (x > 0)
-                        frame.setData(x - 1, y, GLYPH.LIGHT_SHADE, rockAttr);
-                    if (x < this.width - 1)
-                        frame.setData(x + 1, y, GLYPH.LIGHT_SHADE, rockAttr);
+            var depthFactor = y / frameHeight;
+            for (var x = 0; x < this.width; x++) {
+                var caustic1 = Math.sin((x * 0.2) + (y * 0.15) + waterPhase * 0.8);
+                var caustic2 = Math.sin((x * 0.15) - (y * 0.1) + waterPhase * 0.6 + 1.5);
+                var causticIntensity = (caustic1 + caustic2) / 2;
+                var currentWave = Math.sin(y * 0.3 + waterPhase * 1.2) * 0.5;
+                var currentIntensity = Math.sin((x + waterPhase * 3) * 0.1 + currentWave);
+                var bubbleSeed = (x * 7919 + y * 104729) % 1000;
+                var bubblePhase = Math.sin(waterPhase * 2 - y * 0.3 + bubbleSeed * 0.01);
+                var isBubble = bubbleSeed < 20 && bubblePhase > 0.8 && depthFactor > 0.2;
+                var sandNoise = Math.sin(x * 0.4 + y * 0.2) + Math.sin(x * 0.2 - y * 0.3);
+                var isSandy = sandNoise > 0.8 && depthFactor > 0.5;
+                var seaweedSeed = (x * 31 + y * 17) % 100;
+                var seaweedWave = Math.sin(waterPhase * 1.5 + x * 0.5);
+                var isSeaweed = seaweedSeed < 8 && depthFactor > 0.3 && seaweedWave > 0.3;
+                var char;
+                var attr;
+                if (isBubble) {
+                    char = 'o';
+                    attr = bubbleAttr;
                 }
-            }
-            if (distFromHorizon > frameHeight / 2) {
-                var poolChance = ((y * 17 + flowPhase) % 11);
-                if (poolChance === 0) {
-                    var poolX = (y * 13 + flowPhase * 5) % this.width;
-                    frame.setData(poolX, y, GLYPH.MEDIUM_SHADE, lavaAttr);
+                else if (isSeaweed) {
+                    var seaweedChar = seaweedWave > 0.6 ? ')' : '(';
+                    char = seaweedChar;
+                    attr = seaweedAttr;
                 }
+                else if (isSandy) {
+                    var sandRipple = Math.sin(x * 0.5 + waterPhase * 0.5);
+                    if (sandRipple > 0.5) {
+                        char = '~';
+                        attr = sandAttr;
+                    }
+                    else if (sandRipple > 0) {
+                        char = '.';
+                        attr = sandDarkAttr;
+                    }
+                    else {
+                        char = ',';
+                        attr = sandAttr;
+                    }
+                }
+                else if (causticIntensity > 0.7) {
+                    char = GLYPH.LIGHT_SHADE;
+                    attr = whiteAttr;
+                }
+                else if (causticIntensity > 0.3) {
+                    char = '~';
+                    attr = lightBlueAttr;
+                }
+                else if (currentIntensity > 0.6) {
+                    char = '~';
+                    attr = cyanAttr;
+                }
+                else if (currentIntensity > 0.2) {
+                    char = '~';
+                    attr = mediumBlueAttr;
+                }
+                else if (currentIntensity > -0.2) {
+                    char = GLYPH.MEDIUM_SHADE;
+                    attr = mediumBlueAttr;
+                }
+                else {
+                    char = GLYPH.DARK_SHADE;
+                    attr = deepBlueAttr;
+                }
+                frame.setData(x, y, char, attr);
             }
         }
     };
@@ -12271,6 +13282,13 @@ var FrameRenderer = (function () {
         }
         switch (ground.type) {
             case 'grid':
+            case 'lava':
+            case 'candy':
+            case 'void':
+            case 'cobblestone':
+            case 'jungle':
+            case 'dirt':
+            case 'water':
                 return;
             case 'dither':
                 this.renderDitherGround(frame, x, y, distFromRoad, distance, ground);
@@ -12669,7 +13687,7 @@ var FrameRenderer = (function () {
     };
     FrameRenderer.prototype.shutdown = function () {
         this.frameManager.shutdown();
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     return FrameRenderer;
 }());
@@ -12699,7 +13717,7 @@ var Renderer = (function () {
             logWarning("Renderer: frame.js not available, using direct console");
             this.useFrame = false;
         }
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     Renderer.prototype.beginFrame = function () {
         this.composer.clear();
@@ -12770,7 +13788,7 @@ var Renderer = (function () {
             this.frame = null;
         }
         console.attributes = LIGHTGRAY;
-        console.clear();
+        console.clear(BG_BLACK, false);
     };
     return Renderer;
 }());
@@ -13077,7 +14095,8 @@ var Game = (function () {
             'ancient_ruins': 'ancient_ruins',
             'thunder_stadium': 'thunder_stadium',
             'glitch_circuit': 'glitch_circuit',
-            'kaiju_rampage': 'kaiju_rampage'
+            'kaiju_rampage': 'kaiju_rampage',
+            'underwater_grotto': 'underwater_grotto'
         };
         var themeName = themeMapping[trackDef.themeId] || 'synthwave';
         if (this.renderer.setTheme) {
@@ -13227,7 +14246,13 @@ var Game = (function () {
         this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
         this.itemSystem.checkPickups(this.state.vehicles);
         if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
-            this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles);
+            var fireBackward = this.controls.getLastAccelAction() < 0;
+            var currentSpeed = this.state.playerVehicle.speed;
+            var currentAccel = this.controls.getAcceleration();
+            this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles, fireBackward);
+            if (currentAccel >= 0 && this.state.playerVehicle.speed < currentSpeed) {
+                this.state.playerVehicle.speed = currentSpeed;
+            }
         }
         for (var i = 0; i < this.state.vehicles.length; i++) {
             var vehicle = this.state.vehicles[i];
@@ -13281,7 +14306,7 @@ var Game = (function () {
                 logInfo("NEW HIGH SCORE! Lap time #" + lapTimePosition + ": " + bestLap.toFixed(2));
             }
         }
-        this.renderResultsScreen(finalPosition, finalTime, bestLap, trackTimePosition, lapTimePosition);
+        this.renderResultsScreen(finalPosition, finalTime, bestLap);
         while (true) {
             var key = console.inkey(K_NONE, 100);
             if (key === '\r' || key === '\n') {
@@ -13291,92 +14316,76 @@ var Game = (function () {
         }
         if (this.highScoreManager && this.state.trackDefinition && (trackTimePosition > 0 || lapTimePosition > 0)) {
             var trackId = this.state.trackDefinition.id;
-            if (trackTimePosition > 0) {
-                showHighScoreList(HighScoreType.TRACK_TIME, trackId, "=== TRACK TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
-            }
-            if (lapTimePosition > 0) {
-                showHighScoreList(HighScoreType.LAP_TIME, trackId, "=== LAP TIME HIGH SCORES ===", this.state.track.name, this.highScoreManager);
-            }
+            showTwoColumnHighScores(trackId, this.state.track.name, this.highScoreManager, trackTimePosition, lapTimePosition);
         }
     };
-    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap, trackTimePosition, lapTimePosition) {
-        this.renderer.beginFrame();
-        var screenWidth = console.screen_columns;
-        var screenHeight = console.screen_rows;
-        var composer = new SceneComposer(screenWidth, screenHeight);
-        for (var y = 0; y < screenHeight; y++) {
-            for (var x = 0; x < screenWidth; x++) {
-                composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
-            }
-        }
+    Game.prototype.renderResultsScreen = function (position, totalTime, bestLap) {
+        console.clear(BG_BLACK, false);
         var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
         var labelAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
         var valueAttr = colorToAttr({ fg: LIGHTGREEN, bg: BG_BLACK });
         var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
         var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
+        var viewWidth = 80;
+        var viewHeight = 24;
         var boxWidth = 40;
         var boxHeight = 12;
-        var boxX = Math.floor((screenWidth - boxWidth) / 2);
-        var topY = Math.floor((screenHeight - boxHeight) / 2);
-        composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
-        composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
-        composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
-        composer.setCell(boxX + boxWidth - 1, topY + boxHeight - 1, GLYPH.DBOX_BR, boxAttr);
+        var boxX = Math.floor((viewWidth - boxWidth) / 2);
+        var topY = Math.floor((viewHeight - boxHeight) / 2);
+        console.gotoxy(boxX + 1, topY + 1);
+        console.attributes = boxAttr;
+        console.print(GLYPH.DBOX_TL);
         for (var i = 1; i < boxWidth - 1; i++) {
-            composer.setCell(boxX + i, topY, GLYPH.DBOX_H, boxAttr);
-            composer.setCell(boxX + i, topY + boxHeight - 1, GLYPH.DBOX_H, boxAttr);
+            console.print(GLYPH.DBOX_H);
         }
+        console.print(GLYPH.DBOX_TR);
         for (var j = 1; j < boxHeight - 1; j++) {
-            composer.setCell(boxX, topY + j, GLYPH.DBOX_V, boxAttr);
-            composer.setCell(boxX + boxWidth - 1, topY + j, GLYPH.DBOX_V, boxAttr);
+            console.gotoxy(boxX + 1, topY + 1 + j);
+            console.print(GLYPH.DBOX_V);
+            for (var i = 1; i < boxWidth - 1; i++) {
+                console.print(' ');
+            }
+            console.print(GLYPH.DBOX_V);
         }
+        console.gotoxy(boxX + 1, topY + boxHeight);
+        console.print(GLYPH.DBOX_BL);
+        for (var i = 1; i < boxWidth - 1; i++) {
+            console.print(GLYPH.DBOX_H);
+        }
+        console.print(GLYPH.DBOX_BR);
         var title = "=== RACE COMPLETE ===";
-        composer.writeString(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2, title, titleAttr);
+        console.gotoxy(boxX + 1 + Math.floor((boxWidth - title.length) / 2), topY + 3);
+        console.attributes = titleAttr;
+        console.print(title);
         var posSuffix = PositionIndicator.getOrdinalSuffix(position);
-        composer.writeString(boxX + 4, topY + 4, "FINAL POSITION:", labelAttr);
-        composer.writeString(boxX + 22, topY + 4, position + posSuffix, valueAttr);
-        composer.writeString(boxX + 4, topY + 5, "TOTAL TIME:", labelAttr);
-        composer.writeString(boxX + 22, topY + 5, LapTimer.format(totalTime), valueAttr);
-        composer.writeString(boxX + 4, topY + 6, "BEST LAP:", labelAttr);
-        composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
-        composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
-        composer.writeString(boxX + 22, topY + 8, this.state.track.name, valueAttr);
-        var highScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
-        if (trackTimePosition && trackTimePosition > 0) {
-            var msg = "NEW HIGH SCORE! #" + trackTimePosition + " Track Time";
-            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 4, msg, highScoreAttr);
-        }
-        if (lapTimePosition && lapTimePosition > 0) {
-            var msg = "NEW HIGH SCORE! #" + lapTimePosition + " Lap Time";
-            composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 3, msg, highScoreAttr);
-        }
+        console.gotoxy(boxX + 5, topY + 5);
+        console.attributes = labelAttr;
+        console.print("FINAL POSITION:");
+        console.gotoxy(boxX + 23, topY + 5);
+        console.attributes = valueAttr;
+        console.print(position + posSuffix);
+        console.gotoxy(boxX + 5, topY + 6);
+        console.attributes = labelAttr;
+        console.print("TOTAL TIME:");
+        console.gotoxy(boxX + 23, topY + 6);
+        console.attributes = valueAttr;
+        console.print(LapTimer.format(totalTime));
+        console.gotoxy(boxX + 5, topY + 7);
+        console.attributes = labelAttr;
+        console.print("BEST LAP:");
+        console.gotoxy(boxX + 23, topY + 7);
+        console.attributes = valueAttr;
+        console.print(bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--");
+        console.gotoxy(boxX + 5, topY + 9);
+        console.attributes = labelAttr;
+        console.print("TRACK:");
+        console.gotoxy(boxX + 23, topY + 9);
+        console.attributes = valueAttr;
+        console.print(this.state.track.name);
         var prompt = "Press ENTER to continue";
-        composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
-        this.flushComposerToConsole(composer);
-    };
-    Game.prototype.flushComposerToConsole = function (composer) {
-        console.home();
-        var buffer = composer.getBuffer();
-        for (var y = 0; y < buffer.length; y++) {
-            var row = buffer[y];
-            var line = '';
-            var lastAttr = -1;
-            for (var x = 0; x < row.length; x++) {
-                var cell = row[x];
-                if (cell.attr !== lastAttr) {
-                    if (line.length > 0) {
-                        console.print(line);
-                        line = '';
-                    }
-                    console.attributes = cell.attr;
-                    lastAttr = cell.attr;
-                }
-                line += cell.char;
-            }
-            if (line.length > 0) {
-                console.print(line);
-            }
-        }
+        console.gotoxy(boxX + 1 + Math.floor((boxWidth - prompt.length) / 2), topY + 11);
+        console.attributes = promptAttr;
+        console.print(prompt);
     };
     Game.prototype.activateDormantNPCs = function () {
         if (!this.state)
@@ -13476,7 +14485,7 @@ var Game = (function () {
         var road = this.state.road;
         var curvature = road.getCurvature(trackZ);
         var playerSteer = vehicle.playerX;
-        var speed = vehicle.speed;
+        var speed = this.paused ? 0 : vehicle.speed;
         var dt = 1.0 / this.config.tickRate;
         this.renderer.beginFrame();
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
@@ -13663,7 +14672,7 @@ var CIRCUITS = [
             '   DC   '
         ],
         color: LIGHTMAGENTA,
-        trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'pharaohs_tomb'],
+        trackIds: ['haunted_hollow', 'fortress_rally', 'inferno_speedway', 'mermaid_lagoon'],
         description: 'Dangerous & mysterious'
     },
     {
@@ -13690,7 +14699,7 @@ function showTrackSelector(highScoreManager) {
         circuitIndex: 0,
         trackIndex: 0
     };
-    console.clear(LIGHTGRAY);
+    console.clear(LIGHTGRAY, false);
     drawSelectorUI(state, highScoreManager);
     while (true) {
         var key = console.inkey(K_UPPER, 100);
@@ -13709,6 +14718,11 @@ function showTrackSelector(highScoreManager) {
             else if (key === '\r' || key === '\n' || key === ' ' || key === KEY_RIGHT || key === 'D' || key === '6') {
                 state.mode = 'tracks';
                 state.trackIndex = 0;
+                needsRedraw = true;
+            }
+            else if (key === 'H' && highScoreManager) {
+                var circuit = CIRCUITS[state.circuitIndex];
+                showHighScoreList(HighScoreType.CIRCUIT_TIME, circuit.id, '=== CIRCUIT HIGH SCORES ===', circuit.name, highScoreManager);
                 needsRedraw = true;
             }
             else if (key === 'Q' || key === KEY_ESC) {
@@ -13736,7 +14750,9 @@ function showTrackSelector(highScoreManager) {
                         selected: true,
                         track: circuitTracks[0],
                         isCircuitMode: true,
-                        circuitTracks: circuitTracks
+                        circuitTracks: circuitTracks,
+                        circuitId: circuit.id,
+                        circuitName: circuit.name
                     };
                 }
                 else {
@@ -13755,12 +14771,26 @@ function showTrackSelector(highScoreManager) {
                 state.mode = 'circuit';
                 needsRedraw = true;
             }
+            else if (key === 'H' && highScoreManager) {
+                var circuit = CIRCUITS[state.circuitIndex];
+                if (state.trackIndex === 4) {
+                    showHighScoreList(HighScoreType.CIRCUIT_TIME, circuit.id, '=== CIRCUIT HIGH SCORES ===', circuit.name, highScoreManager);
+                }
+                else {
+                    var trackId = circuit.trackIds[state.trackIndex];
+                    var trackDef = getTrackDefinition(trackId);
+                    if (trackDef) {
+                        showTwoColumnHighScores(trackId, trackDef.name, highScoreManager, 0, 0);
+                    }
+                }
+                needsRedraw = true;
+            }
             else if (key === 'Q') {
                 return { selected: false, track: null };
             }
         }
         if (needsRedraw) {
-            console.clear(LIGHTGRAY);
+            console.clear(LIGHTGRAY, false);
             drawSelectorUI(state, highScoreManager);
         }
     }
@@ -14410,38 +15440,42 @@ function drawControls(state) {
     console.gotoxy(1, 24);
     console.attributes = LIGHTGRAY;
     if (state.mode === 'circuit') {
-        console.print('  W/S or ');
+        console.print('  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
         console.attributes = LIGHTGRAY;
-        console.print(' Select Circuit   ');
+        console.print(' Select  ');
         console.attributes = WHITE;
         console.print('ENTER');
         console.attributes = LIGHTGRAY;
-        console.print(' Open   ');
+        console.print(' Open  ');
+        console.attributes = WHITE;
+        console.print('H');
+        console.attributes = LIGHTGRAY;
+        console.print(' Scores  ');
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;
         console.print(' Quit');
     }
     else {
-        console.print('  W/S or ');
+        console.print('  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(24) + '/' + String.fromCharCode(25));
         console.attributes = LIGHTGRAY;
-        console.print(' Select Track   ');
+        console.print(' Select  ');
         console.attributes = WHITE;
         console.print('ENTER');
         console.attributes = LIGHTGRAY;
-        console.print(' Race!   ');
+        console.print(' Race  ');
+        console.attributes = WHITE;
+        console.print('H');
+        console.attributes = LIGHTGRAY;
+        console.print(' Scores  ');
         console.attributes = WHITE;
         console.print(String.fromCharCode(27));
         console.attributes = LIGHTGRAY;
-        console.print('/');
-        console.attributes = WHITE;
-        console.print('A');
-        console.attributes = LIGHTGRAY;
-        console.print(' Back   ');
+        console.print(' Back  ');
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;
@@ -14474,9 +15508,9 @@ function showCupStandings(cupManager, isPreRace) {
     var state = cupManager.getState();
     if (!state)
         return;
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
-    console.clear(BG_BLACK);
+    var screenWidth = 80;
+    var screenHeight = 24;
+    console.clear(BG_BLACK, false);
     console.attributes = WHITE | BG_BLACK;
     var title = "=== " + state.definition.name.toUpperCase() + " ===";
     console.gotoxy(Math.floor((screenWidth - title.length) / 2), 2);
@@ -14615,11 +15649,10 @@ function showWinnersCircle(cupManager) {
     var state = cupManager.getState();
     if (!state)
         return;
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
+    var screenWidth = 80;
     var playerWon = cupManager.didPlayerWin();
     var playerPos = cupManager.getPlayerCupPosition();
-    console.clear(BG_BLACK);
+    console.clear(BG_BLACK, false);
     if (playerWon) {
         console.attributes = YELLOW | BG_BLACK;
         var trophy = [
@@ -14676,7 +15709,7 @@ function showWinnersCircle(cupManager) {
             console.print(tryAgain);
         }
     }
-    var statsTop = 14;
+    var statsTop = 16;
     console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop);
     console.attributes = LIGHTGRAY | BG_BLACK;
     console.print("Total Points: " + cupManager.getPlayerPoints());
@@ -14684,25 +15717,8 @@ function showWinnersCircle(cupManager) {
     console.print("Circuit Time: " + formatCupTime(state.totalTime));
     console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop + 2);
     console.print("Best Laps Sum: " + formatCupTime(state.totalBestLaps));
-    var standings = cupManager.getStandings();
-    var standingsTop = statsTop + 5;
-    console.gotoxy(Math.floor((screenWidth - 20) / 2), standingsTop);
-    console.attributes = WHITE | BG_BLACK;
-    console.print("Final Standings:");
-    for (var i = 0; i < Math.min(3, standings.length); i++) {
-        var s = standings[i];
-        console.gotoxy(Math.floor((screenWidth - 30) / 2), standingsTop + 2 + i);
-        if (s.isPlayer) {
-            console.attributes = LIGHTCYAN | BG_BLACK;
-        }
-        else {
-            console.attributes = LIGHTGRAY | BG_BLACK;
-        }
-        var line = (i + 1) + ". " + (s.isPlayer ? "YOU" : s.name) + " - " + s.points + " pts";
-        console.print(line);
-    }
     var prompt = "Press ENTER to continue";
-    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), screenHeight - 3);
+    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), 22);
     console.attributes = LIGHTMAGENTA | BG_BLACK;
     console.print(prompt);
     waitForEnter();
@@ -14727,7 +15743,7 @@ if (typeof console === 'undefined' || console === null) {
     exit(1);
 }
 function showTitleScreen() {
-    console.clear();
+    console.clear(BG_BLACK, false);
     var titleFile = "";
     var f = new File(js.exec_dir + "title.bin");
     if (f.exists) {
@@ -14811,7 +15827,7 @@ function waitForTitleInput() {
     }
 }
 function showRaceEndScreen() {
-    console.clear();
+    console.clear(BG_BLACK, false);
     console.attributes = LIGHTMAGENTA;
     console.print("\r\n\r\n");
     console.print("  ========================================\r\n");
@@ -14853,21 +15869,21 @@ function main() {
             }
             debugLog.info("Selected track: " + trackSelection.track.name);
             if (trackSelection.isCircuitMode && trackSelection.circuitTracks) {
-                runCupMode(trackSelection.circuitTracks, cupManager, highScoreManager);
+                runCupMode(trackSelection.circuitTracks, cupManager, highScoreManager, trackSelection.circuitId || 'custom_cup', trackSelection.circuitName || 'Circuit Cup');
             }
             else {
                 runSingleRace(trackSelection.track, highScoreManager);
             }
             debugLog.info("Returning to splash screen");
         }
-        console.clear();
+        console.clear(BG_BLACK, false);
         console.attributes = LIGHTGRAY;
         console.print("Thanks for playing OutRun ANSI!\r\n");
     }
     catch (e) {
         debugLog.separator("FATAL ERROR");
         debugLog.exception("Uncaught exception in main()", e);
-        console.clear();
+        console.clear(BG_BLACK, false);
         console.attributes = LIGHTRED;
         console.print("An error occurred: " + e + "\r\n");
         console.attributes = LIGHTGRAY;
@@ -14891,15 +15907,15 @@ function runSingleRace(track, highScoreManager) {
     game.shutdown();
     showRaceEndScreen();
 }
-function runCupMode(tracks, cupManager, highScoreManager) {
+function runCupMode(tracks, cupManager, highScoreManager, circuitId, circuitName) {
     debugLog.separator("CUP MODE START");
-    debugLog.info("Starting cup with " + tracks.length + " tracks");
+    debugLog.info("Starting cup with " + tracks.length + " tracks: " + circuitId);
     var aiNames = ['MAX', 'LUNA', 'BLAZE', 'NOVA', 'TURBO', 'DASH', 'FLASH'];
     var cupDef = {
-        id: 'custom_cup',
-        name: 'Circuit Cup',
+        id: circuitId,
+        name: circuitName,
         trackIds: [],
-        description: 'Custom circuit'
+        description: circuitName + ' circuit'
     };
     for (var t = 0; t < tracks.length; t++) {
         cupDef.trackIds.push(tracks[t].id);

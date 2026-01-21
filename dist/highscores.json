@@ -11,9 +11,57 @@
 			"time": 80.09999999999674,
 			"date": 1768854378100,
 			"trackName": "Winter Wonderland"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 74.51666666666372,
+			"date": 1768872492627,
+			"trackName": "Winter Wonderland"
 		}
 	],
 	"track_time.neon_coast": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 76.7166666666636,
+			"date": 1768889168128,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 80.71666666666337,
+			"date": 1768890054915,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 83.1833333333299,
+			"date": 1768851288422,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 83.56666666666321,
+			"date": 1768972618841,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 83.78333333332986,
+			"date": 1768889320609,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 84.14999999999651,
+			"date": 1768883359296,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 84.74999999999648,
+			"date": 1768890366776,
+			"trackName": "Neon Coast"
+		},
 		{
 			"playerName": "Hm Derdoc",
 			"time": 85.33333333332978,
@@ -31,35 +79,29 @@
 			"time": 86.76666666666303,
 			"date": 1768845891495,
 			"trackName": "Neon Coast"
-		},
-		{
-			"playerName": "Hm Derdoc",
-			"time": 89.58333333332953,
-			"date": 1768839916504,
-			"trackName": "Neon Coast"
-		},
-		{
-			"playerName": "Hm Derdoc",
-			"time": 83.1833333333299,
-			"date": 1768851288422,
-			"trackName": "Neon Coast"
 		}
 	],
 	"track_time.downtown_dash": [
 		{
 			"playerName": "Hm Derdoc",
+			"time": 91.3499999999961,
+			"date": 1768972727414,
+			"trackName": "Downtown Dash"
+		},
+		{
+			"playerName": "Hm Derdoc",
 			"time": 93.23333333332933,
 			"date": 1768839340888,
+			"trackName": "Downtown Dash"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 100.79999999999556,
+			"date": 1768883550988,
 			"trackName": "Downtown Dash"
 		}
 	],
 	"lap_time.neon_coast": [
-		{
-			"playerName": "Hm Derdoc",
-			"time": 26.84999999999848,
-			"date": 1768845891496,
-			"trackName": "Neon Coast"
-		},
 		{
 			"playerName": "Hm Derdoc",
 			"time": 22.483333333332062,
@@ -68,8 +110,56 @@
 		},
 		{
 			"playerName": "Hm Derdoc",
+			"time": 22.61666666666538,
+			"date": 1768890237823,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 23.066666666665355,
+			"date": 1768972618842,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 24.033333333331974,
+			"date": 1768890054916,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 24.633333333333216,
+			"date": 1768889168129,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 25.183333333331905,
+			"date": 1768883359297,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
 			"time": 25.99999999999853,
 			"date": 1768855861508,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 26.84999999999848,
+			"date": 1768845891496,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 27.11666666666513,
+			"date": 1768890366777,
+			"trackName": "Neon Coast"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 27.299999999998455,
+			"date": 1768889320610,
 			"trackName": "Neon Coast"
 		}
 	],
@@ -79,6 +169,380 @@
 			"time": 24.249999999998625,
 			"date": 1768854378100,
 			"trackName": "Winter Wonderland"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 23.149999999998688,
+			"date": 1768872492628,
+			"trackName": "Winter Wonderland"
+		}
+	],
+	"track_time.cactus_canyon": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 94.18333333332927,
+			"date": 1768872602086,
+			"trackName": "Cactus Canyon"
+		}
+	],
+	"lap_time.cactus_canyon": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 29.699999999999594,
+			"date": 1768872602087,
+			"trackName": "Cactus Canyon"
+		}
+	],
+	"track_time.jungle_run": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 76.01666666666364,
+			"date": 1768872722728,
+			"trackName": "Jungle Run"
+		}
+	],
+	"lap_time.jungle_run": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 24.1166666666653,
+			"date": 1768872722729,
+			"trackName": "Jungle Run"
+		}
+	],
+	"track_time.sugar_rush": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 58.3333333333313,
+			"date": 1768979268100,
+			"trackName": "Sugar Rush"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 61.09999999999781,
+			"date": 1768872799509,
+			"trackName": "Sugar Rush"
+		}
+	],
+	"lap_time.sugar_rush": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 18.550000000000228,
+			"date": 1768872799510,
+			"trackName": "Sugar Rush"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 18.749999999998934,
+			"date": 1768979268102,
+			"trackName": "Sugar Rush"
+		}
+	],
+	"circuit_time.nature_cup": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 305.81666666665444,
+			"date": 1768872815910,
+			"circuitName": "Circuit Cup"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 329.73333333331976,
+			"date": 1768883839910,
+			"circuitName": "Circuit Cup"
+		}
+	],
+	"track_time.haunted_hollow": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 94.51666666666259,
+			"date": 1768883029433,
+			"trackName": "Haunted Hollow"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 95.16666666666255,
+			"date": 1768973034218,
+			"trackName": "Haunted Hollow"
+		}
+	],
+	"lap_time.haunted_hollow": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 29.43333333333166,
+			"date": 1768973034219,
+			"trackName": "Haunted Hollow"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 29.599999999998317,
+			"date": 1768883029434,
+			"trackName": "Haunted Hollow"
+		}
+	],
+	"track_time.sunset_beach": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 56.649999999998066,
+			"date": 1768883626891,
+			"trackName": "Sunset Beach"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 57.51666666666468,
+			"date": 1768883207003,
+			"trackName": "Sunset Beach"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 59.11666666666459,
+			"date": 1768972802448,
+			"trackName": "Sunset Beach"
+		}
+	],
+	"lap_time.sunset_beach": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 16.766666666665717,
+			"date": 1768883207004,
+			"trackName": "Sunset Beach"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 17.416666666665677,
+			"date": 1768883626892,
+			"trackName": "Sunset Beach"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 17.733333333333608,
+			"date": 1768972802449,
+			"trackName": "Sunset Beach"
+		}
+	],
+	"lap_time.downtown_dash": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 29.38333333333167,
+			"date": 1768972727416,
+			"trackName": "Downtown Dash"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 30.316666666664943,
+			"date": 1768883550989,
+			"trackName": "Downtown Dash"
+		}
+	],
+	"track_time.twilight_grove": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 88.13333333332962,
+			"date": 1768883726162,
+			"trackName": "Twilight Grove"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 89.78333333332952,
+			"date": 1768972906526,
+			"trackName": "Twilight Grove"
+		}
+	],
+	"lap_time.twilight_grove": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 22.61666666666538,
+			"date": 1768972906528,
+			"trackName": "Twilight Grove"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 25.883333333331866,
+			"date": 1768883726163,
+			"trackName": "Twilight Grove"
+		}
+	],
+	"track_time.glitch_circuit": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 156.5666666666834,
+			"date": 1768973983036,
+			"trackName": "Glitch Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 171.40000000002854,
+			"date": 1768890714466,
+			"trackName": "Glitch Circuit"
+		}
+	],
+	"lap_time.glitch_circuit": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 49.26666666666515,
+			"date": 1768973983038,
+			"trackName": "Glitch Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 52.366666666664976,
+			"date": 1768890714467,
+			"trackName": "Glitch Circuit"
+		}
+	],
+	"circuit_time.retro_cup": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 323.8166666666534,
+			"date": 1768972918606,
+			"circuitName": "RETRO CUP"
+		}
+	],
+	"track_time.fortress_rally": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 108.59999999999512,
+			"date": 1768973153229,
+			"trackName": "Fortress Rally"
+		}
+	],
+	"lap_time.fortress_rally": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 30.699999999998255,
+			"date": 1768973153231,
+			"trackName": "Fortress Rally"
+		}
+	],
+	"track_time.inferno_speedway": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 108.38333333332847,
+			"date": 1768973275105,
+			"trackName": "Inferno Speedway"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 110.46666666666168,
+			"date": 1768980902185,
+			"trackName": "Inferno Speedway"
+		}
+	],
+	"lap_time.inferno_speedway": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 24.39999999999862,
+			"date": 1768973275107,
+			"trackName": "Inferno Speedway"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 32.983333333331466,
+			"date": 1768980902187,
+			"trackName": "Inferno Speedway"
+		}
+	],
+	"track_time.pharaohs_tomb": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 83.73333333332987,
+			"date": 1768973370826,
+			"trackName": "Pharaoh's Tomb"
+		}
+	],
+	"lap_time.pharaohs_tomb": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 22.183333333332072,
+			"date": 1768973370828,
+			"trackName": "Pharaoh's Tomb"
+		}
+	],
+	"circuit_time.dark_cup": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 395.883333333316,
+			"date": 1768973385044,
+			"circuitName": "DARK CUP"
+		}
+	],
+	"track_time.celestial_circuit": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 152.88333333334714,
+			"date": 1768973731353,
+			"trackName": "Celestial Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 154.95000000001545,
+			"date": 1769011913055,
+			"trackName": "Celestial Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 155.9166666666829,
+			"date": 1768973557832,
+			"trackName": "Celestial Circuit"
+		}
+	],
+	"lap_time.celestial_circuit": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 45.95000000002118,
+			"date": 1768973557834,
+			"trackName": "Celestial Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 49.38333333333181,
+			"date": 1769011913057,
+			"trackName": "Celestial Circuit"
+		},
+		{
+			"playerName": "Hm Derdoc",
+			"time": 50.149999999997156,
+			"date": 1768973731354,
+			"trackName": "Celestial Circuit"
+		}
+	],
+	"track_time.thunder_stadium": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 72.56666666666383,
+			"date": 1768973813919,
+			"trackName": "Thunder Stadium"
+		}
+	],
+	"lap_time.thunder_stadium": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 11.433333333332683,
+			"date": 1768973813922,
+			"trackName": "Thunder Stadium"
+		}
+	],
+	"track_time.kaiju_rampage": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 112.94999999999487,
+			"date": 1768974108684,
+			"trackName": "Kaiju Rampage"
+		}
+	],
+	"lap_time.kaiju_rampage": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 35.14999999999801,
+			"date": 1768974108686,
+			"trackName": "Kaiju Rampage"
+		}
+	],
+	"circuit_time.special_cup": [
+		{
+			"playerName": "Hm Derdoc",
+			"time": 494.96666666668926,
+			"date": 1768974117213,
+			"circuitName": "SPECIAL CUP"
 		}
 	]
 }

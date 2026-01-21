@@ -20,28 +20,10 @@ var InputMap = (function () {
         this.setupDefaultBindings();
     }
     InputMap.prototype.setupDefaultBindings = function () {
-        this.bind('Q', GameAction.ACCEL_LEFT);
-        this.bind('U', GameAction.ACCEL_LEFT);
-        this.bind('W', GameAction.ACCELERATE);
-        this.bind('I', GameAction.ACCELERATE);
-        this.bind('E', GameAction.ACCEL_RIGHT);
-        this.bind('P', GameAction.ACCEL_RIGHT);
-        this.bind('q', GameAction.STEER_LEFT);
-        this.bind('u', GameAction.STEER_LEFT);
-        this.bind('w', GameAction.ACCELERATE);
-        this.bind('i', GameAction.ACCELERATE);
-        this.bind('e', GameAction.STEER_RIGHT);
-        this.bind('p', GameAction.STEER_RIGHT);
-        this.bind('A', GameAction.BRAKE_LEFT);
-        this.bind('a', GameAction.BRAKE_LEFT);
-        this.bind('S', GameAction.BRAKE);
-        this.bind('s', GameAction.BRAKE);
-        this.bind('D', GameAction.BRAKE_RIGHT);
-        this.bind('d', GameAction.BRAKE_RIGHT);
-        this.bind('Z', GameAction.ACCELERATE);
-        this.bind('z', GameAction.ACCELERATE);
-        this.bind('C', GameAction.BRAKE);
-        this.bind('c', GameAction.BRAKE);
+        this.bind(KEY_UP, GameAction.ACCELERATE);
+        this.bind(KEY_DOWN, GameAction.BRAKE);
+        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
+        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind('7', GameAction.ACCEL_LEFT);
         this.bind('8', GameAction.ACCELERATE);
         this.bind('9', GameAction.ACCEL_RIGHT);
@@ -51,15 +33,15 @@ var InputMap = (function () {
         this.bind('1', GameAction.BRAKE_LEFT);
         this.bind('2', GameAction.BRAKE);
         this.bind('3', GameAction.BRAKE_RIGHT);
-        this.bind(KEY_UP, GameAction.ACCELERATE);
-        this.bind(KEY_DOWN, GameAction.BRAKE);
-        this.bind(KEY_LEFT, GameAction.STEER_LEFT);
-        this.bind(KEY_RIGHT, GameAction.STEER_RIGHT);
         this.bind(' ', GameAction.USE_ITEM);
-        this.bind('\r', GameAction.USE_ITEM);
-        this.bind('x', GameAction.PAUSE);
-        this.bind('X', GameAction.PAUSE);
-        this.bind('0', GameAction.QUIT);
+        this.bind('p', GameAction.PAUSE);
+        this.bind('P', GameAction.PAUSE);
+        this.bind('\r', GameAction.PAUSE);
+        this.bind('q', GameAction.QUIT);
+        this.bind('Q', GameAction.QUIT);
+        this.bind('x', GameAction.QUIT);
+        this.bind('X', GameAction.QUIT);
+        this.bind('\x1b', GameAction.QUIT);
     };
     InputMap.prototype.bind = function (key, action) {
         this.bindings[key] = action;

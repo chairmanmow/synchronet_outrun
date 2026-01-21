@@ -3,9 +3,9 @@ function showCupStandings(cupManager, isPreRace) {
     var state = cupManager.getState();
     if (!state)
         return;
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
-    console.clear(BG_BLACK);
+    var screenWidth = 80;
+    var screenHeight = 24;
+    console.clear(BG_BLACK, false);
     console.attributes = WHITE | BG_BLACK;
     var title = "=== " + state.definition.name.toUpperCase() + " ===";
     console.gotoxy(Math.floor((screenWidth - title.length) / 2), 2);
@@ -144,11 +144,10 @@ function showWinnersCircle(cupManager) {
     var state = cupManager.getState();
     if (!state)
         return;
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
+    var screenWidth = 80;
     var playerWon = cupManager.didPlayerWin();
     var playerPos = cupManager.getPlayerCupPosition();
-    console.clear(BG_BLACK);
+    console.clear(BG_BLACK, false);
     if (playerWon) {
         console.attributes = YELLOW | BG_BLACK;
         var trophy = [
@@ -205,7 +204,7 @@ function showWinnersCircle(cupManager) {
             console.print(tryAgain);
         }
     }
-    var statsTop = 14;
+    var statsTop = 16;
     console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop);
     console.attributes = LIGHTGRAY | BG_BLACK;
     console.print("Total Points: " + cupManager.getPlayerPoints());
@@ -213,25 +212,8 @@ function showWinnersCircle(cupManager) {
     console.print("Circuit Time: " + formatCupTime(state.totalTime));
     console.gotoxy(Math.floor((screenWidth - 30) / 2), statsTop + 2);
     console.print("Best Laps Sum: " + formatCupTime(state.totalBestLaps));
-    var standings = cupManager.getStandings();
-    var standingsTop = statsTop + 5;
-    console.gotoxy(Math.floor((screenWidth - 20) / 2), standingsTop);
-    console.attributes = WHITE | BG_BLACK;
-    console.print("Final Standings:");
-    for (var i = 0; i < Math.min(3, standings.length); i++) {
-        var s = standings[i];
-        console.gotoxy(Math.floor((screenWidth - 30) / 2), standingsTop + 2 + i);
-        if (s.isPlayer) {
-            console.attributes = LIGHTCYAN | BG_BLACK;
-        }
-        else {
-            console.attributes = LIGHTGRAY | BG_BLACK;
-        }
-        var line = (i + 1) + ". " + (s.isPlayer ? "YOU" : s.name) + " - " + s.points + " pts";
-        console.print(line);
-    }
     var prompt = "Press ENTER to continue";
-    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), screenHeight - 3);
+    console.gotoxy(Math.floor((screenWidth - prompt.length) / 2), 22);
     console.attributes = LIGHTMAGENTA | BG_BLACK;
     console.print(prompt);
     waitForEnter();

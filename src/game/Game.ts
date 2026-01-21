@@ -95,7 +95,8 @@ class Game {
       'ancient_ruins': 'ancient_ruins',
       'thunder_stadium': 'thunder_stadium',
       'glitch_circuit': 'glitch_circuit',
-      'kaiju_rampage': 'kaiju_rampage'
+      'kaiju_rampage': 'kaiju_rampage',
+      'underwater_grotto': 'underwater_grotto'
     };
     var themeName = themeMapping[trackDef.themeId] || 'synthwave';
     if (this.renderer.setTheme) {
@@ -329,7 +330,21 @@ class Game {
 
     // Use item if requested (consume to prevent multi-tick triggering)
     if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
-      this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles);
+      // Determine if we should fire backward (for green shells)
+      // Fire backward if the last accel/decel action was braking
+      var fireBackward = this.controls.getLastAccelAction() < 0;
+      
+      // Store current speed and accel state to preserve it after item use
+      var currentSpeed = this.state.playerVehicle.speed;
+      var currentAccel = this.controls.getAcceleration();
+      
+      this.itemSystem.useItem(this.state.playerVehicle, this.state.vehicles, fireBackward);
+      
+      // Preserve speed after item use - don't let the BBS input quirk kill our momentum
+      // Only restore if we weren't braking (currentAccel >= 0) and we lost speed
+      if (currentAccel >= 0 && this.state.playerVehicle.speed < currentSpeed) {
+        this.state.playerVehicle.speed = currentSpeed;
+      }
     }
     
     // Process AI item usage (racers only, not commuters)
@@ -432,8 +447,8 @@ class Game {
       }
     }
     
-    // Render results screen once
-    this.renderResultsScreen(finalPosition, finalTime, bestLap, trackTimePosition, lapTimePosition);
+    // Render results screen once (simple stats only)
+    this.renderResultsScreen(finalPosition, finalTime, bestLap);
     
     // Wait for ENTER key
     while (true) {
@@ -444,53 +459,30 @@ class Game {
       }
     }
     
-    // Show high scores if player made the list
+    // Show two-column high scores if player made any list
     if (this.highScoreManager && this.state.trackDefinition && (trackTimePosition > 0 || lapTimePosition > 0)) {
       var trackId = this.state.trackDefinition.id;
-      
-      if (trackTimePosition > 0) {
-        showHighScoreList(
-          HighScoreType.TRACK_TIME,
-          trackId,
-          "=== TRACK TIME HIGH SCORES ===",
-          this.state.track.name,
-          this.highScoreManager
-        );
-      }
-      
-      if (lapTimePosition > 0) {
-        showHighScoreList(
-          HighScoreType.LAP_TIME,
-          trackId,
-          "=== LAP TIME HIGH SCORES ===",
-          this.state.track.name,
-          this.highScoreManager
-        );
-      }
+      showTwoColumnHighScores(
+        trackId,
+        this.state.track.name,
+        this.highScoreManager,
+        trackTimePosition,
+        lapTimePosition
+      );
     }
   }
   
   /**
    * Render a dedicated results screen (no game view, just results).
+   * Uses fixed 80x24 viewport for consistent layout.
    */
   private renderResultsScreen(
     position: number,
     totalTime: number,
-    bestLap: number,
-    trackTimePosition?: number,
-    lapTimePosition?: number
+    bestLap: number
   ): void {
-    this.renderer.beginFrame();
-    
-    // Clear to black background
-    var screenWidth = console.screen_columns;
-    var screenHeight = console.screen_rows;
-    var composer = new SceneComposer(screenWidth, screenHeight);
-    for (var y = 0; y < screenHeight; y++) {
-      for (var x = 0; x < screenWidth; x++) {
-        composer.setCell(x, y, ' ', makeAttr(BLACK, BG_BLACK));
-      }
-    }
+    // Clear the entire screen first
+    console.clear(BG_BLACK, false);
     
     // Colors
     var titleAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
@@ -499,95 +491,84 @@ class Game {
     var boxAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
     var promptAttr = colorToAttr({ fg: LIGHTMAGENTA, bg: BG_BLACK });
     
-    // Box dimensions - centered based on actual screen size
+    // Use fixed 80x24 viewport, centered within that
+    var viewWidth = 80;
+    var viewHeight = 24;
     var boxWidth = 40;
     var boxHeight = 12;
-    var boxX = Math.floor((screenWidth - boxWidth) / 2);
-    var topY = Math.floor((screenHeight - boxHeight) / 2);
+    var boxX = Math.floor((viewWidth - boxWidth) / 2);
+    var topY = Math.floor((viewHeight - boxHeight) / 2);
     
-    // Draw box border
-    composer.setCell(boxX, topY, GLYPH.DBOX_TL, boxAttr);
-    composer.setCell(boxX + boxWidth - 1, topY, GLYPH.DBOX_TR, boxAttr);
-    composer.setCell(boxX, topY + boxHeight - 1, GLYPH.DBOX_BL, boxAttr);
-    composer.setCell(boxX + boxWidth - 1, topY + boxHeight - 1, GLYPH.DBOX_BR, boxAttr);
-    
+    // Draw box border using gotoxy for precise positioning
+    console.gotoxy(boxX + 1, topY + 1);
+    console.attributes = boxAttr;
+    console.print(GLYPH.DBOX_TL);
     for (var i = 1; i < boxWidth - 1; i++) {
-      composer.setCell(boxX + i, topY, GLYPH.DBOX_H, boxAttr);
-      composer.setCell(boxX + i, topY + boxHeight - 1, GLYPH.DBOX_H, boxAttr);
+      console.print(GLYPH.DBOX_H);
     }
+    console.print(GLYPH.DBOX_TR);
+    
     for (var j = 1; j < boxHeight - 1; j++) {
-      composer.setCell(boxX, topY + j, GLYPH.DBOX_V, boxAttr);
-      composer.setCell(boxX + boxWidth - 1, topY + j, GLYPH.DBOX_V, boxAttr);
+      console.gotoxy(boxX + 1, topY + 1 + j);
+      console.print(GLYPH.DBOX_V);
+      // Fill interior with spaces
+      for (var i = 1; i < boxWidth - 1; i++) {
+        console.print(' ');
+      }
+      console.print(GLYPH.DBOX_V);
     }
+    
+    console.gotoxy(boxX + 1, topY + boxHeight);
+    console.print(GLYPH.DBOX_BL);
+    for (var i = 1; i < boxWidth - 1; i++) {
+      console.print(GLYPH.DBOX_H);
+    }
+    console.print(GLYPH.DBOX_BR);
     
     // Title
     var title = "=== RACE COMPLETE ===";
-    composer.writeString(boxX + Math.floor((boxWidth - title.length) / 2), topY + 2, title, titleAttr);
+    console.gotoxy(boxX + 1 + Math.floor((boxWidth - title.length) / 2), topY + 3);
+    console.attributes = titleAttr;
+    console.print(title);
     
     // Position
     var posSuffix = PositionIndicator.getOrdinalSuffix(position);
-    composer.writeString(boxX + 4, topY + 4, "FINAL POSITION:", labelAttr);
-    composer.writeString(boxX + 22, topY + 4, position + posSuffix, valueAttr);
+    console.gotoxy(boxX + 5, topY + 5);
+    console.attributes = labelAttr;
+    console.print("FINAL POSITION:");
+    console.gotoxy(boxX + 23, topY + 5);
+    console.attributes = valueAttr;
+    console.print(position + posSuffix);
     
     // Total time
-    composer.writeString(boxX + 4, topY + 5, "TOTAL TIME:", labelAttr);
-    composer.writeString(boxX + 22, topY + 5, LapTimer.format(totalTime), valueAttr);
+    console.gotoxy(boxX + 5, topY + 6);
+    console.attributes = labelAttr;
+    console.print("TOTAL TIME:");
+    console.gotoxy(boxX + 23, topY + 6);
+    console.attributes = valueAttr;
+    console.print(LapTimer.format(totalTime));
     
     // Best lap
-    composer.writeString(boxX + 4, topY + 6, "BEST LAP:", labelAttr);
-    composer.writeString(boxX + 22, topY + 6, bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--", valueAttr);
+    console.gotoxy(boxX + 5, topY + 7);
+    console.attributes = labelAttr;
+    console.print("BEST LAP:");
+    console.gotoxy(boxX + 23, topY + 7);
+    console.attributes = valueAttr;
+    console.print(bestLap > 0 ? LapTimer.format(bestLap) : "--:--.--");
     
     // Track name
-    composer.writeString(boxX + 4, topY + 8, "TRACK:", labelAttr);
-    composer.writeString(boxX + 22, topY + 8, this.state!.track.name, valueAttr);
-    
-    // High score notifications
-    var highScoreAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
-    if (trackTimePosition && trackTimePosition > 0) {
-      var msg = "NEW HIGH SCORE! #" + trackTimePosition + " Track Time";
-      composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 4, msg, highScoreAttr);
-    }
-    if (lapTimePosition && lapTimePosition > 0) {
-      var msg = "NEW HIGH SCORE! #" + lapTimePosition + " Lap Time";
-      composer.writeString(boxX + Math.floor((boxWidth - msg.length) / 2), topY + boxHeight - 3, msg, highScoreAttr);
-    }
+    console.gotoxy(boxX + 5, topY + 9);
+    console.attributes = labelAttr;
+    console.print("TRACK:");
+    console.gotoxy(boxX + 23, topY + 9);
+    console.attributes = valueAttr;
+    console.print(this.state!.track.name);
     
     // Prompt
     var prompt = "Press ENTER to continue";
-    composer.writeString(boxX + Math.floor((boxWidth - prompt.length) / 2), topY + 10, prompt, promptAttr);
-    
-    // Flush the composer buffer directly to console
-    this.flushComposerToConsole(composer);
-  }
-  
-  /**
-   * Flush SceneComposer buffer directly to console.
-   */
-  private flushComposerToConsole(composer: SceneComposer): void {
-    console.home();
-    var buffer = composer.getBuffer();
-    for (var y = 0; y < buffer.length; y++) {
-      var row = buffer[y];
-      var line = '';
-      var lastAttr = -1;
-      for (var x = 0; x < row.length; x++) {
-        var cell = row[x];
-        // When attr changes, need to output accumulated text and change color
-        if (cell.attr !== lastAttr) {
-          if (line.length > 0) {
-            console.print(line);
-            line = '';
-          }
-          console.attributes = cell.attr;
-          lastAttr = cell.attr;
-        }
-        line += cell.char;
-      }
-      // Output remaining text on this row
-      if (line.length > 0) {
-        console.print(line);
-      }
-    }
+    console.gotoxy(boxX + 1 + Math.floor((boxWidth - prompt.length) / 2), topY + 11);
+    console.attributes = promptAttr;
+    console.print(prompt);
   }
 
   /**
@@ -732,7 +713,8 @@ class Game {
     // Get curvature at player position for parallax
     var curvature = road.getCurvature(trackZ);
     var playerSteer = vehicle.playerX;  // Player's lateral position indicates steering direction
-    var speed = vehicle.speed;
+    // Pass 0 speed when paused so animations freeze
+    var speed = this.paused ? 0 : vehicle.speed;
     var dt = 1.0 / this.config.tickRate;  // Fixed timestep
 
     this.renderer.beginFrame();

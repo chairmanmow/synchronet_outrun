@@ -8,6 +8,7 @@ var Controls = (function () {
         this.holdThreshold = 200;
         this.currentAccel = 0;
         this.currentSteer = 0;
+        this.lastAccelAction = 1;
     }
     Controls.prototype.handleKey = function (key, now) {
         var action = this.inputMap.getAction(key);
@@ -24,9 +25,11 @@ var Controls = (function () {
         switch (action) {
             case GameAction.ACCELERATE:
                 this.currentAccel = 1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.BRAKE:
                 this.currentAccel = -1;
+                this.lastAccelAction = -1;
                 break;
             case GameAction.STEER_LEFT:
                 this.currentSteer = -1;
@@ -37,18 +40,22 @@ var Controls = (function () {
             case GameAction.ACCEL_LEFT:
                 this.currentAccel = 1;
                 this.currentSteer = -1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.ACCEL_RIGHT:
                 this.currentAccel = 1;
                 this.currentSteer = 1;
+                this.lastAccelAction = 1;
                 break;
             case GameAction.BRAKE_LEFT:
                 this.currentAccel = -1;
                 this.currentSteer = -1;
+                this.lastAccelAction = -1;
                 break;
             case GameAction.BRAKE_RIGHT:
                 this.currentAccel = -1;
                 this.currentSteer = 1;
+                this.lastAccelAction = -1;
                 break;
         }
     };
@@ -96,6 +103,9 @@ var Controls = (function () {
         this.activeActions = {};
         this.justPressedActions = {};
         this.lastKeyTime = {};
+    };
+    Controls.prototype.getLastAccelAction = function () {
+        return this.lastAccelAction;
     };
     return Controls;
 }());
