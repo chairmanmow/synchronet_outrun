@@ -22,6 +22,11 @@ var HauntedHollowTheme = {
         roadGrid: { fg: DARKGRAY, bg: BG_BLACK },
         shoulderPrimary: { fg: DARKGRAY, bg: BG_BLACK },
         shoulderSecondary: { fg: GREEN, bg: BG_BLACK },
+        itemBox: {
+            border: { fg: LIGHTGREEN, bg: BG_BLACK },
+            fill: { fg: GREEN, bg: BG_BLACK },
+            symbol: { fg: LIGHTMAGENTA, bg: BG_BLACK }
+        },
         roadsideColors: {
             'deadtree': {
                 primary: { fg: BROWN, bg: BG_BLACK },

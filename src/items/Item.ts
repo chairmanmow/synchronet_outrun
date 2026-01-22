@@ -143,33 +143,61 @@ class Item extends Entity implements IItem {
   type: ItemType;
   respawnTime: number;
   respawnCountdown: number;
+  
+  // Destruction effect state
+  destructionTimer: number;      // Time remaining for destruction animation
+  destructionStartTime: number;  // When destruction started (for animation phase)
+  pickedUpByPlayer: boolean;     // Whether the player (not NPC) picked this up
 
   constructor(type: ItemType) {
     super();
     this.type = type;
     this.respawnTime = 10;
     this.respawnCountdown = -1;
+    this.destructionTimer = 0;
+    this.destructionStartTime = 0;
+    this.pickedUpByPlayer = false;
   }
 
   /**
    * Check if item is available for pickup.
    */
   isAvailable(): boolean {
-    return this.active && this.respawnCountdown < 0;
+    return this.active && this.respawnCountdown < 0 && this.destructionTimer <= 0;
   }
-
+  
   /**
-   * Mark item as picked up.
+   * Check if item is currently showing destruction animation.
    */
-  pickup(): void {
-    this.respawnCountdown = this.respawnTime;
+  isBeingDestroyed(): boolean {
+    return this.destructionTimer > 0;
   }
 
   /**
-   * Update respawn timer.
+   * Mark item as picked up with destruction effect.
+   * @param byPlayer - true if picked up by human player (shows screen effect)
+   */
+  pickup(byPlayer: boolean = false): void {
+    this.destructionTimer = 0.4;  // 400ms destruction animation
+    this.destructionStartTime = Date.now();
+    this.pickedUpByPlayer = byPlayer;
+  }
+
+  /**
+   * Update respawn timer and destruction animation.
    */
   updateRespawn(dt: number): void {
-    if (this.respawnCountdown >= 0) {
+    // Update destruction animation
+    if (this.destructionTimer > 0) {
+      this.destructionTimer -= dt;
+      if (this.destructionTimer <= 0) {
+        // Animation finished, start respawn countdown
+        this.respawnCountdown = this.respawnTime;
+        this.destructionTimer = 0;
+      }
+    }
+    // Update respawn countdown
+    else if (this.respawnCountdown >= 0) {
       this.respawnCountdown -= dt;
     }
   }

@@ -20,7 +20,6 @@ class FrameRenderer implements IRenderer {
   
   // Sprite cache (built from theme's roadside config)
   private spriteCache: { [name: string]: SpriteDefinition };
-  private playerCarSprite: SpriteDefinition;
   
   // Parallax state (placeholders for future scrolling)
   private _mountainScrollOffset: number;
@@ -42,6 +41,9 @@ class FrameRenderer implements IRenderer {
   private _currentTrackPosition: number;
   private _currentCameraX: number;
   
+  // Lightning bolt visual effects
+  private _lightningBolts: { x: number; startTime: number; targetY: number }[];
+  
   constructor(width: number, height: number) {
     this.width = width;
     this.height = height;
@@ -57,13 +59,15 @@ class FrameRenderer implements IRenderer {
     this._currentTrackPosition = 0;
     this._currentCameraX = 0;
     
+    // Initialize lightning bolt effects
+    this._lightningBolts = [];
+    
     this.frameManager = new FrameManager(width, height, this.horizonY);
     this.composer = new SceneComposer(width, height);
     
     // Default to synthwave theme
     this.activeTheme = SynthwaveTheme;
     this.spriteCache = {};
-    this.playerCarSprite = null as any;
   }
   
   /**
@@ -107,7 +111,6 @@ class FrameRenderer implements IRenderer {
     
     // Build sprite cache from theme
     this.rebuildSpriteCache();
-    this.playerCarSprite = SpriteSheet.createPlayerCar();
     
     // Render static elements based on theme
     this.renderStaticElements();
@@ -216,6 +219,8 @@ class FrameRenderer implements IRenderer {
       this.renderDestroyedCity();
     } else if (this.activeTheme.background.type === 'underwater') {
       this.renderUnderwaterBackground();
+    } else if (this.activeTheme.background.type === 'aquarium') {
+      this.renderAquariumBackground();
     }
     
     this._staticElementsDirty = false;
@@ -245,13 +250,15 @@ class FrameRenderer implements IRenderer {
     // Always advance fire animation phase (for lava/fire effects even when stopped)
     this._fireAnimPhase += (dt || 0.016) * 8;  // Faster animation for more dramatic flames
     
-    // Update sky background based on theme type (grid vs stars vs gradient)
+    // Update sky background based on theme type (grid vs stars vs gradient vs water)
     if (this.activeTheme.sky.type === 'grid') {
       this.renderSkyGrid(speed || 0, dt || 0);
     } else if (this.activeTheme.sky.type === 'stars') {
       this.renderSkyStars(trackPosition);
     } else if (this.activeTheme.sky.type === 'gradient') {
       this.renderSkyGradient(trackPosition);
+    } else if (this.activeTheme.sky.type === 'water') {
+      this.renderSkyWater(trackPosition, speed || 0, dt || 0);
     }
     // 'plain' type = no sky animation
     
@@ -436,7 +443,10 @@ class FrameRenderer implements IRenderer {
       playerVehicle.boostTimer > 0,
       v.hasEffect ? v.hasEffect(ItemType.STAR) : false,
       v.hasEffect ? v.hasEffect(ItemType.BULLET) : false,
-      v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false
+      v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false,
+      v.carId || 'sports',
+      v.carColorId || 'yellow',
+      this._currentBrakeLightsOn  // Use the brake light state set by Game
     );
   }
   
@@ -581,33 +591,57 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Render item boxes on the track.
+   * Render item boxes on the track with super-scaling and themed colors.
+   * Uses CP437 double-lined box characters for a proper "mystery box" look.
    */
   private renderItemBoxes(playerVehicle: IVehicle, items: Item[]): void {
     var frame = this.frameManager.getRoadFrame();
     if (!frame) return;
     
-    // Get road colors from theme for item box styling
-    var roadColor = this.activeTheme.colors.roadSurface;
-    // Item boxes use a contrasting bright color on road background
-    var itemBoxFg = YELLOW;  // Bright yellow "?" for contrast
-    var itemBoxBg = roadColor.bg;  // Match road background
+    // Get item box colors from theme or use defaults
+    var colors = this.activeTheme.colors;
+    var boxColors = colors.itemBox || {
+      border: { fg: YELLOW, bg: BG_BLACK },
+      fill: { fg: BROWN, bg: BG_BLACK },
+      symbol: { fg: WHITE, bg: BG_BLACK }
+    };
+    
+    var borderAttr = makeAttr(boxColors.border.fg, boxColors.border.bg);
+    var fillAttr = makeAttr(boxColors.fill.fg, boxColors.fill.bg);
+    var symbolAttr = makeAttr(boxColors.symbol.fg, boxColors.symbol.bg);
     
     var visualHorizonY = 5;
     var roadBottom = this.height - 4;
     
+    // Collect items to render with their screen positions for sorting
+    var itemsToRender: { item: Item; screenY: number; screenX: number; t: number }[] = [];
+    
+    // FIRST: Check for any player pickup effects (these render at screen-space, not world position)
+    // Must do this before the distance filter which would skip items at/behind the player
+    for (var p = 0; p < items.length; p++) {
+      var pItem = items[p];
+      if (pItem.isBeingDestroyed() && pItem.pickedUpByPlayer) {
+        this.renderPlayerPickupEffect(frame, pItem.destructionTimer, pItem.destructionStartTime, symbolAttr);
+      }
+    }
+    
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
-      if (!item.isAvailable()) continue;  // Skip picked-up items
+      
+      // Skip items that are fully respawning (not available and not animating)
+      if (!item.isAvailable() && !item.isBeingDestroyed()) continue;
+      
+      // Skip player pickups - already rendered above as screen-space effect
+      if (item.isBeingDestroyed() && item.pickedUpByPlayer) continue;
       
       // Calculate relative position to player
       var relativeZ = item.z - playerVehicle.trackZ;
-      var relativeX = item.x - (playerVehicle.playerX * 20);  // Scale to match world coords
+      var relativeX = item.x - (playerVehicle.playerX * 20);
       
       // Only render items ahead of player and within view distance
       if (relativeZ < 5 || relativeZ > 300) continue;
       
-      // Perspective calculation (same as NPC vehicles)
+      // Perspective calculation
       var maxViewDist = 300;
       var normalizedDist = Math.max(0.01, relativeZ / maxViewDist);
       var t = Math.max(0, Math.min(1, 1 - normalizedDist));
@@ -626,33 +660,310 @@ class FrameRenderer implements IRenderer {
       }
       
       // Screen X position with curve offset
-      var perspectiveScale = t * t;
-      var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 0.1 - this._currentCameraX * 0.5);
+      // Item x ranges from -20 to +20 (road width)
+      // At close range (t=1), we want full spread across ~60 char road width
+      // So multiply by ~1.5 to convert item x to screen offset
+      var xScale = t * 1.5;  // Scale with perspective
+      var screenX = Math.round(40 + curveOffset + relativeX * xScale - this._currentCameraX * 0.5);
       
-      // Bounds check
-      if (screenY < visualHorizonY || screenY >= this.height - 1) continue;
-      if (screenX < 0 || screenX >= this.width) continue;
+      // Bounds check (rough - we'll do precise checks when rendering)
+      if (screenY < visualHorizonY - 2 || screenY >= this.height) continue;
+      if (screenX < -3 || screenX >= this.width + 3) continue;
       
-      // Scale item box size based on distance
-      var boxChar = '?';
-      var boxWidth = 1;
-      if (t > 0.4) {
-        // Close enough to show larger box
-        boxWidth = 3;
-      } else if (t > 0.2) {
-        boxWidth = 2;
+      itemsToRender.push({ item: item, screenY: screenY, screenX: screenX, t: t });
+    }
+    
+    // Sort by Y (far to near) so closer boxes render on top
+    itemsToRender.sort(function(a, b) { return a.screenY - b.screenY; });
+    
+    // Render each item box
+    for (var j = 0; j < itemsToRender.length; j++) {
+      var data = itemsToRender[j];
+      var item = data.item;
+      var screenX = data.screenX;
+      var screenY = data.screenY;
+      var t = data.t;
+      
+      // Animation pulse
+      var pulse = Math.floor(Date.now() / 150) % 4;
+      
+      // Handle destruction animation (NPC pickups only - player pickups rendered above)
+      if (item.isBeingDestroyed()) {
+        this.renderItemBoxDestruction(frame, screenX, screenY, t, item.destructionTimer, item.destructionStartTime);
+        continue;
       }
       
-      // Render the item box with pulsing animation
-      var pulse = Math.floor(Date.now() / 200) % 2;
-      var attr = pulse === 0 ? makeAttr(itemBoxFg, itemBoxBg) : makeAttr(YELLOW, itemBoxBg);
+      // Determine scale based on distance (t)
+      // t > 0.5: Large (3x3 box)
+      // t > 0.25: Medium (3x2 box)  
+      // t > 0.1: Small (1x1)
+      // t <= 0.1: Tiny (single char)
       
-      // Draw box (centered)
-      var startX = screenX - Math.floor(boxWidth / 2);
-      for (var col = 0; col < boxWidth; col++) {
-        var drawX = startX + col;
-        if (drawX >= 0 && drawX < this.width) {
-          frame.setData(drawX, screenY, boxChar, attr);
+      if (t > 0.5) {
+        // Large scale: 3x3 double-lined box with "?" inside
+        this.renderItemBoxLarge(frame, screenX, screenY, borderAttr, fillAttr, symbolAttr, pulse);
+      } else if (t > 0.25) {
+        // Medium scale: 3x2 box
+        this.renderItemBoxMedium(frame, screenX, screenY, borderAttr, symbolAttr, pulse);
+      } else if (t > 0.1) {
+        // Small scale: simplified 1x1 with color variation
+        this.renderItemBoxSmall(frame, screenX, screenY, borderAttr, symbolAttr, pulse);
+      } else {
+        // Tiny: just a dot
+        if (screenX >= 0 && screenX < this.width && screenY >= 0 && screenY < this.height) {
+          var tinyAttr = (pulse % 2 === 0) ? borderAttr : symbolAttr;
+          frame.setData(screenX, screenY, '.', tinyAttr);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Render a large 3x3 item box with double-lined border and "?" inside.
+   * Uses CP437 box drawing characters for that retro feel.
+   */
+  private renderItemBoxLarge(frame: Frame, cx: number, cy: number, 
+                              borderAttr: number, _fillAttr: number, symbolAttr: number, pulse: number): void {
+    // CP437 double-line box characters
+    var TL = GLYPH.DBOX_TL;  // ╔
+    var TR = GLYPH.DBOX_TR;  // ╗
+    var BL = GLYPH.DBOX_BL;  // ╚
+    var BR = GLYPH.DBOX_BR;  // ╝
+    var H = GLYPH.DBOX_H;    // ═
+    var V = GLYPH.DBOX_V;    // ║
+    
+    // Pulsing effect - alternate border brightness
+    var activeBorderAttr = (pulse === 0 || pulse === 2) ? borderAttr : 
+                           makeAttr(WHITE, borderAttr & 0xF0);
+    
+    // 3x3 layout centered at (cx, cy):
+    //   ╔═╗   (cy-1)
+    //   ║?║   (cy)
+    //   ╚═╝   (cy+1)
+    
+    var left = cx - 1;
+    var right = cx + 1;
+    var top = cy - 1;
+    var bottom = cy + 1;
+    
+    // Top row
+    if (top >= 0 && top < this.height) {
+      if (left >= 0 && left < this.width) frame.setData(left, top, TL, activeBorderAttr);
+      if (cx >= 0 && cx < this.width) frame.setData(cx, top, H, activeBorderAttr);
+      if (right >= 0 && right < this.width) frame.setData(right, top, TR, activeBorderAttr);
+    }
+    
+    // Middle row with "?"
+    if (cy >= 0 && cy < this.height) {
+      if (left >= 0 && left < this.width) frame.setData(left, cy, V, activeBorderAttr);
+      if (cx >= 0 && cx < this.width) {
+        // Pulsing "?" color
+        var qAttr = (pulse % 2 === 0) ? symbolAttr : makeAttr(YELLOW, symbolAttr & 0xF0);
+        frame.setData(cx, cy, '?', qAttr);
+      }
+      if (right >= 0 && right < this.width) frame.setData(right, cy, V, activeBorderAttr);
+    }
+    
+    // Bottom row
+    if (bottom >= 0 && bottom < this.height) {
+      if (left >= 0 && left < this.width) frame.setData(left, bottom, BL, activeBorderAttr);
+      if (cx >= 0 && cx < this.width) frame.setData(cx, bottom, H, activeBorderAttr);
+      if (right >= 0 && right < this.width) frame.setData(right, bottom, BR, activeBorderAttr);
+    }
+  }
+  
+  /**
+   * Render a medium 3x2 item box (no top/bottom lines, just sides).
+   */
+  private renderItemBoxMedium(frame: Frame, cx: number, cy: number,
+                               borderAttr: number, symbolAttr: number, pulse: number): void {
+    // Simpler box for medium distance
+    //   [?]   (cy)
+    //   └─┘   (cy+1)
+    
+    var left = cx - 1;
+    var right = cx + 1;
+    
+    var activeBorderAttr = (pulse % 2 === 0) ? borderAttr : makeAttr(WHITE, borderAttr & 0xF0);
+    
+    // Main row with "?"
+    if (cy >= 0 && cy < this.height) {
+      if (left >= 0 && left < this.width) frame.setData(left, cy, '[', activeBorderAttr);
+      if (cx >= 0 && cx < this.width) {
+        var qAttr = (pulse % 2 === 0) ? symbolAttr : makeAttr(YELLOW, symbolAttr & 0xF0);
+        frame.setData(cx, cy, '?', qAttr);
+      }
+      if (right >= 0 && right < this.width) frame.setData(right, cy, ']', activeBorderAttr);
+    }
+    
+    // Bottom hint (shadow/base)
+    var bottom = cy + 1;
+    if (bottom >= 0 && bottom < this.height) {
+      if (cx >= 0 && cx < this.width) frame.setData(cx, bottom, GLYPH.LOWER_HALF, makeAttr(DARKGRAY, BG_BLACK));
+    }
+  }
+  
+  /**
+   * Render a small item box (single character with styling).
+   */
+  private renderItemBoxSmall(frame: Frame, cx: number, cy: number,
+                              borderAttr: number, symbolAttr: number, pulse: number): void {
+    if (cx < 0 || cx >= this.width || cy < 0 || cy >= this.height) return;
+    
+    // Alternate between "?" and a box character
+    var char = (pulse % 2 === 0) ? '?' : GLYPH.FULL_BLOCK;
+    var attr = (pulse % 2 === 0) ? symbolAttr : borderAttr;
+    
+    frame.setData(cx, cy, char, attr);
+  }
+  
+  /**
+   * Render item box destruction effect - expanding burst of particles.
+   */
+  private renderItemBoxDestruction(frame: Frame, cx: number, cy: number, t: number,
+                                    destructionTimer: number, startTime: number): void {
+    // Calculate animation progress (0 = just started, 1 = finished)
+    var totalDuration = 0.4;
+    var progress = 1 - (destructionTimer / totalDuration);
+    progress = Math.max(0, Math.min(1, progress));
+    
+    // Explosion colors - cycle through bright colors
+    var colors = [YELLOW, WHITE, LIGHTCYAN, LIGHTMAGENTA, LIGHTRED];
+    var colorIndex = Math.floor((Date.now() - startTime) / 50) % colors.length;
+    var explosionAttr = makeAttr(colors[colorIndex], BG_BLACK);
+    var sparkAttr = makeAttr(YELLOW, BG_BLACK);
+    
+    // Scale determines particle spread
+    var scale = t > 0.5 ? 3 : (t > 0.25 ? 2 : 1);
+    
+    // Particle positions expand outward over time
+    var spread = Math.floor(progress * scale * 2) + 1;
+    
+    // Explosion characters
+    var chars = ['*', '+', GLYPH.LIGHT_SHADE, '.', GLYPH.MEDIUM_SHADE];
+    
+    // Center burst
+    if (progress < 0.5) {
+      if (cx >= 0 && cx < this.width && cy >= 0 && cy < this.height) {
+        frame.setData(cx, cy, chars[0], explosionAttr);
+      }
+    }
+    
+    // Expanding particles
+    var particleCount = Math.floor(progress * 8);
+    for (var i = 0; i < particleCount; i++) {
+      // Calculate particle position based on angle
+      var angle = (i / 8) * Math.PI * 2;
+      var dist = spread * (0.5 + progress * 0.5);
+      var px = Math.round(cx + Math.cos(angle) * dist);
+      var py = Math.round(cy + Math.sin(angle) * dist * 0.5);  // Compress vertically
+      
+      if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+        var charIdx = (i + Math.floor(progress * 3)) % chars.length;
+        var attr = (i % 2 === 0) ? explosionAttr : sparkAttr;
+        frame.setData(px, py, chars[charIdx], attr);
+      }
+    }
+    
+    // Fading center sparkle
+    if (progress > 0.3 && progress < 0.8) {
+      var sparkles = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+      for (var s = 0; s < sparkles.length; s++) {
+        var sx = cx + sparkles[s][0];
+        var sy = cy + sparkles[s][1];
+        if (sx >= 0 && sx < this.width && sy >= 0 && sy < this.height) {
+          var sparkChar = (Date.now() % 100 < 50) ? '*' : '+';
+          frame.setData(sx, sy, sparkChar, sparkAttr);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Render a screen-space pickup effect when the PLAYER picks up an item box.
+   * This shows a burst around the car/bottom of screen so the player sees it.
+   */
+  private renderPlayerPickupEffect(frame: Frame, destructionTimer: number, startTime: number, themeAttr: number): void {
+    // Calculate animation progress (0 = just started, 1 = finished)
+    var totalDuration = 0.5;
+    var progress = 1 - (destructionTimer / totalDuration);
+    progress = Math.max(0, Math.min(1, progress));
+    
+    // Center of effect at bottom-center of screen (where player car is)
+    var cx = Math.floor(this.width / 2);
+    var cy = this.height - 5;  // Just above car position
+    
+    // Explosion colors - bright and attention-grabbing
+    var colors = [WHITE, YELLOW, LIGHTCYAN, LIGHTMAGENTA, YELLOW];
+    var colorIndex = Math.floor((Date.now() - startTime) / 40) % colors.length;
+    var burstAttr = makeAttr(colors[colorIndex], BG_BLACK);
+    var sparkAttr = makeAttr(YELLOW, BG_BLACK);
+    
+    // Use theme color for some particles
+    var flashChars = ['*', '+', GLYPH.LIGHT_SHADE, '!', '?', GLYPH.MEDIUM_SHADE, GLYPH.FULL_BLOCK];
+    
+    // Phase 1: Initial bright flash at center (0 - 0.2)
+    if (progress < 0.3) {
+      // Bright center burst
+      var flashSize = Math.floor(3 + progress * 6);
+      for (var fy = -1; fy <= 1; fy++) {
+        for (var fx = -flashSize; fx <= flashSize; fx++) {
+          var px = cx + fx;
+          var py = cy + fy;
+          if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+            var dist = Math.abs(fx) + Math.abs(fy);
+            var charIdx = dist % flashChars.length;
+            var attr = (dist % 2 === 0) ? burstAttr : themeAttr;
+            frame.setData(px, py, flashChars[charIdx], attr);
+          }
+        }
+      }
+    }
+    
+    // Phase 2: Expanding ring of particles (0.1 - 0.6)
+    if (progress > 0.1 && progress < 0.7) {
+      var ringProgress = (progress - 0.1) / 0.5;
+      var ringRadius = 2 + ringProgress * 10;
+      var numParticles = 12;
+      
+      for (var i = 0; i < numParticles; i++) {
+        var angle = (i / numParticles) * Math.PI * 2;
+        var px = Math.round(cx + Math.cos(angle) * ringRadius);
+        var py = Math.round(cy + Math.sin(angle) * ringRadius * 0.4);  // Compress vertically
+        
+        if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+          var charIdx = (i + Math.floor(progress * 5)) % flashChars.length;
+          var attr = (i % 3 === 0) ? burstAttr : (i % 3 === 1) ? sparkAttr : themeAttr;
+          frame.setData(px, py, flashChars[charIdx], attr);
+        }
+      }
+    }
+    
+    // Phase 3: Rising sparkles (0.2 - 1.0)
+    if (progress > 0.2) {
+      var riseProgress = (progress - 0.2) / 0.8;
+      var numSparkles = 8;
+      
+      for (var s = 0; s < numSparkles; s++) {
+        // Each sparkle rises from center
+        var sx = cx + (s - numSparkles / 2) * 2;
+        var sy = cy - Math.floor(riseProgress * (4 + (s % 3) * 2));
+        
+        if (sx >= 0 && sx < this.width && sy >= 0 && sy < this.height) {
+          var sparkleChar = (Date.now() % 80 < 40) ? '*' : '+';
+          var attr = (s % 2 === 0) ? burstAttr : sparkAttr;
+          frame.setData(sx, sy, sparkleChar, attr);
+        }
+      }
+    }
+    
+    // "Got Item!" indicator text at very start
+    if (progress < 0.4) {
+      var textY = cy - 3;
+      if (progress < 0.15) {
+        // Brief "!" flash
+        if (cx >= 0 && cx < this.width && textY >= 0 && textY < this.height) {
+          frame.setData(cx, textY, '!', burstAttr);
         }
       }
     }
@@ -788,9 +1099,36 @@ class FrameRenderer implements IRenderer {
     var frame = this.frameManager.getRoadFrame();
     if (!frame) return;
     
-    // Apply flash effect if vehicle is flashing
+    // Apply flash effect if vehicle is flashing (damage) or has visual effects
     var isFlashing = vehicle.flashTimer > 0;
     var flashAttr = makeAttr(LIGHTRED, BG_BLACK);
+    
+    // Check for status effects that have visual flash
+    var hasLightning = vehicle.hasEffect(ItemType.LIGHTNING);
+    var hasStar = vehicle.hasEffect(ItemType.STAR);
+    var hasBullet = vehicle.hasEffect(ItemType.BULLET);
+    
+    // Lightning: blue/cyan flash (slower cycle)
+    if (hasLightning) {
+      var lightningCycle = Math.floor(Date.now() / 150) % 2;
+      flashAttr = lightningCycle === 0 ? makeAttr(CYAN, BG_BLACK) : makeAttr(LIGHTCYAN, BG_BLUE);
+      isFlashing = true;
+    }
+    
+    // Star: rainbow cycling (fast)
+    if (hasStar) {
+      var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+      var starIndex = Math.floor(Date.now() / 80) % starColors.length;
+      flashAttr = makeAttr(starColors[starIndex], BG_BLACK);
+      isFlashing = true;
+    }
+    
+    // Bullet: white/yellow flash
+    if (hasBullet) {
+      var bulletCycle = Math.floor(Date.now() / 100) % 2;
+      flashAttr = bulletCycle === 0 ? makeAttr(WHITE, BG_BLACK) : makeAttr(YELLOW, BG_BLACK);
+      isFlashing = true;
+    }
     
     // Visual horizon for bounds check (matches visualHorizonY above)
     var visualHorizon = 5;
@@ -820,6 +1158,9 @@ class FrameRenderer implements IRenderer {
     if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined') {
       this.applyGlitchEffects();
     }
+    
+    // Render any active lightning bolt effects
+    this.renderLightningBolts();
     
     this.cycle();
   }
@@ -1510,6 +1851,175 @@ class FrameRenderer implements IRenderer {
       var by = bubblePositions[i][1];
       frame.setData(bx, by, 'o', makeAttr(WHITE, BG_BLUE));
     }
+  }
+
+  /**
+   * Render aquarium background - glass panels on sides with underwater scene
+   * and a beautiful mermaid swimming in the center aquarium tank.
+   */
+  private renderAquariumBackground(): void {
+    var frame = this.frameManager.getMountainsFrame();
+    if (!frame) return;
+    
+    // Glass panel colors (the gray columns the user liked)
+    var glassFrameAttr = makeAttr(LIGHTGRAY, BG_BLACK);
+    var glassHighlightAttr = makeAttr(WHITE, BG_BLACK);
+    var glassDarkAttr = makeAttr(DARKGRAY, BG_BLACK);
+    
+    // Aquarium interior colors
+    var waterAttr = makeAttr(CYAN, BG_BLUE);
+    var waterDeepAttr = makeAttr(BLUE, BG_BLUE);
+    var coralAttr = makeAttr(LIGHTRED, BG_BLUE);
+    var coralYellowAttr = makeAttr(YELLOW, BG_BLUE);
+    var plantAttr = makeAttr(LIGHTGREEN, BG_BLUE);
+    var sandAttr = makeAttr(YELLOW, BG_BLUE);
+    var rockAttr = makeAttr(DARKGRAY, BG_BLUE);
+    
+    // Mermaid colors
+    var mermaidSkinAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+    var mermaidHairAttr = makeAttr(LIGHTRED, BG_BLUE);
+    var mermaidTailAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+    var mermaidTailGlowAttr = makeAttr(CYAN, BG_BLUE);
+    
+    // Left glass panel (column) - x: 0-7
+    for (var y = 0; y < this.horizonY; y++) {
+      // Outer frame
+      frame.setData(0, y, GLYPH.FULL_BLOCK, glassDarkAttr);
+      frame.setData(1, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+      // Glass highlight
+      frame.setData(2, y, GLYPH.LIGHT_SHADE, glassHighlightAttr);
+      // Inner frame
+      for (var x = 3; x < 7; x++) {
+        frame.setData(x, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+      }
+      frame.setData(7, y, GLYPH.RIGHT_HALF, glassFrameAttr);
+    }
+    
+    // Right glass panel (column) - x: 72-79
+    for (var y = 0; y < this.horizonY; y++) {
+      frame.setData(72, y, GLYPH.LEFT_HALF, glassFrameAttr);
+      for (var x = 73; x < 77; x++) {
+        frame.setData(x, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+      }
+      // Glass highlight
+      frame.setData(77, y, GLYPH.LIGHT_SHADE, glassHighlightAttr);
+      frame.setData(78, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+      frame.setData(79, y, GLYPH.FULL_BLOCK, glassDarkAttr);
+    }
+    
+    // Center aquarium tank (between the pillars)
+    // Fill with water
+    for (var y = 0; y < this.horizonY; y++) {
+      for (var x = 8; x < 72; x++) {
+        var attr = (y < 4) ? waterAttr : waterDeepAttr;
+        frame.setData(x, y, ' ', attr);
+      }
+    }
+    
+    // Sandy bottom
+    var bottomY = this.horizonY - 1;
+    for (var x = 8; x < 72; x++) {
+      var sandChar = (x % 3 === 0) ? GLYPH.LOWER_HALF : GLYPH.LIGHT_SHADE;
+      frame.setData(x, bottomY, sandChar, sandAttr);
+    }
+    
+    // Rocks on the sand
+    var rockPositions = [12, 25, 45, 62];
+    for (var i = 0; i < rockPositions.length; i++) {
+      var rx = rockPositions[i];
+      frame.setData(rx, bottomY, GLYPH.FULL_BLOCK, rockAttr);
+      frame.setData(rx + 1, bottomY, GLYPH.FULL_BLOCK, rockAttr);
+      if (bottomY - 1 >= 0) {
+        frame.setData(rx, bottomY - 1, GLYPH.LOWER_HALF, rockAttr);
+      }
+    }
+    
+    // Coral clusters
+    var coralPositions = [15, 32, 50, 65];
+    for (var i = 0; i < coralPositions.length; i++) {
+      var cx = coralPositions[i];
+      var attr = (i % 2 === 0) ? coralAttr : coralYellowAttr;
+      frame.setData(cx, bottomY, 'Y', attr);
+      frame.setData(cx + 1, bottomY, '*', attr);
+      frame.setData(cx + 2, bottomY, 'Y', attr);
+      if (bottomY - 1 >= 0) {
+        frame.setData(cx + 1, bottomY - 1, '^', attr);
+      }
+      if (bottomY - 2 >= 0) {
+        frame.setData(cx + 1, bottomY - 2, '*', attr);
+      }
+    }
+    
+    // Seaweed/kelp on sides
+    var kelpLeft = [10, 14, 18];
+    var kelpRight = [58, 62, 68];
+    var kelpPositions = kelpLeft.concat(kelpRight);
+    for (var i = 0; i < kelpPositions.length; i++) {
+      var kx = kelpPositions[i];
+      for (var ky = 0; ky < 4; ky++) {
+        var y = bottomY - 1 - ky;
+        if (y >= 0) {
+          var kchar = (ky % 2 === 0) ? ')' : '(';
+          frame.setData(kx, y, kchar, plantAttr);
+        }
+      }
+    }
+    
+    // === MERMAID in center of aquarium ===
+    var mermaidX = 38;
+    var mermaidY = 5;
+    
+    // Flowing hair (streams behind)
+    frame.setData(mermaidX - 6, mermaidY - 1, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 5, mermaidY - 1, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 4, mermaidY - 1, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 5, mermaidY, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 4, mermaidY, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 3, mermaidY, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 4, mermaidY + 1, '~', mermaidHairAttr);
+    frame.setData(mermaidX - 3, mermaidY + 1, '~', mermaidHairAttr);
+    
+    // Head
+    frame.setData(mermaidX - 2, mermaidY, '(', mermaidSkinAttr);
+    frame.setData(mermaidX - 1, mermaidY, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+    frame.setData(mermaidX, mermaidY, ')', mermaidSkinAttr);
+    
+    // Torso  
+    frame.setData(mermaidX - 1, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+    frame.setData(mermaidX, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+    frame.setData(mermaidX + 1, mermaidY + 1, '\\', mermaidSkinAttr);  // Arm
+    
+    // Hip/waist
+    frame.setData(mermaidX, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    frame.setData(mermaidX + 1, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    
+    // Tail (curves right)
+    frame.setData(mermaidX + 2, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    frame.setData(mermaidX + 3, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    frame.setData(mermaidX + 4, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    frame.setData(mermaidX + 5, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    frame.setData(mermaidX + 6, mermaidY, GLYPH.FULL_BLOCK, mermaidTailAttr);
+    
+    // Tail fin (forked)
+    frame.setData(mermaidX + 7, mermaidY - 1, '/', mermaidTailGlowAttr);
+    frame.setData(mermaidX + 7, mermaidY, GLYPH.FULL_BLOCK, mermaidTailGlowAttr);
+    frame.setData(mermaidX + 7, mermaidY + 1, '\\', mermaidTailGlowAttr);
+    frame.setData(mermaidX + 8, mermaidY - 1, '/', mermaidTailGlowAttr);
+    frame.setData(mermaidX + 8, mermaidY + 1, '\\', mermaidTailGlowAttr);
+    
+    // Small fish near mermaid
+    var fishAttr = makeAttr(YELLOW, BG_BLUE);
+    frame.setData(mermaidX - 8, mermaidY + 3, '<', fishAttr);
+    frame.setData(mermaidX - 7, mermaidY + 3, '>', fishAttr);
+    
+    frame.setData(mermaidX + 12, mermaidY - 2, '<', makeAttr(LIGHTRED, BG_BLUE));
+    frame.setData(mermaidX + 13, mermaidY - 2, '>', makeAttr(LIGHTRED, BG_BLUE));
+    
+    // Bubbles rising
+    frame.setData(mermaidX + 2, mermaidY - 2, 'o', makeAttr(WHITE, BG_BLUE));
+    frame.setData(mermaidX + 3, mermaidY - 3, '.', makeAttr(WHITE, BG_BLUE));
+    frame.setData(20, 3, 'o', makeAttr(WHITE, BG_BLUE));
+    frame.setData(55, 2, 'o', makeAttr(WHITE, BG_BLUE));
   }
 
   /**
@@ -2675,6 +3185,147 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
+   * Render underwater sky - wavy blue water with swimming fish and bubbles.
+   * Creates the impression of being deep underwater looking up at the surface.
+   */
+  renderSkyWater(trackPosition: number, speed: number, dt: number): void {
+    var frame = this.frameManager.getSkyGridFrame();
+    if (!frame) return;
+    
+    frame.clear();
+    
+    // Update water animation phase
+    if (speed > 1) {
+      this._skyGridAnimPhase += dt * 2.0;  // Gentle wave speed
+      while (this._skyGridAnimPhase >= 1) this._skyGridAnimPhase -= 1;
+    }
+    
+    // Water colors - gradient from deep to surface
+    var deepAttr = makeAttr(BLUE, BG_BLUE);
+    var midAttr = makeAttr(CYAN, BG_BLUE);
+    var surfaceAttr = makeAttr(LIGHTCYAN, BG_CYAN);
+    var waveAttr = makeAttr(WHITE, BG_CYAN);
+    var bubbleAttr = makeAttr(WHITE, BG_BLUE);
+    var lightrayAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+    
+    // Fish colors
+    var fish1Attr = makeAttr(YELLOW, BG_BLUE);
+    var fish2Attr = makeAttr(LIGHTRED, BG_BLUE);
+    var fish3Attr = makeAttr(LIGHTGREEN, BG_BLUE);
+    
+    // Divide sky into depth zones
+    var surfaceZone = 3;  // Top 3 rows = surface
+    var lightZone = Math.floor(this.horizonY * 0.5);
+    
+    // Render water background with wavy texture
+    for (var y = 0; y < this.horizonY; y++) {
+      var attr: number;
+      var baseChars: string[];
+      
+      if (y < surfaceZone) {
+        // Surface zone - bright, wavy
+        attr = surfaceAttr;
+        baseChars = ['~', '~', GLYPH.UPPER_HALF, '~', GLYPH.LOWER_HALF, '~'];
+      } else if (y < lightZone) {
+        // Light zone - medium blue, some waves
+        attr = midAttr;
+        baseChars = ['~', ' ', GLYPH.LIGHT_SHADE, ' ', '~', ' '];
+      } else {
+        // Deep zone - dark, sparse
+        attr = deepAttr;
+        baseChars = [' ', ' ', GLYPH.LIGHT_SHADE, ' ', ' ', ' ', ' ', ' '];
+      }
+      
+      // Create wave pattern that moves
+      var waveOffset = Math.floor(this._skyGridAnimPhase * 20 + y * 0.5);
+      
+      for (var x = 0; x < this.width; x++) {
+        var charIndex = (x + waveOffset) % baseChars.length;
+        var char = baseChars[charIndex];
+        var cellAttr = attr;
+        
+        // Add surface wave highlights
+        if (y < surfaceZone) {
+          var wavePhase = Math.sin((x + trackPosition * 0.1 + this._skyGridAnimPhase * 10) * 0.3);
+          if (wavePhase > 0.7) {
+            cellAttr = waveAttr;
+            char = GLYPH.FULL_BLOCK;
+          }
+        }
+        
+        frame.setData(x, y, char, cellAttr);
+      }
+    }
+    
+    // Add light rays from surface (vertical shimmering)
+    var numRays = 5;
+    for (var i = 0; i < numRays; i++) {
+      var rayX = 10 + i * 15;
+      var rayWobble = Math.sin(this._skyGridAnimPhase * 6.28 + i * 2) * 2;
+      var actualX = Math.floor(rayX + rayWobble);
+      
+      for (var ry = surfaceZone; ry < lightZone; ry++) {
+        if (actualX >= 0 && actualX < this.width) {
+          // Fade ray as it goes deeper
+          var fade = 1 - (ry - surfaceZone) / (lightZone - surfaceZone);
+          if (Math.random() < fade * 0.6) {
+            frame.setData(actualX, ry, GLYPH.LIGHT_SHADE, lightrayAttr);
+          }
+        }
+      }
+    }
+    
+    // Add swimming fish
+    var fishPhase = trackPosition * 0.02 + this._skyGridAnimPhase * 5;
+    
+    // Fish 1 - yellow, swimming right
+    var fish1X = Math.floor((fishPhase * 30) % (this.width + 10)) - 5;
+    var fish1Y = 5 + Math.floor(Math.sin(fishPhase * 2) * 2);
+    if (fish1X >= 0 && fish1X < this.width - 3 && fish1Y >= 0 && fish1Y < this.horizonY) {
+      frame.setData(fish1X, fish1Y, '<', fish1Attr);
+      frame.setData(fish1X + 1, fish1Y, GLYPH.FULL_BLOCK, fish1Attr);
+      frame.setData(fish1X + 2, fish1Y, '>', fish1Attr);
+    }
+    
+    // Fish 2 - red, swimming left (opposite direction)
+    var fish2X = this.width - Math.floor((fishPhase * 25) % (this.width + 8));
+    var fish2Y = 8 + Math.floor(Math.sin(fishPhase * 1.5 + 1) * 2);
+    if (fish2X >= 2 && fish2X < this.width && fish2Y >= 0 && fish2Y < this.horizonY) {
+      frame.setData(fish2X, fish2Y, '<', fish2Attr);
+      frame.setData(fish2X - 1, fish2Y, GLYPH.FULL_BLOCK, fish2Attr);
+      frame.setData(fish2X - 2, fish2Y, '>', fish2Attr);
+    }
+    
+    // Fish school - small fish in background
+    for (var f = 0; f < 4; f++) {
+      var schoolX = Math.floor(((fishPhase + f * 0.7) * 20) % this.width);
+      var schoolY = 3 + f * 2;
+      if (schoolY < this.horizonY - 2) {
+        frame.setData(schoolX, schoolY, '<', fish3Attr);
+        frame.setData((schoolX + 1) % this.width, schoolY, '>', fish3Attr);
+      }
+    }
+    
+    // Add rising bubbles
+    var bubblePositions = [8, 22, 38, 55, 72];
+    for (var i = 0; i < bubblePositions.length; i++) {
+      var bubbleBaseX = bubblePositions[i];
+      // Bubbles rise over time
+      var bubbleY = this.horizonY - 2 - Math.floor((trackPosition * 0.5 + i * 7) % (this.horizonY - 2));
+      var wobble = Math.sin(trackPosition * 0.1 + i * 3) * 1.5;
+      var bx = Math.floor(bubbleBaseX + wobble);
+      
+      if (bubbleY >= 0 && bubbleY < this.horizonY && bx >= 0 && bx < this.width) {
+        frame.setData(bx, bubbleY, 'o', bubbleAttr);
+        // Smaller bubble trailing
+        if (bubbleY + 2 < this.horizonY) {
+          frame.setData(bx, bubbleY + 2, '.', bubbleAttr);
+        }
+      }
+    }
+  }
+  
+  /**
    * Update parallax scroll based on steering/curvature.
    * Classic Super Scaler: backgrounds scroll horizontally when turning.
    */
@@ -3682,18 +4333,55 @@ class FrameRenderer implements IRenderer {
     return 4;
   }
   
+  // Track current brake state for sprite caching
+  private _currentBrakeLightsOn: boolean = false;
+  
+  /**
+   * Set brake light state for next render.
+   * Called by Game based on player input/deceleration.
+   */
+  setBrakeLightState(brakeLightsOn: boolean): void {
+    this._currentBrakeLightsOn = brakeLightsOn;
+  }
+  
   /**
    * Render player vehicle with visual effects.
+   * 
+   * @param playerX - Lateral position for steering offset
+   * @param isFlashing - Collision/damage flash
+   * @param isBoosting - Mushroom boost active
+   * @param hasStar - Star power active
+   * @param hasBullet - Bullet power active
+   * @param hasLightning - Lightning debuff active
+   * @param carId - Car type from CarCatalog
+   * @param carColorId - Color from CarCatalog
+   * @param brakeLightsOn - Whether brake lights should be lit
    */
   renderPlayerVehicle(playerX: number, isFlashing?: boolean, isBoosting?: boolean, 
-                      hasStar?: boolean, hasBullet?: boolean, hasLightning?: boolean): void {
+                      hasStar?: boolean, hasBullet?: boolean, hasLightning?: boolean,
+                      carId?: string, carColorId?: string, brakeLightsOn?: boolean): void {
     var frame = this.frameManager.getVehicleFrame(0);
     if (!frame) return;
     
+    // Get the appropriate sprite based on car selection and brake state
+    var effectiveCarId = carId || 'sports';
+    var effectiveColorId = carColorId || 'yellow';
+    var effectiveBrake = brakeLightsOn !== undefined ? brakeLightsOn : this._currentBrakeLightsOn;
+    
+    // Get car definition for body style
+    var carDef = getCarDefinition(effectiveCarId);
+    var bodyStyle: CarBodyStyle = carDef ? carDef.bodyStyle : 'sports';
+    
+    // Get the parameterized sprite
+    var sprite = getPlayerCarSprite(bodyStyle, effectiveColorId, effectiveBrake);
+    
     // Render sprite to frame
-    renderSpriteToFrame(frame, this.playerCarSprite, 0);
+    renderSpriteToFrame(frame, sprite, 0);
     
     var now = Date.now();
+    
+    // Get the effect flash color for this car color (ensures visibility)
+    var effectFlashColor = getEffectFlashColor(effectiveColorId);
     
     // STAR EFFECT: Rainbow cycling colors (most prominent effect)
     if (hasStar) {
@@ -3704,7 +4392,7 @@ class FrameRenderer implements IRenderer {
       // Color the entire car with cycling rainbow
       for (var y = 0; y < 3; y++) {
         for (var x = 0; x < 5; x++) {
-          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
           if (cell) {
             frame.setData(x, y, cell.char, starAttr);
           }
@@ -3713,12 +4401,12 @@ class FrameRenderer implements IRenderer {
     }
     // BULLET EFFECT: Fast white/yellow flash + speed lines look
     else if (hasBullet) {
-      var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : YELLOW;
+      var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : effectFlashColor;
       var bulletAttr = makeAttr(bulletColor, BG_BLACK);
       // Whole car flashes fast
       for (var y = 0; y < 3; y++) {
         for (var x = 0; x < 5; x++) {
-          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
           if (cell) {
             frame.setData(x, y, cell.char, bulletAttr);
           }
@@ -3733,7 +4421,7 @@ class FrameRenderer implements IRenderer {
       // Car flickers blue when slowed by lightning
       for (var y = 0; y < 3; y++) {
         for (var x = 0; x < 5; x++) {
-          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
           if (cell) {
             frame.setData(x, y, cell.char, lightningAttr);
           }
@@ -3746,7 +4434,7 @@ class FrameRenderer implements IRenderer {
       var flashAttr = makeAttr(flashColor, BG_BLACK);
       for (var y = 0; y < 3; y++) {
         for (var x = 0; x < 5; x++) {
-          var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+          var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
           if (cell) {
             frame.setData(x, y, cell.char, flashAttr);
           }
@@ -3755,11 +4443,11 @@ class FrameRenderer implements IRenderer {
     }
     // MUSHROOM BOOST: Cyan/yellow shimmer on exhaust
     else if (isBoosting) {
-      var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : YELLOW;
+      var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : effectFlashColor;
       var boostAttr = makeAttr(boostColor, BG_BLACK);
       // Just color the bottom row (exhaust/wheels area) for boost effect
       for (var bx = 0; bx < 5; bx++) {
-        var cell = this.playerCarSprite.variants[0][2] ? this.playerCarSprite.variants[0][2][bx] : null;
+        var cell = sprite.variants[0][2] ? sprite.variants[0][2][bx] : null;
         if (cell) {
           frame.setData(bx, 2, cell.char, boostAttr);
         }
@@ -3790,35 +4478,26 @@ class FrameRenderer implements IRenderer {
     this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
     
     // Bottom bar (row 23):
-    // LEFT:  [1/3] [====TRACK====] [8th]
+    // LEFT:  [====LAP 2/3====]
     // RIGHT: [300] [=====SPD=====]
+    // Position (8th) on row above, far left
     var bottomY = this.height - 1;
     
-    // LEFT SIDE - Lap, Track progress, Position
-    this.writeStringToFrame(frame, 2, bottomY, hudData.lap + '/' + hudData.totalLaps, valueAttr);
-    this.renderTrackProgressCompact(frame, hudData.lapProgress, 7, bottomY, 12);
+    // POSITION - One row up, far left
     var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
-    this.writeStringToFrame(frame, 21, bottomY, posStr, valueAttr);
+    this.writeStringToFrame(frame, 0, bottomY - 1, posStr, valueAttr);
     
-    // RIGHT SIDE - Speed numeric and bar
+    // LEFT SIDE - Lap progress bar with "LAP 2/3" centered inside
+    this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16);
+    
+    // RIGHT SIDE - Speed numeric and bar (full width)
     var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
     var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
     this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
-    this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 10);
+    this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 11);
     
-    // Held item display - ABOVE speedometer (row 22, right side)
-    if (hudData.heldItem !== null) {
-      var itemData = hudData.heldItem;
-      var itemName = this.getItemDisplayName(itemData.type);
-      var itemAttr = this.getItemDisplayAttr(itemData.type);
-      
-      // Show uses count for pack items (e.g., "MUSHROOMx3")
-      if (itemData.uses > 1) {
-        itemName = itemName + "x" + itemData.uses;
-      }
-      
-      this.writeStringToFrame(frame, 71 - itemName.length, bottomY - 1, itemName, itemAttr);
-    }
+    // Held item display - ABOVE speedometer (rows 20-22, right side)
+    this.renderItemSlotWithIcon(frame, hudData.heldItem);
     
     // Render countdown stoplight if race hasn't started
     if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
@@ -3827,72 +4506,266 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Get display name for an item type.
+   * Render item slot with visual icon ABOVE the speedometer.
+   * Layout: [divider] [quantity if >1] [icon]
+   * Icon area: rows 19-21, columns 67-79 (same width as speedometer below)
+   * Row 22 is margin between icons and speedometer on row 23.
    */
-  private getItemDisplayName(itemType: ItemType): string {
-    switch (itemType) {
-      case ItemType.MUSHROOM:
-      case ItemType.MUSHROOM_TRIPLE:
-        return 'MUSHROOM';
-      case ItemType.MUSHROOM_GOLDEN:
-        return 'G.MUSHROOM';
-      case ItemType.SHELL:
-      case ItemType.SHELL_TRIPLE:
-        return 'SHELL';
-      case ItemType.GREEN_SHELL:
-      case ItemType.GREEN_SHELL_TRIPLE:
-        return 'SHELL';
-      case ItemType.RED_SHELL:
-      case ItemType.RED_SHELL_TRIPLE:
-        return 'SHELL';
-      case ItemType.BLUE_SHELL:
-        return 'SHELL';
-      case ItemType.BANANA:
-      case ItemType.BANANA_TRIPLE:
-        return 'BANANA';
-      case ItemType.STAR:
-        return 'STAR';
-      case ItemType.LIGHTNING:
-        return 'LIGHTNING';
-      case ItemType.BULLET:
-        return 'BULLET';
-      default:
-        return '???';
+  private renderItemSlotWithIcon(frame: any, heldItem: HeldItemData | null): void {
+    var slotLeft = 67;      // Align with speedometer
+    var slotRight = 79;     // Right edge of screen
+    var slotTop = 19;       // 4 rows above bottom (moved up 1 for margin)
+    var slotBottom = 21;    // 2 rows above speedometer
+    var slotHeight = 3;
+    var slotWidth = slotRight - slotLeft + 1;  // 13 chars wide
+    
+    var separatorAttr = makeAttr(DARKGRAY, BG_BLACK);
+    
+    // Draw vertical divider on left edge with fancy ends
+    frame.setData(slotLeft, slotTop, GLYPH.BOX_VD_HD, separatorAttr);      // ╤ top
+    for (var row = slotTop + 1; row < slotBottom; row++) {
+      frame.setData(slotLeft, row, GLYPH.BOX_V, separatorAttr);            // │ middle
+    }
+    frame.setData(slotLeft, slotBottom, GLYPH.BOX_VD_HU, separatorAttr);   // ╧ bottom
+    
+    if (heldItem === null) {
+      // No item - just show empty slot (no text)
+      return;
+    }
+    
+    var itemType = heldItem.type;
+    var uses = heldItem.uses;
+    var isActivated = heldItem.activated;
+    
+    // Get icon data - all icons are 3 rows tall, cells have individual colors
+    var icon = this.getItemIconCP437(itemType);
+    
+    // Calculate icon position (centered in remaining space after divider)
+    var iconWidth = icon.cells[0].length;
+    var availableWidth = slotWidth - 1;  // Minus divider
+    var iconX = slotLeft + 1 + Math.floor((availableWidth - iconWidth) / 2);
+    
+    // If we have uses > 1, shift icon right and show count
+    if (uses > 1) {
+      iconX = slotLeft + 3;  // Leave room for count
+      var countAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+      frame.setData(slotLeft + 1, slotTop + 1, String(uses).charAt(0), countAttr);
+    }
+    
+    // Render icon cells (3 rows)
+    for (var row = 0; row < icon.cells.length && row < slotHeight; row++) {
+      var cellRow = icon.cells[row];
+      for (var col = 0; col < cellRow.length; col++) {
+        var cellData = cellRow[col];
+        if (cellData.char !== ' ') {
+          var attr = this.getIconAttrCP437(cellData.attr, itemType, isActivated);
+          frame.setData(iconX + col, slotTop + row, cellData.char, attr);
+        }
+      }
     }
   }
   
   /**
-   * Get display attribute/color for an item type.
+   * Get CP437-based icon for item type.
+   * All icons are exactly 3 rows tall for consistency.
+   * Uses background colors for body with foreground details on top.
+   * Returns cells with individual char+attr for each position.
    */
-  private getItemDisplayAttr(itemType: ItemType): number {
+  private getItemIconCP437(itemType: ItemType): { cells: { char: string, attr: number }[][], mainColor: number, altColor?: number } {
+    // Block characters:
+    // █ = FULL_BLOCK (219)    ▄ = LOWER_HALF (220)    ▀ = UPPER_HALF (223)
+    // ▌ = LEFT_HALF (221)     ▐ = RIGHT_HALF (222)
+    // ░ = LIGHT_SHADE (176)   ▒ = MEDIUM_SHADE (177)  ▓ = DARK_SHADE (178)
+    
+    var FB = GLYPH.FULL_BLOCK;    // █
+    var LH = GLYPH.LOWER_HALF;    // ▄
+    var UH = GLYPH.UPPER_HALF;    // ▀
+    var DS = GLYPH.DARK_SHADE;    // ▓
+    var LS = GLYPH.LIGHT_SHADE;   // ░
+    var __ = ' ';  // Space (transparent)
+    
+    // Helper to create a cell
+    function cell(ch: string, fg: number, bg: number): { char: string, attr: number } {
+      return { char: ch, attr: makeAttr(fg, bg) };
+    }
+    
+    // Empty/transparent cell
+    var X = cell(__, BLACK, BG_BLACK);
+    
     switch (itemType) {
+      // === MUSHROOM - Red cap with white spots, stem ===
       case ItemType.MUSHROOM:
       case ItemType.MUSHROOM_TRIPLE:
+        // Use BG_RED for cap, draw white spots on top
+        //   ▄██▄      (red on black edges, solid red middle)
+        //  █o██o█    (white 'o' spots on red background)
+        //    ██      (white stem)
+        return {
+          cells: [
+            [X, cell(LH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LH, LIGHTRED, BG_BLACK), X],
+            [cell(FB, LIGHTRED, BG_BLACK), cell('o', WHITE, BG_RED), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell('o', WHITE, BG_RED), cell(FB, LIGHTRED, BG_BLACK)],
+            [X, X, cell(FB, WHITE, BG_BLACK), cell(FB, WHITE, BG_BLACK), X, X]
+          ],
+          mainColor: LIGHTRED
+        };
+        
       case ItemType.MUSHROOM_GOLDEN:
-        return makeAttr(LIGHTRED, BG_BLACK);
-      case ItemType.SHELL:
-      case ItemType.SHELL_TRIPLE:
-        return makeAttr(LIGHTGREEN, BG_BLACK);
+        // Golden version - yellow cap with white sparkles
+        return {
+          cells: [
+            [X, cell(LH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, YELLOW, BG_BLACK), X],
+            [cell(FB, YELLOW, BG_BLACK), cell('*', WHITE, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell('*', WHITE, BG_BLACK), cell(FB, YELLOW, BG_BLACK)],
+            [X, X, cell(FB, WHITE, BG_BLACK), cell(FB, WHITE, BG_BLACK), X, X]
+          ],
+          mainColor: YELLOW
+        };
+      
+      // === SHELLS - Turtle shell with pattern ===
       case ItemType.GREEN_SHELL:
       case ItemType.GREEN_SHELL_TRIPLE:
-        return makeAttr(LIGHTGREEN, BG_BLACK);
+        // BG_GREEN body with lighter pattern details
+        //  ▄██▄
+        // █░██░█   (light shade pattern on green bg)
+        //  ▀██▀
+        return {
+          cells: [
+            [X, cell(LH, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(LH, LIGHTGREEN, BG_BLACK), X],
+            [cell(FB, LIGHTGREEN, BG_BLACK), cell(LS, YELLOW, BG_GREEN), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(LS, YELLOW, BG_GREEN), cell(FB, LIGHTGREEN, BG_BLACK)],
+            [X, cell(UH, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(UH, LIGHTGREEN, BG_BLACK), X]
+          ],
+          mainColor: LIGHTGREEN
+        };
+        
       case ItemType.RED_SHELL:
       case ItemType.RED_SHELL_TRIPLE:
-        return makeAttr(LIGHTRED, BG_BLACK);
+      case ItemType.SHELL:
+      case ItemType.SHELL_TRIPLE:
+        return {
+          cells: [
+            [X, cell(LH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LH, LIGHTRED, BG_BLACK), X],
+            [cell(FB, LIGHTRED, BG_BLACK), cell(LS, YELLOW, BG_RED), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LS, YELLOW, BG_RED), cell(FB, LIGHTRED, BG_BLACK)],
+            [X, cell(UH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(UH, LIGHTRED, BG_BLACK), X]
+          ],
+          mainColor: LIGHTRED
+        };
+        
       case ItemType.BLUE_SHELL:
-        return makeAttr(LIGHTCYAN, BG_BLACK);
+        // Blue shell with "wings" effect using extended width
+        // ░▄██▄░    (light edges for wing effect)
+        // ▀ ▓▓ ▀   (dark pattern, wing tips)
+        //  ▀██▀
+        return {
+          cells: [
+            [cell(LS, LIGHTCYAN, BG_BLACK), cell(LH, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(LH, LIGHTCYAN, BG_BLACK), cell(LS, LIGHTCYAN, BG_BLACK)],
+            [cell(UH, WHITE, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(DS, WHITE, BG_CYAN), cell(DS, WHITE, BG_CYAN), cell(FB, LIGHTCYAN, BG_BLACK), cell(UH, WHITE, BG_BLACK)],
+            [X, cell(UH, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(UH, LIGHTCYAN, BG_BLACK), X]
+          ],
+          mainColor: LIGHTCYAN,
+          altColor: WHITE
+        };
+      
+      // === BANANA - Yellow peel with green tip ===
       case ItemType.BANANA:
       case ItemType.BANANA_TRIPLE:
-        return makeAttr(YELLOW, BG_BLACK);
+        // Curved banana shape - yellow with green ends
+        //  ▄██▄       (top curve)
+        // █▀  ▀█      (open middle - peel shape)
+        // ▀    ▀      (bottom tips)
+        return {
+          cells: [
+            [X, cell(LH, GREEN, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, GREEN, BG_BLACK), X],
+            [cell(FB, YELLOW, BG_BLACK), cell(UH, YELLOW, BG_BLACK), X, X, cell(UH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK)],
+            [cell(UH, YELLOW, BG_BLACK), X, X, X, X, cell(UH, YELLOW, BG_BLACK)]
+          ],
+          mainColor: YELLOW
+        };
+      
+      // === STAR - Invincibility star, pure yellow ===
       case ItemType.STAR:
-        return makeAttr(YELLOW, BG_BLACK);
+        // Star shape - all yellow blocks
+        //   ▄█▄       (top point)
+        // ▀█████▀     (arms extend with solid center)
+        //   ▀ ▀       (bottom points)
+        return {
+          cells: [
+            [X, X, cell(LH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, YELLOW, BG_BLACK), X, X],
+            [cell(UH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(UH, YELLOW, BG_BLACK)],
+            [X, X, cell(UH, YELLOW, BG_BLACK), X, cell(UH, YELLOW, BG_BLACK), X, X]
+          ],
+          mainColor: YELLOW
+        };
+      
+      // === LIGHTNING - ASCII zigzag bolt ===
       case ItemType.LIGHTNING:
-        return makeAttr(LIGHTCYAN, BG_BLACK);
+        // Sharp ASCII bolt - distinct from banana
+        //  /\         
+        // /--\        
+        //    \/       
+        return {
+          cells: [
+            [X, cell('/', LIGHTCYAN, BG_BLACK), cell('\\', LIGHTCYAN, BG_BLACK), X, X],
+            [cell('/', LIGHTCYAN, BG_BLACK), cell('-', YELLOW, BG_BLACK), cell('-', YELLOW, BG_BLACK), cell('\\', LIGHTCYAN, BG_BLACK), X],
+            [X, X, X, cell('\\', LIGHTCYAN, BG_BLACK), cell('/', LIGHTCYAN, BG_BLACK)]
+          ],
+          mainColor: YELLOW,
+          altColor: LIGHTCYAN
+        };
+      
+      // === BULLET BILL - Solid bullet with definition ===
       case ItemType.BULLET:
-        return makeAttr(WHITE, BG_BLACK);
+        // Bullet shape - light gray body, dark outline, white eyes
+        // ▄▓▓▓▓▄     (rounded top, dark outline)
+        // █oo▓▓▀     (eyes, gray body, pointed tip)
+        // ▀▓▓▓▓▀     (rounded bottom)
+        return {
+          cells: [
+            [cell(LH, DARKGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(LH, DARKGRAY, BG_BLACK)],
+            [cell(FB, DARKGRAY, BG_BLACK), cell('O', WHITE, BG_BLACK), cell('O', WHITE, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(UH, LIGHTGRAY, BG_BLACK)],
+            [cell(UH, DARKGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(UH, DARKGRAY, BG_BLACK)]
+          ],
+          mainColor: LIGHTGRAY,
+          altColor: WHITE
+        };
+      
       default:
-        return makeAttr(WHITE, BG_BLACK);
+        return {
+          cells: [
+            [X, X, cell('?', YELLOW, BG_BLACK), X, X],
+            [X, cell('?', YELLOW, BG_BLACK), cell('?', YELLOW, BG_BLACK), cell('?', YELLOW, BG_BLACK), X],
+            [X, X, cell('?', YELLOW, BG_BLACK), X, X]
+          ],
+          mainColor: YELLOW
+        };
     }
+  }
+  
+  /**
+   * Get attribute for icon cell, with animation support.
+   */
+  private getIconAttrCP437(baseAttr: number, itemType: ItemType, isActivated: boolean): number {
+    // Special animation handling
+    switch (itemType) {
+      case ItemType.STAR:
+        // Rainbow cycling ONLY when activated
+        if (isActivated) {
+          var starColors = [YELLOW, LIGHTRED, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+          var colorIdx = Math.floor(Date.now() / 100) % starColors.length;
+          // Keep the background but change foreground
+          var bg = (baseAttr >> 4) & 0x07;
+          return makeAttr(starColors[colorIdx], bg << 4);
+        }
+        break;
+        
+      case ItemType.LIGHTNING:
+        // Flash cyan/yellow when activated
+        if (isActivated && (Math.floor(Date.now() / 150) % 2 === 0)) {
+          var bg2 = (baseAttr >> 4) & 0x07;
+          return makeAttr(LIGHTCYAN, bg2 << 4);
+        }
+        break;
+    }
+    
+    return baseAttr;
   }
   
   /**
@@ -3962,24 +4835,46 @@ class FrameRenderer implements IRenderer {
   }
   
   /**
-   * Render compact track progress bar at specified position.
+   * Render lap progress bar with "LAP X/Y" text centered inside.
+   * Background fills from BG_BLACK to BG_BLUE as progress increases.
+   * Text is always YELLOW to stand out on either background.
    */
-  private renderTrackProgressCompact(frame: Frame, progress: number, x: number, y: number, width: number): void {
+  private renderLapProgressBar(frame: Frame, lap: number, totalLaps: number, progress: number, x: number, y: number, width: number): void {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
-    var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
-    var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
     
+    // Draw brackets
     frame.setData(x, y, '[', labelAttr);
+    frame.setData(x + width + 1, y, ']', labelAttr);
     
+    // Calculate fill width (inside the brackets)
     var fillWidth = Math.round(progress * width);
     
-    for (var i = 0; i < width; i++) {
-      var attr = (i < fillWidth) ? filledAttr : emptyAttr;
-      var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-      frame.setData(x + 1 + i, y, char, attr);
-    }
+    // Build the "LAP X/Y" text to center inside
+    var lapText = 'LAP ' + lap + '/' + totalLaps;
+    var textStart = Math.floor((width - lapText.length) / 2);
     
-    frame.setData(x + width + 1, y, ']', labelAttr);
+    // Render each character inside the bar
+    for (var i = 0; i < width; i++) {
+      var isFilled = i < fillWidth;
+      var bg = isFilled ? BG_BLUE : BG_BLACK;
+      
+      // Check if this position has a character from the lap text
+      var textIndex = i - textStart;
+      if (textIndex >= 0 && textIndex < lapText.length) {
+        // Render lap text character in YELLOW
+        var attr = colorToAttr({ fg: YELLOW, bg: bg });
+        frame.setData(x + 1 + i, y, lapText.charAt(textIndex), attr);
+      } else {
+        // Render fill or empty space
+        if (isFilled) {
+          var filledAttr = colorToAttr({ fg: LIGHTBLUE, bg: BG_BLUE });
+          frame.setData(x + 1 + i, y, ' ', filledAttr);
+        } else {
+          var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+          frame.setData(x + 1 + i, y, GLYPH.LIGHT_SHADE, emptyAttr);
+        }
+      }
+    }
   }
   
   /**
@@ -4036,6 +4931,117 @@ class FrameRenderer implements IRenderer {
       str = ' ' + str;
     }
     return str;
+  }
+  
+  /**
+   * Trigger a lightning bolt visual effect at a specific X position.
+   * The bolt will animate from the top of the screen to the target Y.
+   * 
+   * @param targetX - X position on screen (0-79)
+   * @param targetY - Y position where bolt terminates (default: player car)
+   */
+  triggerLightningBolt(targetX?: number, targetY?: number): void {
+    var x = targetX !== undefined ? targetX : 40;  // Default to center
+    var y = targetY !== undefined ? targetY : this.height - 3;  // Default to player car
+    
+    this._lightningBolts.push({
+      x: x,
+      startTime: Date.now(),
+      targetY: y
+    });
+  }
+  
+  /**
+   * Trigger lightning bolts for all affected vehicles (called when lightning item is used).
+   * Creates bolts at the player position and random positions across the screen.
+   * 
+   * @param hitCount - Number of vehicles hit (determines number of bolts)
+   */
+  triggerLightningStrike(hitCount: number): void {
+    // Always add a main bolt at center (player's screen)
+    this.triggerLightningBolt(40, this.height - 3);
+    
+    // Add additional bolts at random positions for dramatic effect
+    var additionalBolts = Math.min(hitCount, 4);  // Cap at 4 extra bolts
+    for (var i = 0; i < additionalBolts; i++) {
+      var randomX = 10 + Math.floor(Math.random() * 60);  // Spread across screen
+      var randomY = 8 + Math.floor(Math.random() * 10);   // Various depths on road
+      this.triggerLightningBolt(randomX, randomY);
+    }
+  }
+  
+  /**
+   * Render active lightning bolt effects.
+   * Called during endFrame() to draw bolts on top of everything.
+   */
+  private renderLightningBolts(): void {
+    if (this._lightningBolts.length === 0) return;
+    
+    var now = Date.now();
+    var roadFrame = this.frameManager.getRoadFrame();
+    if (!roadFrame) return;
+    
+    // Lightning bolt duration (ms) and animation speed
+    var boltDuration = 300;  // Total effect duration
+    var flashCycleMs = 40;   // How fast colors alternate
+    
+    // Process each active bolt
+    for (var i = this._lightningBolts.length - 1; i >= 0; i--) {
+      var bolt = this._lightningBolts[i];
+      var elapsed = now - bolt.startTime;
+      
+      // Remove expired bolts
+      if (elapsed > boltDuration) {
+        this._lightningBolts.splice(i, 1);
+        continue;
+      }
+      
+      // Calculate bolt progress (0 = starting, 1 = complete)
+      var progress = elapsed / boltDuration;
+      
+      // Bolt descends from sky to target
+      var startY = 1;
+      var currentEndY = Math.floor(startY + (bolt.targetY - startY) * Math.min(1, progress * 2));
+      
+      // Flash colors: white/yellow/cyan cycling
+      var colorPhase = Math.floor(now / flashCycleMs) % 3;
+      var boltColor = colorPhase === 0 ? WHITE : (colorPhase === 1 ? YELLOW : LIGHTCYAN);
+      var boltAttr = makeAttr(boltColor, BG_BLACK);
+      var brightAttr = makeAttr(WHITE, BG_BLUE);  // Extra bright flash at impact
+      
+      // Draw the bolt using / and \ characters with some randomness
+      var x = bolt.x;
+      for (var y = startY; y <= currentEndY; y++) {
+        // Add slight horizontal jitter for jagged look
+        var jitter = (y % 3 === 0) ? ((y % 6 === 0) ? 1 : -1) : 0;
+        var drawX = x + jitter;
+        
+        // Choose character based on jitter direction
+        var char = jitter > 0 ? '\\' : (jitter < 0 ? '/' : '|');
+        
+        // Extra bright at the bolt tip
+        var attr = (y === currentEndY && progress < 0.7) ? brightAttr : boltAttr;
+        
+        if (drawX >= 0 && drawX < this.width && y >= 0 && y < this.height - 1) {
+          roadFrame.setData(drawX, y, char, attr);
+        }
+        
+        // Update x for next segment based on jitter
+        x = drawX;
+      }
+      
+      // Flash effect at impact point when bolt reaches target
+      if (progress > 0.3 && progress < 0.8) {
+        var flashRadius = 2;
+        var impactAttr = makeAttr(WHITE, BG_CYAN);
+        for (var fx = -flashRadius; fx <= flashRadius; fx++) {
+          var impactX = bolt.x + fx;
+          if (impactX >= 0 && impactX < this.width && bolt.targetY < this.height - 1) {
+            roadFrame.setData(impactX, bolt.targetY, '*', impactAttr);
+          }
+        }
+      }
+    }
   }
   
   /**

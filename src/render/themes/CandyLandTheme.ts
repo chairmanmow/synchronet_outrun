@@ -42,6 +42,13 @@ var CandyLandTheme: Theme = {
     shoulderPrimary: { fg: WHITE, bg: BG_MAGENTA },
     shoulderSecondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
     
+    // Item box colors - rainbow candy colors
+    itemBox: {
+      border: { fg: LIGHTRED, bg: BG_CYAN },
+      fill: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+      symbol: { fg: WHITE, bg: BG_CYAN }
+    },
+    
     // Roadside colors - candy palette with pastel backgrounds
     roadsideColors: {
       'lollipop': {

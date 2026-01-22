@@ -149,55 +149,251 @@ class HudRenderer {
   }
 
   /**
-   * Render held item slot.
+   * Render held item slot with visual icons.
+   * Icons are right-aligned to x=79 (frame edge).
+   * Multi-use items show count to the left of the icon.
    */
   private renderItemSlot(data: HudData): void {
-    var y = 23;
-    var x = 70;
-
-    var frameAttr = colorToAttr(PALETTE.HUD_FRAME);
-
-    this.composer.setCell(x, y, '[', frameAttr);
-    this.composer.setCell(x + 5, y, ']', frameAttr);
-
-    if (data.heldItem !== null) {
-      var itemAttr: number;
-      var itemChar: string;
-      var itemType = data.heldItem.type;
-      
-      switch (itemType) {
-        case ItemType.MUSHROOM:
-        case ItemType.MUSHROOM_TRIPLE:
-        case ItemType.MUSHROOM_GOLDEN:
-          itemAttr = colorToAttr(PALETTE.ITEM_MUSHROOM);
-          itemChar = 'MUSH';
-          break;
-        case ItemType.SHELL:
-        case ItemType.SHELL_TRIPLE:
-          itemAttr = colorToAttr(PALETTE.ITEM_SHELL);
-          itemChar = 'SHEL';
-          break;
-        case ItemType.STAR:
-          itemAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
-          itemChar = 'STAR';
-          break;
-        case ItemType.LIGHTNING:
-          itemAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
-          itemChar = 'BOLT';
-          break;
-        case ItemType.BULLET:
-          itemAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
-          itemChar = 'BULL';
-          break;
-        default:
-          itemAttr = colorToAttr(PALETTE.HUD_VALUE);
-          itemChar = 'ITEM';
-      }
-
-      this.composer.writeString(x + 1, y, itemChar, itemAttr);
-    } else {
-      this.composer.writeString(x + 1, y, "----", colorToAttr(PALETTE.HUD_LABEL));
+    var bottomY = 23;
+    var rightEdge = 79;  // Right edge of frame
+    
+    if (data.heldItem === null) {
+      // No item - show empty indicator
+      var emptyAttr = colorToAttr(PALETTE.HUD_LABEL);
+      this.composer.writeString(rightEdge - 3, bottomY, "----", emptyAttr);
+      return;
     }
+    
+    var itemType = data.heldItem.type;
+    var uses = data.heldItem.uses;
+    
+    // Get icon data for this item type
+    var icon = this.getItemIcon(itemType);
+    
+    // Calculate icon position (right-aligned)
+    var iconWidth = icon.lines[0].length;
+    var iconHeight = icon.lines.length;
+    var iconX = rightEdge - iconWidth + 1;
+    var iconY = bottomY - iconHeight + 1;
+    
+    // Render icon
+    for (var row = 0; row < iconHeight; row++) {
+      var line = icon.lines[row];
+      for (var col = 0; col < line.length; col++) {
+        var ch = line.charAt(col);
+        if (ch !== ' ') {
+          // Check for special color codes in icon
+          var attr = this.getIconCharAttr(ch, icon, itemType);
+          this.composer.setCell(iconX + col, iconY + row, ch, attr);
+        }
+      }
+    }
+    
+    // Show uses count if > 1 (to the left of icon)
+    if (uses > 1) {
+      var countAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+      this.composer.setCell(iconX - 2, bottomY, 'x', colorToAttr(PALETTE.HUD_LABEL));
+      this.composer.setCell(iconX - 1, bottomY, String(uses).charAt(0), countAttr);
+    }
+  }
+  
+  /**
+   * Get icon sprite data for an item type.
+   * Returns { lines: string[], color: {fg, bg}, altColor?: {fg, bg} }
+   */
+  private getItemIcon(type: ItemType): { lines: string[], color: { fg: number, bg: number }, altColor?: { fg: number, bg: number } } {
+    switch (type) {
+      // === MUSHROOM ICONS ===
+      case ItemType.MUSHROOM:
+      case ItemType.MUSHROOM_TRIPLE:
+        // Red mushroom with spots
+        //  @@
+        // @##@
+        //  ||
+        return {
+          lines: [
+            ' @@ ',
+            '@##@',
+            ' || '
+          ],
+          color: { fg: LIGHTRED, bg: BG_BLACK },      // @ = cap
+          altColor: { fg: WHITE, bg: BG_BLACK }       // # = spots, | = stem
+        };
+        
+      case ItemType.MUSHROOM_GOLDEN:
+        // Golden mushroom (shiny)
+        return {
+          lines: [
+            ' @@ ',
+            '@##@',
+            ' || '
+          ],
+          color: { fg: YELLOW, bg: BG_BLACK },
+          altColor: { fg: WHITE, bg: BG_BLACK }
+        };
+      
+      // === SHELL ICONS ===
+      case ItemType.GREEN_SHELL:
+      case ItemType.GREEN_SHELL_TRIPLE:
+        // Green turtle shell
+        //  /^\
+        // (O O)
+        //  \_/
+        return {
+          lines: [
+            ' /^\\ ',
+            '(O O)',
+            ' \\_/ '
+          ],
+          color: { fg: LIGHTGREEN, bg: BG_BLACK }
+        };
+        
+      case ItemType.RED_SHELL:
+      case ItemType.RED_SHELL_TRIPLE:
+      case ItemType.SHELL:
+      case ItemType.SHELL_TRIPLE:
+        // Red turtle shell
+        return {
+          lines: [
+            ' /^\\ ',
+            '(O O)',
+            ' \\_/ '
+          ],
+          color: { fg: LIGHTRED, bg: BG_BLACK }
+        };
+        
+      case ItemType.BLUE_SHELL:
+        // Blue spiny shell with wings
+        //  ~*~
+        // <(@)>
+        //  \_/
+        return {
+          lines: [
+            ' ~*~ ',
+            '<(@)>',
+            ' \\_/ '
+          ],
+          color: { fg: LIGHTBLUE, bg: BG_BLACK },
+          altColor: { fg: LIGHTCYAN, bg: BG_BLACK }   // wings
+        };
+      
+      // === BANANA ICON ===
+      case ItemType.BANANA:
+      case ItemType.BANANA_TRIPLE:
+        // Banana peel
+        //  /\\
+        // (  )
+        //  \/
+        return {
+          lines: [
+            '  /\\ ',
+            ' (  )',
+            '  \\/ '
+          ],
+          color: { fg: YELLOW, bg: BG_BLACK }
+        };
+      
+      // === STAR ICON ===
+      case ItemType.STAR:
+        // Invincibility star
+        //   *
+        //  ***
+        // *****
+        //  * *
+        return {
+          lines: [
+            '  *  ',
+            ' *** ',
+            '*****',
+            ' * * '
+          ],
+          color: { fg: YELLOW, bg: BG_BLACK }
+        };
+      
+      // === LIGHTNING ICON ===
+      case ItemType.LIGHTNING:
+        // Lightning bolt
+        //  /|
+        // /-'
+        // |/
+        return {
+          lines: [
+            ' /| ',
+            '/-\' ',
+            '|/  '
+          ],
+          color: { fg: YELLOW, bg: BG_BLACK },
+          altColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+        };
+      
+      // === BULLET ICON ===
+      case ItemType.BULLET:
+        // Bullet Bill
+        //  __
+        // |===>
+        //  --
+        return {
+          lines: [
+            ' __ ',
+            '|==>',
+            ' -- '
+          ],
+          color: { fg: WHITE, bg: BG_BLACK },
+          altColor: { fg: DARKGRAY, bg: BG_BLACK }
+        };
+      
+      default:
+        // Unknown item - show ?
+        return {
+          lines: [
+            ' ? '
+          ],
+          color: { fg: YELLOW, bg: BG_BLACK }
+        };
+    }
+  }
+  
+  /**
+   * Get attribute for a character in an icon based on the character.
+   */
+  private getIconCharAttr(ch: string, icon: { lines: string[], color: { fg: number, bg: number }, altColor?: { fg: number, bg: number } }, itemType: ItemType): number {
+    // Special characters use altColor
+    var useAlt = false;
+    
+    switch (itemType) {
+      case ItemType.MUSHROOM:
+      case ItemType.MUSHROOM_TRIPLE:
+      case ItemType.MUSHROOM_GOLDEN:
+        // # = spots (white), | = stem (white), @ = cap (main color)
+        useAlt = (ch === '#' || ch === '|');
+        break;
+        
+      case ItemType.BLUE_SHELL:
+        // < > ~ = wings (altColor)
+        useAlt = (ch === '<' || ch === '>' || ch === '~');
+        break;
+        
+      case ItemType.LIGHTNING:
+        // Alternate flash effect
+        useAlt = (Math.floor(Date.now() / 150) % 2 === 0);
+        break;
+        
+      case ItemType.STAR:
+        // Rainbow cycling for star
+        var starColors = [YELLOW, LIGHTRED, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+        var colorIdx = Math.floor(Date.now() / 100) % starColors.length;
+        return makeAttr(starColors[colorIdx], BG_BLACK);
+        
+      case ItemType.BULLET:
+        // = and > are lighter, rest is dark
+        useAlt = (ch !== '=' && ch !== '>');
+        break;
+    }
+    
+    if (useAlt && icon.altColor) {
+      return makeAttr(icon.altColor.fg, icon.altColor.bg);
+    }
+    return makeAttr(icon.color.fg, icon.color.bg);
   }
 
   /**

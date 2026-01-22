@@ -1,6 +1,7 @@
 "use strict";
 var FrameRenderer = (function () {
     function FrameRenderer(width, height) {
+        this._currentBrakeLightsOn = false;
         this.width = width;
         this.height = height;
         this.horizonY = 8;
@@ -11,11 +12,11 @@ var FrameRenderer = (function () {
         this._currentRoad = null;
         this._currentTrackPosition = 0;
         this._currentCameraX = 0;
+        this._lightningBolts = [];
         this.frameManager = new FrameManager(width, height, this.horizonY);
         this.composer = new SceneComposer(width, height);
         this.activeTheme = SynthwaveTheme;
         this.spriteCache = {};
-        this.playerCarSprite = null;
     }
     FrameRenderer.prototype.setTheme = function (themeName) {
         var theme = getTheme(themeName);
@@ -40,7 +41,6 @@ var FrameRenderer = (function () {
         load('frame.js');
         this.frameManager.init();
         this.rebuildSpriteCache();
-        this.playerCarSprite = SpriteSheet.createPlayerCar();
         this.renderStaticElements();
         logInfo('FrameRenderer initialized with theme: ' + this.activeTheme.name);
     };
@@ -137,6 +137,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'underwater') {
             this.renderUnderwaterBackground();
         }
+        else if (this.activeTheme.background.type === 'aquarium') {
+            this.renderAquariumBackground();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -155,6 +158,9 @@ var FrameRenderer = (function () {
         }
         else if (this.activeTheme.sky.type === 'gradient') {
             this.renderSkyGradient(trackPosition);
+        }
+        else if (this.activeTheme.sky.type === 'water') {
+            this.renderSkyWater(trackPosition, speed || 0, dt || 0);
         }
         if (this.activeTheme.background.type === 'ocean') {
             this.renderOceanWaves(trackPosition);
@@ -268,7 +274,7 @@ var FrameRenderer = (function () {
         }
         this.renderNPCVehicles(playerVehicle, vehicles);
         var v = playerVehicle;
-        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0, playerVehicle.boostTimer > 0, v.hasEffect ? v.hasEffect(ItemType.STAR) : false, v.hasEffect ? v.hasEffect(ItemType.BULLET) : false, v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false);
+        this.renderPlayerVehicle(playerVehicle.playerX, playerVehicle.flashTimer > 0, playerVehicle.boostTimer > 0, v.hasEffect ? v.hasEffect(ItemType.STAR) : false, v.hasEffect ? v.hasEffect(ItemType.BULLET) : false, v.hasEffect ? v.hasEffect(ItemType.LIGHTNING) : false, v.carId || 'sports', v.carColorId || 'yellow', this._currentBrakeLightsOn);
     };
     FrameRenderer.prototype.renderProjectiles = function (playerVehicle, projectiles) {
         var frame = this.frameManager.getRoadFrame();
@@ -385,14 +391,29 @@ var FrameRenderer = (function () {
         var frame = this.frameManager.getRoadFrame();
         if (!frame)
             return;
-        var roadColor = this.activeTheme.colors.roadSurface;
-        var itemBoxFg = YELLOW;
-        var itemBoxBg = roadColor.bg;
+        var colors = this.activeTheme.colors;
+        var boxColors = colors.itemBox || {
+            border: { fg: YELLOW, bg: BG_BLACK },
+            fill: { fg: BROWN, bg: BG_BLACK },
+            symbol: { fg: WHITE, bg: BG_BLACK }
+        };
+        var borderAttr = makeAttr(boxColors.border.fg, boxColors.border.bg);
+        var fillAttr = makeAttr(boxColors.fill.fg, boxColors.fill.bg);
+        var symbolAttr = makeAttr(boxColors.symbol.fg, boxColors.symbol.bg);
         var visualHorizonY = 5;
         var roadBottom = this.height - 4;
+        var itemsToRender = [];
+        for (var p = 0; p < items.length; p++) {
+            var pItem = items[p];
+            if (pItem.isBeingDestroyed() && pItem.pickedUpByPlayer) {
+                this.renderPlayerPickupEffect(frame, pItem.destructionTimer, pItem.destructionStartTime, symbolAttr);
+            }
+        }
         for (var i = 0; i < items.length; i++) {
             var item = items[i];
-            if (!item.isAvailable())
+            if (!item.isAvailable() && !item.isBeingDestroyed())
+                continue;
+            if (item.isBeingDestroyed() && item.pickedUpByPlayer)
                 continue;
             var relativeZ = item.z - playerVehicle.trackZ;
             var relativeX = item.x - (playerVehicle.playerX * 20);
@@ -410,27 +431,209 @@ var FrameRenderer = (function () {
                     curveOffset = seg.curve * t * 15;
                 }
             }
-            var perspectiveScale = t * t;
-            var screenX = Math.round(40 + curveOffset + relativeX * perspectiveScale * 0.1 - this._currentCameraX * 0.5);
-            if (screenY < visualHorizonY || screenY >= this.height - 1)
+            var xScale = t * 1.5;
+            var screenX = Math.round(40 + curveOffset + relativeX * xScale - this._currentCameraX * 0.5);
+            if (screenY < visualHorizonY - 2 || screenY >= this.height)
                 continue;
-            if (screenX < 0 || screenX >= this.width)
+            if (screenX < -3 || screenX >= this.width + 3)
                 continue;
-            var boxChar = '?';
-            var boxWidth = 1;
-            if (t > 0.4) {
-                boxWidth = 3;
+            itemsToRender.push({ item: item, screenY: screenY, screenX: screenX, t: t });
+        }
+        itemsToRender.sort(function (a, b) { return a.screenY - b.screenY; });
+        for (var j = 0; j < itemsToRender.length; j++) {
+            var data = itemsToRender[j];
+            var item = data.item;
+            var screenX = data.screenX;
+            var screenY = data.screenY;
+            var t = data.t;
+            var pulse = Math.floor(Date.now() / 150) % 4;
+            if (item.isBeingDestroyed()) {
+                this.renderItemBoxDestruction(frame, screenX, screenY, t, item.destructionTimer, item.destructionStartTime);
+                continue;
             }
-            else if (t > 0.2) {
-                boxWidth = 2;
+            if (t > 0.5) {
+                this.renderItemBoxLarge(frame, screenX, screenY, borderAttr, fillAttr, symbolAttr, pulse);
             }
-            var pulse = Math.floor(Date.now() / 200) % 2;
-            var attr = pulse === 0 ? makeAttr(itemBoxFg, itemBoxBg) : makeAttr(YELLOW, itemBoxBg);
-            var startX = screenX - Math.floor(boxWidth / 2);
-            for (var col = 0; col < boxWidth; col++) {
-                var drawX = startX + col;
-                if (drawX >= 0 && drawX < this.width) {
-                    frame.setData(drawX, screenY, boxChar, attr);
+            else if (t > 0.25) {
+                this.renderItemBoxMedium(frame, screenX, screenY, borderAttr, symbolAttr, pulse);
+            }
+            else if (t > 0.1) {
+                this.renderItemBoxSmall(frame, screenX, screenY, borderAttr, symbolAttr, pulse);
+            }
+            else {
+                if (screenX >= 0 && screenX < this.width && screenY >= 0 && screenY < this.height) {
+                    var tinyAttr = (pulse % 2 === 0) ? borderAttr : symbolAttr;
+                    frame.setData(screenX, screenY, '.', tinyAttr);
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderItemBoxLarge = function (frame, cx, cy, borderAttr, _fillAttr, symbolAttr, pulse) {
+        var TL = GLYPH.DBOX_TL;
+        var TR = GLYPH.DBOX_TR;
+        var BL = GLYPH.DBOX_BL;
+        var BR = GLYPH.DBOX_BR;
+        var H = GLYPH.DBOX_H;
+        var V = GLYPH.DBOX_V;
+        var activeBorderAttr = (pulse === 0 || pulse === 2) ? borderAttr :
+            makeAttr(WHITE, borderAttr & 0xF0);
+        var left = cx - 1;
+        var right = cx + 1;
+        var top = cy - 1;
+        var bottom = cy + 1;
+        if (top >= 0 && top < this.height) {
+            if (left >= 0 && left < this.width)
+                frame.setData(left, top, TL, activeBorderAttr);
+            if (cx >= 0 && cx < this.width)
+                frame.setData(cx, top, H, activeBorderAttr);
+            if (right >= 0 && right < this.width)
+                frame.setData(right, top, TR, activeBorderAttr);
+        }
+        if (cy >= 0 && cy < this.height) {
+            if (left >= 0 && left < this.width)
+                frame.setData(left, cy, V, activeBorderAttr);
+            if (cx >= 0 && cx < this.width) {
+                var qAttr = (pulse % 2 === 0) ? symbolAttr : makeAttr(YELLOW, symbolAttr & 0xF0);
+                frame.setData(cx, cy, '?', qAttr);
+            }
+            if (right >= 0 && right < this.width)
+                frame.setData(right, cy, V, activeBorderAttr);
+        }
+        if (bottom >= 0 && bottom < this.height) {
+            if (left >= 0 && left < this.width)
+                frame.setData(left, bottom, BL, activeBorderAttr);
+            if (cx >= 0 && cx < this.width)
+                frame.setData(cx, bottom, H, activeBorderAttr);
+            if (right >= 0 && right < this.width)
+                frame.setData(right, bottom, BR, activeBorderAttr);
+        }
+    };
+    FrameRenderer.prototype.renderItemBoxMedium = function (frame, cx, cy, borderAttr, symbolAttr, pulse) {
+        var left = cx - 1;
+        var right = cx + 1;
+        var activeBorderAttr = (pulse % 2 === 0) ? borderAttr : makeAttr(WHITE, borderAttr & 0xF0);
+        if (cy >= 0 && cy < this.height) {
+            if (left >= 0 && left < this.width)
+                frame.setData(left, cy, '[', activeBorderAttr);
+            if (cx >= 0 && cx < this.width) {
+                var qAttr = (pulse % 2 === 0) ? symbolAttr : makeAttr(YELLOW, symbolAttr & 0xF0);
+                frame.setData(cx, cy, '?', qAttr);
+            }
+            if (right >= 0 && right < this.width)
+                frame.setData(right, cy, ']', activeBorderAttr);
+        }
+        var bottom = cy + 1;
+        if (bottom >= 0 && bottom < this.height) {
+            if (cx >= 0 && cx < this.width)
+                frame.setData(cx, bottom, GLYPH.LOWER_HALF, makeAttr(DARKGRAY, BG_BLACK));
+        }
+    };
+    FrameRenderer.prototype.renderItemBoxSmall = function (frame, cx, cy, borderAttr, symbolAttr, pulse) {
+        if (cx < 0 || cx >= this.width || cy < 0 || cy >= this.height)
+            return;
+        var char = (pulse % 2 === 0) ? '?' : GLYPH.FULL_BLOCK;
+        var attr = (pulse % 2 === 0) ? symbolAttr : borderAttr;
+        frame.setData(cx, cy, char, attr);
+    };
+    FrameRenderer.prototype.renderItemBoxDestruction = function (frame, cx, cy, t, destructionTimer, startTime) {
+        var totalDuration = 0.4;
+        var progress = 1 - (destructionTimer / totalDuration);
+        progress = Math.max(0, Math.min(1, progress));
+        var colors = [YELLOW, WHITE, LIGHTCYAN, LIGHTMAGENTA, LIGHTRED];
+        var colorIndex = Math.floor((Date.now() - startTime) / 50) % colors.length;
+        var explosionAttr = makeAttr(colors[colorIndex], BG_BLACK);
+        var sparkAttr = makeAttr(YELLOW, BG_BLACK);
+        var scale = t > 0.5 ? 3 : (t > 0.25 ? 2 : 1);
+        var spread = Math.floor(progress * scale * 2) + 1;
+        var chars = ['*', '+', GLYPH.LIGHT_SHADE, '.', GLYPH.MEDIUM_SHADE];
+        if (progress < 0.5) {
+            if (cx >= 0 && cx < this.width && cy >= 0 && cy < this.height) {
+                frame.setData(cx, cy, chars[0], explosionAttr);
+            }
+        }
+        var particleCount = Math.floor(progress * 8);
+        for (var i = 0; i < particleCount; i++) {
+            var angle = (i / 8) * Math.PI * 2;
+            var dist = spread * (0.5 + progress * 0.5);
+            var px = Math.round(cx + Math.cos(angle) * dist);
+            var py = Math.round(cy + Math.sin(angle) * dist * 0.5);
+            if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                var charIdx = (i + Math.floor(progress * 3)) % chars.length;
+                var attr = (i % 2 === 0) ? explosionAttr : sparkAttr;
+                frame.setData(px, py, chars[charIdx], attr);
+            }
+        }
+        if (progress > 0.3 && progress < 0.8) {
+            var sparkles = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+            for (var s = 0; s < sparkles.length; s++) {
+                var sx = cx + sparkles[s][0];
+                var sy = cy + sparkles[s][1];
+                if (sx >= 0 && sx < this.width && sy >= 0 && sy < this.height) {
+                    var sparkChar = (Date.now() % 100 < 50) ? '*' : '+';
+                    frame.setData(sx, sy, sparkChar, sparkAttr);
+                }
+            }
+        }
+    };
+    FrameRenderer.prototype.renderPlayerPickupEffect = function (frame, destructionTimer, startTime, themeAttr) {
+        var totalDuration = 0.5;
+        var progress = 1 - (destructionTimer / totalDuration);
+        progress = Math.max(0, Math.min(1, progress));
+        var cx = Math.floor(this.width / 2);
+        var cy = this.height - 5;
+        var colors = [WHITE, YELLOW, LIGHTCYAN, LIGHTMAGENTA, YELLOW];
+        var colorIndex = Math.floor((Date.now() - startTime) / 40) % colors.length;
+        var burstAttr = makeAttr(colors[colorIndex], BG_BLACK);
+        var sparkAttr = makeAttr(YELLOW, BG_BLACK);
+        var flashChars = ['*', '+', GLYPH.LIGHT_SHADE, '!', '?', GLYPH.MEDIUM_SHADE, GLYPH.FULL_BLOCK];
+        if (progress < 0.3) {
+            var flashSize = Math.floor(3 + progress * 6);
+            for (var fy = -1; fy <= 1; fy++) {
+                for (var fx = -flashSize; fx <= flashSize; fx++) {
+                    var px = cx + fx;
+                    var py = cy + fy;
+                    if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                        var dist = Math.abs(fx) + Math.abs(fy);
+                        var charIdx = dist % flashChars.length;
+                        var attr = (dist % 2 === 0) ? burstAttr : themeAttr;
+                        frame.setData(px, py, flashChars[charIdx], attr);
+                    }
+                }
+            }
+        }
+        if (progress > 0.1 && progress < 0.7) {
+            var ringProgress = (progress - 0.1) / 0.5;
+            var ringRadius = 2 + ringProgress * 10;
+            var numParticles = 12;
+            for (var i = 0; i < numParticles; i++) {
+                var angle = (i / numParticles) * Math.PI * 2;
+                var px = Math.round(cx + Math.cos(angle) * ringRadius);
+                var py = Math.round(cy + Math.sin(angle) * ringRadius * 0.4);
+                if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                    var charIdx = (i + Math.floor(progress * 5)) % flashChars.length;
+                    var attr = (i % 3 === 0) ? burstAttr : (i % 3 === 1) ? sparkAttr : themeAttr;
+                    frame.setData(px, py, flashChars[charIdx], attr);
+                }
+            }
+        }
+        if (progress > 0.2) {
+            var riseProgress = (progress - 0.2) / 0.8;
+            var numSparkles = 8;
+            for (var s = 0; s < numSparkles; s++) {
+                var sx = cx + (s - numSparkles / 2) * 2;
+                var sy = cy - Math.floor(riseProgress * (4 + (s % 3) * 2));
+                if (sx >= 0 && sx < this.width && sy >= 0 && sy < this.height) {
+                    var sparkleChar = (Date.now() % 80 < 40) ? '*' : '+';
+                    var attr = (s % 2 === 0) ? burstAttr : sparkAttr;
+                    frame.setData(sx, sy, sparkleChar, attr);
+                }
+            }
+        }
+        if (progress < 0.4) {
+            var textY = cy - 3;
+            if (progress < 0.15) {
+                if (cx >= 0 && cx < this.width && textY >= 0 && textY < this.height) {
+                    frame.setData(cx, textY, '!', burstAttr);
                 }
             }
         }
@@ -511,6 +714,25 @@ var FrameRenderer = (function () {
             return;
         var isFlashing = vehicle.flashTimer > 0;
         var flashAttr = makeAttr(LIGHTRED, BG_BLACK);
+        var hasLightning = vehicle.hasEffect(ItemType.LIGHTNING);
+        var hasStar = vehicle.hasEffect(ItemType.STAR);
+        var hasBullet = vehicle.hasEffect(ItemType.BULLET);
+        if (hasLightning) {
+            var lightningCycle = Math.floor(Date.now() / 150) % 2;
+            flashAttr = lightningCycle === 0 ? makeAttr(CYAN, BG_BLACK) : makeAttr(LIGHTCYAN, BG_BLUE);
+            isFlashing = true;
+        }
+        if (hasStar) {
+            var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+            var starIndex = Math.floor(Date.now() / 80) % starColors.length;
+            flashAttr = makeAttr(starColors[starIndex], BG_BLACK);
+            isFlashing = true;
+        }
+        if (hasBullet) {
+            var bulletCycle = Math.floor(Date.now() / 100) % 2;
+            flashAttr = bulletCycle === 0 ? makeAttr(WHITE, BG_BLACK) : makeAttr(YELLOW, BG_BLACK);
+            isFlashing = true;
+        }
         var visualHorizon = 5;
         for (var row = 0; row < variant.length; row++) {
             for (var col = 0; col < variant[row].length; col++) {
@@ -530,6 +752,7 @@ var FrameRenderer = (function () {
         if (this.activeTheme.name === 'glitch_circuit' && typeof GlitchState !== 'undefined') {
             this.applyGlitchEffects();
         }
+        this.renderLightningBolts();
         this.cycle();
     };
     FrameRenderer.prototype.getComposer = function () {
@@ -1020,6 +1243,127 @@ var FrameRenderer = (function () {
             var by = bubblePositions[i][1];
             frame.setData(bx, by, 'o', makeAttr(WHITE, BG_BLUE));
         }
+    };
+    FrameRenderer.prototype.renderAquariumBackground = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var glassFrameAttr = makeAttr(LIGHTGRAY, BG_BLACK);
+        var glassHighlightAttr = makeAttr(WHITE, BG_BLACK);
+        var glassDarkAttr = makeAttr(DARKGRAY, BG_BLACK);
+        var waterAttr = makeAttr(CYAN, BG_BLUE);
+        var waterDeepAttr = makeAttr(BLUE, BG_BLUE);
+        var coralAttr = makeAttr(LIGHTRED, BG_BLUE);
+        var coralYellowAttr = makeAttr(YELLOW, BG_BLUE);
+        var plantAttr = makeAttr(LIGHTGREEN, BG_BLUE);
+        var sandAttr = makeAttr(YELLOW, BG_BLUE);
+        var rockAttr = makeAttr(DARKGRAY, BG_BLUE);
+        var mermaidSkinAttr = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var mermaidHairAttr = makeAttr(LIGHTRED, BG_BLUE);
+        var mermaidTailAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var mermaidTailGlowAttr = makeAttr(CYAN, BG_BLUE);
+        for (var y = 0; y < this.horizonY; y++) {
+            frame.setData(0, y, GLYPH.FULL_BLOCK, glassDarkAttr);
+            frame.setData(1, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+            frame.setData(2, y, GLYPH.LIGHT_SHADE, glassHighlightAttr);
+            for (var x = 3; x < 7; x++) {
+                frame.setData(x, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+            }
+            frame.setData(7, y, GLYPH.RIGHT_HALF, glassFrameAttr);
+        }
+        for (var y = 0; y < this.horizonY; y++) {
+            frame.setData(72, y, GLYPH.LEFT_HALF, glassFrameAttr);
+            for (var x = 73; x < 77; x++) {
+                frame.setData(x, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+            }
+            frame.setData(77, y, GLYPH.LIGHT_SHADE, glassHighlightAttr);
+            frame.setData(78, y, GLYPH.FULL_BLOCK, glassFrameAttr);
+            frame.setData(79, y, GLYPH.FULL_BLOCK, glassDarkAttr);
+        }
+        for (var y = 0; y < this.horizonY; y++) {
+            for (var x = 8; x < 72; x++) {
+                var attr = (y < 4) ? waterAttr : waterDeepAttr;
+                frame.setData(x, y, ' ', attr);
+            }
+        }
+        var bottomY = this.horizonY - 1;
+        for (var x = 8; x < 72; x++) {
+            var sandChar = (x % 3 === 0) ? GLYPH.LOWER_HALF : GLYPH.LIGHT_SHADE;
+            frame.setData(x, bottomY, sandChar, sandAttr);
+        }
+        var rockPositions = [12, 25, 45, 62];
+        for (var i = 0; i < rockPositions.length; i++) {
+            var rx = rockPositions[i];
+            frame.setData(rx, bottomY, GLYPH.FULL_BLOCK, rockAttr);
+            frame.setData(rx + 1, bottomY, GLYPH.FULL_BLOCK, rockAttr);
+            if (bottomY - 1 >= 0) {
+                frame.setData(rx, bottomY - 1, GLYPH.LOWER_HALF, rockAttr);
+            }
+        }
+        var coralPositions = [15, 32, 50, 65];
+        for (var i = 0; i < coralPositions.length; i++) {
+            var cx = coralPositions[i];
+            var attr = (i % 2 === 0) ? coralAttr : coralYellowAttr;
+            frame.setData(cx, bottomY, 'Y', attr);
+            frame.setData(cx + 1, bottomY, '*', attr);
+            frame.setData(cx + 2, bottomY, 'Y', attr);
+            if (bottomY - 1 >= 0) {
+                frame.setData(cx + 1, bottomY - 1, '^', attr);
+            }
+            if (bottomY - 2 >= 0) {
+                frame.setData(cx + 1, bottomY - 2, '*', attr);
+            }
+        }
+        var kelpLeft = [10, 14, 18];
+        var kelpRight = [58, 62, 68];
+        var kelpPositions = kelpLeft.concat(kelpRight);
+        for (var i = 0; i < kelpPositions.length; i++) {
+            var kx = kelpPositions[i];
+            for (var ky = 0; ky < 4; ky++) {
+                var y = bottomY - 1 - ky;
+                if (y >= 0) {
+                    var kchar = (ky % 2 === 0) ? ')' : '(';
+                    frame.setData(kx, y, kchar, plantAttr);
+                }
+            }
+        }
+        var mermaidX = 38;
+        var mermaidY = 5;
+        frame.setData(mermaidX - 6, mermaidY - 1, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 5, mermaidY - 1, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 4, mermaidY - 1, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 5, mermaidY, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 4, mermaidY, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 3, mermaidY, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 4, mermaidY + 1, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 3, mermaidY + 1, '~', mermaidHairAttr);
+        frame.setData(mermaidX - 2, mermaidY, '(', mermaidSkinAttr);
+        frame.setData(mermaidX - 1, mermaidY, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+        frame.setData(mermaidX, mermaidY, ')', mermaidSkinAttr);
+        frame.setData(mermaidX - 1, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+        frame.setData(mermaidX, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidSkinAttr);
+        frame.setData(mermaidX + 1, mermaidY + 1, '\\', mermaidSkinAttr);
+        frame.setData(mermaidX, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 1, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 2, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 3, mermaidY + 2, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 4, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 5, mermaidY + 1, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 6, mermaidY, GLYPH.FULL_BLOCK, mermaidTailAttr);
+        frame.setData(mermaidX + 7, mermaidY - 1, '/', mermaidTailGlowAttr);
+        frame.setData(mermaidX + 7, mermaidY, GLYPH.FULL_BLOCK, mermaidTailGlowAttr);
+        frame.setData(mermaidX + 7, mermaidY + 1, '\\', mermaidTailGlowAttr);
+        frame.setData(mermaidX + 8, mermaidY - 1, '/', mermaidTailGlowAttr);
+        frame.setData(mermaidX + 8, mermaidY + 1, '\\', mermaidTailGlowAttr);
+        var fishAttr = makeAttr(YELLOW, BG_BLUE);
+        frame.setData(mermaidX - 8, mermaidY + 3, '<', fishAttr);
+        frame.setData(mermaidX - 7, mermaidY + 3, '>', fishAttr);
+        frame.setData(mermaidX + 12, mermaidY - 2, '<', makeAttr(LIGHTRED, BG_BLUE));
+        frame.setData(mermaidX + 13, mermaidY - 2, '>', makeAttr(LIGHTRED, BG_BLUE));
+        frame.setData(mermaidX + 2, mermaidY - 2, 'o', makeAttr(WHITE, BG_BLUE));
+        frame.setData(mermaidX + 3, mermaidY - 3, '.', makeAttr(WHITE, BG_BLUE));
+        frame.setData(20, 3, 'o', makeAttr(WHITE, BG_BLUE));
+        frame.setData(55, 2, 'o', makeAttr(WHITE, BG_BLUE));
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -1884,6 +2228,108 @@ var FrameRenderer = (function () {
             }
         }
     };
+    FrameRenderer.prototype.renderSkyWater = function (trackPosition, speed, dt) {
+        var frame = this.frameManager.getSkyGridFrame();
+        if (!frame)
+            return;
+        frame.clear();
+        if (speed > 1) {
+            this._skyGridAnimPhase += dt * 2.0;
+            while (this._skyGridAnimPhase >= 1)
+                this._skyGridAnimPhase -= 1;
+        }
+        var deepAttr = makeAttr(BLUE, BG_BLUE);
+        var midAttr = makeAttr(CYAN, BG_BLUE);
+        var surfaceAttr = makeAttr(LIGHTCYAN, BG_CYAN);
+        var waveAttr = makeAttr(WHITE, BG_CYAN);
+        var bubbleAttr = makeAttr(WHITE, BG_BLUE);
+        var lightrayAttr = makeAttr(LIGHTCYAN, BG_BLUE);
+        var fish1Attr = makeAttr(YELLOW, BG_BLUE);
+        var fish2Attr = makeAttr(LIGHTRED, BG_BLUE);
+        var fish3Attr = makeAttr(LIGHTGREEN, BG_BLUE);
+        var surfaceZone = 3;
+        var lightZone = Math.floor(this.horizonY * 0.5);
+        for (var y = 0; y < this.horizonY; y++) {
+            var attr;
+            var baseChars;
+            if (y < surfaceZone) {
+                attr = surfaceAttr;
+                baseChars = ['~', '~', GLYPH.UPPER_HALF, '~', GLYPH.LOWER_HALF, '~'];
+            }
+            else if (y < lightZone) {
+                attr = midAttr;
+                baseChars = ['~', ' ', GLYPH.LIGHT_SHADE, ' ', '~', ' '];
+            }
+            else {
+                attr = deepAttr;
+                baseChars = [' ', ' ', GLYPH.LIGHT_SHADE, ' ', ' ', ' ', ' ', ' '];
+            }
+            var waveOffset = Math.floor(this._skyGridAnimPhase * 20 + y * 0.5);
+            for (var x = 0; x < this.width; x++) {
+                var charIndex = (x + waveOffset) % baseChars.length;
+                var char = baseChars[charIndex];
+                var cellAttr = attr;
+                if (y < surfaceZone) {
+                    var wavePhase = Math.sin((x + trackPosition * 0.1 + this._skyGridAnimPhase * 10) * 0.3);
+                    if (wavePhase > 0.7) {
+                        cellAttr = waveAttr;
+                        char = GLYPH.FULL_BLOCK;
+                    }
+                }
+                frame.setData(x, y, char, cellAttr);
+            }
+        }
+        var numRays = 5;
+        for (var i = 0; i < numRays; i++) {
+            var rayX = 10 + i * 15;
+            var rayWobble = Math.sin(this._skyGridAnimPhase * 6.28 + i * 2) * 2;
+            var actualX = Math.floor(rayX + rayWobble);
+            for (var ry = surfaceZone; ry < lightZone; ry++) {
+                if (actualX >= 0 && actualX < this.width) {
+                    var fade = 1 - (ry - surfaceZone) / (lightZone - surfaceZone);
+                    if (Math.random() < fade * 0.6) {
+                        frame.setData(actualX, ry, GLYPH.LIGHT_SHADE, lightrayAttr);
+                    }
+                }
+            }
+        }
+        var fishPhase = trackPosition * 0.02 + this._skyGridAnimPhase * 5;
+        var fish1X = Math.floor((fishPhase * 30) % (this.width + 10)) - 5;
+        var fish1Y = 5 + Math.floor(Math.sin(fishPhase * 2) * 2);
+        if (fish1X >= 0 && fish1X < this.width - 3 && fish1Y >= 0 && fish1Y < this.horizonY) {
+            frame.setData(fish1X, fish1Y, '<', fish1Attr);
+            frame.setData(fish1X + 1, fish1Y, GLYPH.FULL_BLOCK, fish1Attr);
+            frame.setData(fish1X + 2, fish1Y, '>', fish1Attr);
+        }
+        var fish2X = this.width - Math.floor((fishPhase * 25) % (this.width + 8));
+        var fish2Y = 8 + Math.floor(Math.sin(fishPhase * 1.5 + 1) * 2);
+        if (fish2X >= 2 && fish2X < this.width && fish2Y >= 0 && fish2Y < this.horizonY) {
+            frame.setData(fish2X, fish2Y, '<', fish2Attr);
+            frame.setData(fish2X - 1, fish2Y, GLYPH.FULL_BLOCK, fish2Attr);
+            frame.setData(fish2X - 2, fish2Y, '>', fish2Attr);
+        }
+        for (var f = 0; f < 4; f++) {
+            var schoolX = Math.floor(((fishPhase + f * 0.7) * 20) % this.width);
+            var schoolY = 3 + f * 2;
+            if (schoolY < this.horizonY - 2) {
+                frame.setData(schoolX, schoolY, '<', fish3Attr);
+                frame.setData((schoolX + 1) % this.width, schoolY, '>', fish3Attr);
+            }
+        }
+        var bubblePositions = [8, 22, 38, 55, 72];
+        for (var i = 0; i < bubblePositions.length; i++) {
+            var bubbleBaseX = bubblePositions[i];
+            var bubbleY = this.horizonY - 2 - Math.floor((trackPosition * 0.5 + i * 7) % (this.horizonY - 2));
+            var wobble = Math.sin(trackPosition * 0.1 + i * 3) * 1.5;
+            var bx = Math.floor(bubbleBaseX + wobble);
+            if (bubbleY >= 0 && bubbleY < this.horizonY && bx >= 0 && bx < this.width) {
+                frame.setData(bx, bubbleY, 'o', bubbleAttr);
+                if (bubbleY + 2 < this.horizonY) {
+                    frame.setData(bx, bubbleY + 2, '.', bubbleAttr);
+                }
+            }
+        }
+    };
     FrameRenderer.prototype.updateParallax = function (curvature, steer, speed, dt) {
         var scrollAmount = (curvature * 0.8 + steer * 0.3) * speed * dt * 0.15;
         this._mountainScrollOffset += scrollAmount;
@@ -2629,12 +3075,22 @@ var FrameRenderer = (function () {
             return 3;
         return 4;
     };
-    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing, isBoosting, hasStar, hasBullet, hasLightning) {
+    FrameRenderer.prototype.setBrakeLightState = function (brakeLightsOn) {
+        this._currentBrakeLightsOn = brakeLightsOn;
+    };
+    FrameRenderer.prototype.renderPlayerVehicle = function (playerX, isFlashing, isBoosting, hasStar, hasBullet, hasLightning, carId, carColorId, brakeLightsOn) {
         var frame = this.frameManager.getVehicleFrame(0);
         if (!frame)
             return;
-        renderSpriteToFrame(frame, this.playerCarSprite, 0);
+        var effectiveCarId = carId || 'sports';
+        var effectiveColorId = carColorId || 'yellow';
+        var effectiveBrake = brakeLightsOn !== undefined ? brakeLightsOn : this._currentBrakeLightsOn;
+        var carDef = getCarDefinition(effectiveCarId);
+        var bodyStyle = carDef ? carDef.bodyStyle : 'sports';
+        var sprite = getPlayerCarSprite(bodyStyle, effectiveColorId, effectiveBrake);
+        renderSpriteToFrame(frame, sprite, 0);
         var now = Date.now();
+        var effectFlashColor = getEffectFlashColor(effectiveColorId);
         if (hasStar) {
             var starColors = [LIGHTRED, YELLOW, LIGHTGREEN, LIGHTCYAN, LIGHTBLUE, LIGHTMAGENTA];
             var colorIndex = Math.floor(now / 60) % starColors.length;
@@ -2642,7 +3098,7 @@ var FrameRenderer = (function () {
             var starAttr = makeAttr(starColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
-                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
                     if (cell) {
                         frame.setData(x, y, cell.char, starAttr);
                     }
@@ -2650,11 +3106,11 @@ var FrameRenderer = (function () {
             }
         }
         else if (hasBullet) {
-            var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : YELLOW;
+            var bulletColor = (Math.floor(now / 40) % 2 === 0) ? WHITE : effectFlashColor;
             var bulletAttr = makeAttr(bulletColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
-                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
                     if (cell) {
                         frame.setData(x, y, cell.char, bulletAttr);
                     }
@@ -2667,7 +3123,7 @@ var FrameRenderer = (function () {
             var lightningAttr = makeAttr(lightningColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
-                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
                     if (cell) {
                         frame.setData(x, y, cell.char, lightningAttr);
                     }
@@ -2679,7 +3135,7 @@ var FrameRenderer = (function () {
             var flashAttr = makeAttr(flashColor, BG_BLACK);
             for (var y = 0; y < 3; y++) {
                 for (var x = 0; x < 5; x++) {
-                    var cell = this.playerCarSprite.variants[0][y] ? this.playerCarSprite.variants[0][y][x] : null;
+                    var cell = sprite.variants[0][y] ? sprite.variants[0][y][x] : null;
                     if (cell) {
                         frame.setData(x, y, cell.char, flashAttr);
                     }
@@ -2687,10 +3143,10 @@ var FrameRenderer = (function () {
             }
         }
         else if (isBoosting) {
-            var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : YELLOW;
+            var boostColor = (Math.floor(now / 80) % 2 === 0) ? LIGHTCYAN : effectFlashColor;
             var boostAttr = makeAttr(boostColor, BG_BLACK);
             for (var bx = 0; bx < 5; bx++) {
-                var cell = this.playerCarSprite.variants[0][2] ? this.playerCarSprite.variants[0][2][bx] : null;
+                var cell = sprite.variants[0][2] ? sprite.variants[0][2][bx] : null;
                 if (cell) {
                     frame.setData(bx, 2, cell.char, boostAttr);
                 }
@@ -2710,87 +3166,188 @@ var FrameRenderer = (function () {
         this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
         this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
         var bottomY = this.height - 1;
-        this.writeStringToFrame(frame, 2, bottomY, hudData.lap + '/' + hudData.totalLaps, valueAttr);
-        this.renderTrackProgressCompact(frame, hudData.lapProgress, 7, bottomY, 12);
         var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
-        this.writeStringToFrame(frame, 21, bottomY, posStr, valueAttr);
+        this.writeStringToFrame(frame, 0, bottomY - 1, posStr, valueAttr);
+        this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16);
         var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
         var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
         this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
-        this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 10);
-        if (hudData.heldItem !== null) {
-            var itemData = hudData.heldItem;
-            var itemName = this.getItemDisplayName(itemData.type);
-            var itemAttr = this.getItemDisplayAttr(itemData.type);
-            if (itemData.uses > 1) {
-                itemName = itemName + "x" + itemData.uses;
-            }
-            this.writeStringToFrame(frame, 71 - itemName.length, bottomY - 1, itemName, itemAttr);
-        }
+        this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 11);
+        this.renderItemSlotWithIcon(frame, hudData.heldItem);
         if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
             this.renderStoplight(frame, hudData.countdown);
         }
     };
-    FrameRenderer.prototype.getItemDisplayName = function (itemType) {
-        switch (itemType) {
-            case ItemType.MUSHROOM:
-            case ItemType.MUSHROOM_TRIPLE:
-                return 'MUSHROOM';
-            case ItemType.MUSHROOM_GOLDEN:
-                return 'G.MUSHROOM';
-            case ItemType.SHELL:
-            case ItemType.SHELL_TRIPLE:
-                return 'SHELL';
-            case ItemType.GREEN_SHELL:
-            case ItemType.GREEN_SHELL_TRIPLE:
-                return 'SHELL';
-            case ItemType.RED_SHELL:
-            case ItemType.RED_SHELL_TRIPLE:
-                return 'SHELL';
-            case ItemType.BLUE_SHELL:
-                return 'SHELL';
-            case ItemType.BANANA:
-            case ItemType.BANANA_TRIPLE:
-                return 'BANANA';
-            case ItemType.STAR:
-                return 'STAR';
-            case ItemType.LIGHTNING:
-                return 'LIGHTNING';
-            case ItemType.BULLET:
-                return 'BULLET';
-            default:
-                return '???';
+    FrameRenderer.prototype.renderItemSlotWithIcon = function (frame, heldItem) {
+        var slotLeft = 67;
+        var slotRight = 79;
+        var slotTop = 19;
+        var slotBottom = 21;
+        var slotHeight = 3;
+        var slotWidth = slotRight - slotLeft + 1;
+        var separatorAttr = makeAttr(DARKGRAY, BG_BLACK);
+        frame.setData(slotLeft, slotTop, GLYPH.BOX_VD_HD, separatorAttr);
+        for (var row = slotTop + 1; row < slotBottom; row++) {
+            frame.setData(slotLeft, row, GLYPH.BOX_V, separatorAttr);
+        }
+        frame.setData(slotLeft, slotBottom, GLYPH.BOX_VD_HU, separatorAttr);
+        if (heldItem === null) {
+            return;
+        }
+        var itemType = heldItem.type;
+        var uses = heldItem.uses;
+        var isActivated = heldItem.activated;
+        var icon = this.getItemIconCP437(itemType);
+        var iconWidth = icon.cells[0].length;
+        var availableWidth = slotWidth - 1;
+        var iconX = slotLeft + 1 + Math.floor((availableWidth - iconWidth) / 2);
+        if (uses > 1) {
+            iconX = slotLeft + 3;
+            var countAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+            frame.setData(slotLeft + 1, slotTop + 1, String(uses).charAt(0), countAttr);
+        }
+        for (var row = 0; row < icon.cells.length && row < slotHeight; row++) {
+            var cellRow = icon.cells[row];
+            for (var col = 0; col < cellRow.length; col++) {
+                var cellData = cellRow[col];
+                if (cellData.char !== ' ') {
+                    var attr = this.getIconAttrCP437(cellData.attr, itemType, isActivated);
+                    frame.setData(iconX + col, slotTop + row, cellData.char, attr);
+                }
+            }
         }
     };
-    FrameRenderer.prototype.getItemDisplayAttr = function (itemType) {
+    FrameRenderer.prototype.getItemIconCP437 = function (itemType) {
+        var FB = GLYPH.FULL_BLOCK;
+        var LH = GLYPH.LOWER_HALF;
+        var UH = GLYPH.UPPER_HALF;
+        var DS = GLYPH.DARK_SHADE;
+        var LS = GLYPH.LIGHT_SHADE;
+        var __ = ' ';
+        function cell(ch, fg, bg) {
+            return { char: ch, attr: makeAttr(fg, bg) };
+        }
+        var X = cell(__, BLACK, BG_BLACK);
         switch (itemType) {
             case ItemType.MUSHROOM:
             case ItemType.MUSHROOM_TRIPLE:
+                return {
+                    cells: [
+                        [X, cell(LH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LH, LIGHTRED, BG_BLACK), X],
+                        [cell(FB, LIGHTRED, BG_BLACK), cell('o', WHITE, BG_RED), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell('o', WHITE, BG_RED), cell(FB, LIGHTRED, BG_BLACK)],
+                        [X, X, cell(FB, WHITE, BG_BLACK), cell(FB, WHITE, BG_BLACK), X, X]
+                    ],
+                    mainColor: LIGHTRED
+                };
             case ItemType.MUSHROOM_GOLDEN:
-                return makeAttr(LIGHTRED, BG_BLACK);
-            case ItemType.SHELL:
-            case ItemType.SHELL_TRIPLE:
-                return makeAttr(LIGHTGREEN, BG_BLACK);
+                return {
+                    cells: [
+                        [X, cell(LH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, YELLOW, BG_BLACK), X],
+                        [cell(FB, YELLOW, BG_BLACK), cell('*', WHITE, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell('*', WHITE, BG_BLACK), cell(FB, YELLOW, BG_BLACK)],
+                        [X, X, cell(FB, WHITE, BG_BLACK), cell(FB, WHITE, BG_BLACK), X, X]
+                    ],
+                    mainColor: YELLOW
+                };
             case ItemType.GREEN_SHELL:
             case ItemType.GREEN_SHELL_TRIPLE:
-                return makeAttr(LIGHTGREEN, BG_BLACK);
+                return {
+                    cells: [
+                        [X, cell(LH, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(LH, LIGHTGREEN, BG_BLACK), X],
+                        [cell(FB, LIGHTGREEN, BG_BLACK), cell(LS, YELLOW, BG_GREEN), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(LS, YELLOW, BG_GREEN), cell(FB, LIGHTGREEN, BG_BLACK)],
+                        [X, cell(UH, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(FB, LIGHTGREEN, BG_BLACK), cell(UH, LIGHTGREEN, BG_BLACK), X]
+                    ],
+                    mainColor: LIGHTGREEN
+                };
             case ItemType.RED_SHELL:
             case ItemType.RED_SHELL_TRIPLE:
-                return makeAttr(LIGHTRED, BG_BLACK);
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return {
+                    cells: [
+                        [X, cell(LH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LH, LIGHTRED, BG_BLACK), X],
+                        [cell(FB, LIGHTRED, BG_BLACK), cell(LS, YELLOW, BG_RED), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(LS, YELLOW, BG_RED), cell(FB, LIGHTRED, BG_BLACK)],
+                        [X, cell(UH, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(FB, LIGHTRED, BG_BLACK), cell(UH, LIGHTRED, BG_BLACK), X]
+                    ],
+                    mainColor: LIGHTRED
+                };
             case ItemType.BLUE_SHELL:
-                return makeAttr(LIGHTCYAN, BG_BLACK);
+                return {
+                    cells: [
+                        [cell(LS, LIGHTCYAN, BG_BLACK), cell(LH, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(LH, LIGHTCYAN, BG_BLACK), cell(LS, LIGHTCYAN, BG_BLACK)],
+                        [cell(UH, WHITE, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(DS, WHITE, BG_CYAN), cell(DS, WHITE, BG_CYAN), cell(FB, LIGHTCYAN, BG_BLACK), cell(UH, WHITE, BG_BLACK)],
+                        [X, cell(UH, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(FB, LIGHTCYAN, BG_BLACK), cell(UH, LIGHTCYAN, BG_BLACK), X]
+                    ],
+                    mainColor: LIGHTCYAN,
+                    altColor: WHITE
+                };
             case ItemType.BANANA:
             case ItemType.BANANA_TRIPLE:
-                return makeAttr(YELLOW, BG_BLACK);
+                return {
+                    cells: [
+                        [X, cell(LH, GREEN, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, GREEN, BG_BLACK), X],
+                        [cell(FB, YELLOW, BG_BLACK), cell(UH, YELLOW, BG_BLACK), X, X, cell(UH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK)],
+                        [cell(UH, YELLOW, BG_BLACK), X, X, X, X, cell(UH, YELLOW, BG_BLACK)]
+                    ],
+                    mainColor: YELLOW
+                };
             case ItemType.STAR:
-                return makeAttr(YELLOW, BG_BLACK);
+                return {
+                    cells: [
+                        [X, X, cell(LH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(LH, YELLOW, BG_BLACK), X, X],
+                        [cell(UH, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(FB, YELLOW, BG_BLACK), cell(UH, YELLOW, BG_BLACK)],
+                        [X, X, cell(UH, YELLOW, BG_BLACK), X, cell(UH, YELLOW, BG_BLACK), X, X]
+                    ],
+                    mainColor: YELLOW
+                };
             case ItemType.LIGHTNING:
-                return makeAttr(LIGHTCYAN, BG_BLACK);
+                return {
+                    cells: [
+                        [X, cell('/', LIGHTCYAN, BG_BLACK), cell('\\', LIGHTCYAN, BG_BLACK), X, X],
+                        [cell('/', LIGHTCYAN, BG_BLACK), cell('-', YELLOW, BG_BLACK), cell('-', YELLOW, BG_BLACK), cell('\\', LIGHTCYAN, BG_BLACK), X],
+                        [X, X, X, cell('\\', LIGHTCYAN, BG_BLACK), cell('/', LIGHTCYAN, BG_BLACK)]
+                    ],
+                    mainColor: YELLOW,
+                    altColor: LIGHTCYAN
+                };
             case ItemType.BULLET:
-                return makeAttr(WHITE, BG_BLACK);
+                return {
+                    cells: [
+                        [cell(LH, DARKGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(LH, DARKGRAY, BG_BLACK)],
+                        [cell(FB, DARKGRAY, BG_BLACK), cell('O', WHITE, BG_BLACK), cell('O', WHITE, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(UH, LIGHTGRAY, BG_BLACK)],
+                        [cell(UH, DARKGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(FB, LIGHTGRAY, BG_BLACK), cell(UH, DARKGRAY, BG_BLACK)]
+                    ],
+                    mainColor: LIGHTGRAY,
+                    altColor: WHITE
+                };
             default:
-                return makeAttr(WHITE, BG_BLACK);
+                return {
+                    cells: [
+                        [X, X, cell('?', YELLOW, BG_BLACK), X, X],
+                        [X, cell('?', YELLOW, BG_BLACK), cell('?', YELLOW, BG_BLACK), cell('?', YELLOW, BG_BLACK), X],
+                        [X, X, cell('?', YELLOW, BG_BLACK), X, X]
+                    ],
+                    mainColor: YELLOW
+                };
         }
+    };
+    FrameRenderer.prototype.getIconAttrCP437 = function (baseAttr, itemType, isActivated) {
+        switch (itemType) {
+            case ItemType.STAR:
+                if (isActivated) {
+                    var starColors = [YELLOW, LIGHTRED, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+                    var colorIdx = Math.floor(Date.now() / 100) % starColors.length;
+                    var bg = (baseAttr >> 4) & 0x07;
+                    return makeAttr(starColors[colorIdx], bg << 4);
+                }
+                break;
+            case ItemType.LIGHTNING:
+                if (isActivated && (Math.floor(Date.now() / 150) % 2 === 0)) {
+                    var bg2 = (baseAttr >> 4) & 0x07;
+                    return makeAttr(LIGHTCYAN, bg2 << 4);
+                }
+                break;
+        }
+        return baseAttr;
     };
     FrameRenderer.prototype.renderStoplight = function (frame, countdown) {
         var countNum = Math.ceil(countdown);
@@ -2830,18 +3387,32 @@ var FrameRenderer = (function () {
         }
         frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
-    FrameRenderer.prototype.renderTrackProgressCompact = function (frame, progress, x, y, width) {
+    FrameRenderer.prototype.renderLapProgressBar = function (frame, lap, totalLaps, progress, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
-        var filledAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
-        var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
         frame.setData(x, y, '[', labelAttr);
-        var fillWidth = Math.round(progress * width);
-        for (var i = 0; i < width; i++) {
-            var attr = (i < fillWidth) ? filledAttr : emptyAttr;
-            var char = (i < fillWidth) ? GLYPH.FULL_BLOCK : GLYPH.LIGHT_SHADE;
-            frame.setData(x + 1 + i, y, char, attr);
-        }
         frame.setData(x + width + 1, y, ']', labelAttr);
+        var fillWidth = Math.round(progress * width);
+        var lapText = 'LAP ' + lap + '/' + totalLaps;
+        var textStart = Math.floor((width - lapText.length) / 2);
+        for (var i = 0; i < width; i++) {
+            var isFilled = i < fillWidth;
+            var bg = isFilled ? BG_BLUE : BG_BLACK;
+            var textIndex = i - textStart;
+            if (textIndex >= 0 && textIndex < lapText.length) {
+                var attr = colorToAttr({ fg: YELLOW, bg: bg });
+                frame.setData(x + 1 + i, y, lapText.charAt(textIndex), attr);
+            }
+            else {
+                if (isFilled) {
+                    var filledAttr = colorToAttr({ fg: LIGHTBLUE, bg: BG_BLUE });
+                    frame.setData(x + 1 + i, y, ' ', filledAttr);
+                }
+                else {
+                    var emptyAttr = colorToAttr({ fg: DARKGRAY, bg: BG_BLACK });
+                    frame.setData(x + 1 + i, y, GLYPH.LIGHT_SHADE, emptyAttr);
+                }
+            }
+        }
     };
     FrameRenderer.prototype.renderSpeedometerBarCompact = function (frame, speed, maxSpeed, x, y, width) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
@@ -2884,6 +3455,70 @@ var FrameRenderer = (function () {
             str = ' ' + str;
         }
         return str;
+    };
+    FrameRenderer.prototype.triggerLightningBolt = function (targetX, targetY) {
+        var x = targetX !== undefined ? targetX : 40;
+        var y = targetY !== undefined ? targetY : this.height - 3;
+        this._lightningBolts.push({
+            x: x,
+            startTime: Date.now(),
+            targetY: y
+        });
+    };
+    FrameRenderer.prototype.triggerLightningStrike = function (hitCount) {
+        this.triggerLightningBolt(40, this.height - 3);
+        var additionalBolts = Math.min(hitCount, 4);
+        for (var i = 0; i < additionalBolts; i++) {
+            var randomX = 10 + Math.floor(Math.random() * 60);
+            var randomY = 8 + Math.floor(Math.random() * 10);
+            this.triggerLightningBolt(randomX, randomY);
+        }
+    };
+    FrameRenderer.prototype.renderLightningBolts = function () {
+        if (this._lightningBolts.length === 0)
+            return;
+        var now = Date.now();
+        var roadFrame = this.frameManager.getRoadFrame();
+        if (!roadFrame)
+            return;
+        var boltDuration = 300;
+        var flashCycleMs = 40;
+        for (var i = this._lightningBolts.length - 1; i >= 0; i--) {
+            var bolt = this._lightningBolts[i];
+            var elapsed = now - bolt.startTime;
+            if (elapsed > boltDuration) {
+                this._lightningBolts.splice(i, 1);
+                continue;
+            }
+            var progress = elapsed / boltDuration;
+            var startY = 1;
+            var currentEndY = Math.floor(startY + (bolt.targetY - startY) * Math.min(1, progress * 2));
+            var colorPhase = Math.floor(now / flashCycleMs) % 3;
+            var boltColor = colorPhase === 0 ? WHITE : (colorPhase === 1 ? YELLOW : LIGHTCYAN);
+            var boltAttr = makeAttr(boltColor, BG_BLACK);
+            var brightAttr = makeAttr(WHITE, BG_BLUE);
+            var x = bolt.x;
+            for (var y = startY; y <= currentEndY; y++) {
+                var jitter = (y % 3 === 0) ? ((y % 6 === 0) ? 1 : -1) : 0;
+                var drawX = x + jitter;
+                var char = jitter > 0 ? '\\' : (jitter < 0 ? '/' : '|');
+                var attr = (y === currentEndY && progress < 0.7) ? brightAttr : boltAttr;
+                if (drawX >= 0 && drawX < this.width && y >= 0 && y < this.height - 1) {
+                    roadFrame.setData(drawX, y, char, attr);
+                }
+                x = drawX;
+            }
+            if (progress > 0.3 && progress < 0.8) {
+                var flashRadius = 2;
+                var impactAttr = makeAttr(WHITE, BG_CYAN);
+                for (var fx = -flashRadius; fx <= flashRadius; fx++) {
+                    var impactX = bolt.x + fx;
+                    if (impactX >= 0 && impactX < this.width && bolt.targetY < this.height - 1) {
+                        roadFrame.setData(impactX, bolt.targetY, '*', impactAttr);
+                    }
+                }
+            }
+        }
     };
     FrameRenderer.prototype.cycle = function () {
         this.frameManager.cycle();

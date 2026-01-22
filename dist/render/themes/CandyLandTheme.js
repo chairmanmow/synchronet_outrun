@@ -22,6 +22,11 @@ var CandyLandTheme = {
         roadGrid: { fg: LIGHTMAGENTA, bg: BG_MAGENTA },
         shoulderPrimary: { fg: WHITE, bg: BG_MAGENTA },
         shoulderSecondary: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+        itemBox: {
+            border: { fg: LIGHTRED, bg: BG_CYAN },
+            fill: { fg: LIGHTMAGENTA, bg: BG_CYAN },
+            symbol: { fg: WHITE, bg: BG_CYAN }
+        },
         roadsideColors: {
             'lollipop': {
                 primary: { fg: LIGHTRED, bg: BG_CYAN },

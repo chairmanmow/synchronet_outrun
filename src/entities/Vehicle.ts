@@ -41,6 +41,9 @@ interface IVehicle extends IEntity {
   
   /** Active effects on this vehicle (star, lightning, etc.) */
   activeEffects: ActiveEffect[];
+  
+  /** Check if vehicle has an active effect of given type */
+  hasEffect(type: ItemType): boolean;
 
   /** Vehicle color for rendering */
   color: number;
@@ -77,6 +80,12 @@ interface IVehicle extends IEntity {
   
   /** NPC color index for sprite color */
   npcColorIndex: number;
+
+  /** Player car ID (from CarCatalog) */
+  carId: string;
+  
+  /** Player car color ID (from CarCatalog) */
+  carColorId: string;
 
   /** Update vehicle with road data */
   updatePhysics(road: Road, intent: DriverIntent, dt: number): void;
@@ -134,6 +143,8 @@ class Vehicle extends Entity implements IVehicle {
   isRacer: boolean;
   npcType: string;
   npcColorIndex: number;
+  carId: string;
+  carColorId: string;
 
   constructor() {
     super();
@@ -160,6 +171,8 @@ class Vehicle extends Entity implements IVehicle {
     this.isRacer = false;
     this.npcType = 'sedan';
     this.npcColorIndex = 0;
+    this.carId = 'sports';           // Default car
+    this.carColorId = 'yellow';      // Default color
   }
   
   /**
@@ -179,6 +192,13 @@ class Vehicle extends Entity implements IVehicle {
     // Remove existing effect of same type first
     this.removeEffect(type);
     this.activeEffects.push({ type: type, duration: duration, sourceVehicleId: sourceId });
+    
+    // Handle immediate effect application
+    if (type === ItemType.LIGHTNING) {
+      // Lightning strike triggers a crash
+      this.triggerCrash();
+      logInfo("Vehicle " + this.id + " struck by lightning - crashed!");
+    }
   }
   
   /**
@@ -194,13 +214,21 @@ class Vehicle extends Entity implements IVehicle {
   
   /**
    * Update active effects (countdown timers).
+   * Lightning effect pauses countdown while crashed (so slowdown phase starts after crash recovery).
    */
   updateEffects(dt: number): void {
     for (var i = this.activeEffects.length - 1; i >= 0; i--) {
-      this.activeEffects[i].duration -= dt;
-      if (this.activeEffects[i].duration <= 0) {
+      var effect = this.activeEffects[i];
+      
+      // Lightning effect pauses during crash - the slowdown should happen AFTER recovery
+      if (effect.type === ItemType.LIGHTNING && this.isCrashed) {
+        continue;  // Don't count down while crashed
+      }
+      
+      effect.duration -= dt;
+      if (effect.duration <= 0) {
         // Effect expired - handle cleanup
-        var expiredType = this.activeEffects[i].type;
+        var expiredType = effect.type;
         this.activeEffects.splice(i, 1);
         this.onEffectExpired(expiredType);
       }

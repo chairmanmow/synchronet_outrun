@@ -100,16 +100,32 @@ var Item = (function (_super) {
         _this.type = type;
         _this.respawnTime = 10;
         _this.respawnCountdown = -1;
+        _this.destructionTimer = 0;
+        _this.destructionStartTime = 0;
+        _this.pickedUpByPlayer = false;
         return _this;
     }
     Item.prototype.isAvailable = function () {
-        return this.active && this.respawnCountdown < 0;
+        return this.active && this.respawnCountdown < 0 && this.destructionTimer <= 0;
     };
-    Item.prototype.pickup = function () {
-        this.respawnCountdown = this.respawnTime;
+    Item.prototype.isBeingDestroyed = function () {
+        return this.destructionTimer > 0;
+    };
+    Item.prototype.pickup = function (byPlayer) {
+        if (byPlayer === void 0) { byPlayer = false; }
+        this.destructionTimer = 0.4;
+        this.destructionStartTime = Date.now();
+        this.pickedUpByPlayer = byPlayer;
     };
     Item.prototype.updateRespawn = function (dt) {
-        if (this.respawnCountdown >= 0) {
+        if (this.destructionTimer > 0) {
+            this.destructionTimer -= dt;
+            if (this.destructionTimer <= 0) {
+                this.respawnCountdown = this.respawnTime;
+                this.destructionTimer = 0;
+            }
+        }
+        else if (this.respawnCountdown >= 0) {
             this.respawnCountdown -= dt;
         }
     };

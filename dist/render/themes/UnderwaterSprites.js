@@ -5,6 +5,7 @@ var UnderwaterSprites = {
         var body2 = makeAttr(LIGHTCYAN, BG_BLUE);
         var eye = makeAttr(WHITE, BG_BLUE);
         var fin = makeAttr(LIGHTRED, BG_BLUE);
+        var stripe = makeAttr(WHITE, BG_BLUE);
         var U = null;
         return {
             name: 'underwater_fish',
@@ -13,20 +14,24 @@ var UnderwaterSprites = {
                     [{ char: '<', attr: body1 }, { char: '>', attr: body1 }]
                 ],
                 [
-                    [{ char: '-', attr: fin }, { char: '<', attr: body2 }, { char: '>', attr: body2 }]
+                    [U, { char: GLYPH.UPPER_HALF, attr: fin }, U],
+                    [{ char: '<', attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: '>', attr: body2 }]
                 ],
                 [
-                    [U, { char: '/', attr: fin }, { char: '\\', attr: fin }, U],
-                    [{ char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: 'o', attr: eye }, { char: '>', attr: body1 }]
+                    [U, { char: '/', attr: fin }, { char: GLYPH.UPPER_HALF, attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: '|', attr: stripe }, { char: 'O', attr: eye }, { char: '>', attr: body1 }],
+                    [U, { char: '\\', attr: fin }, { char: GLYPH.LOWER_HALF, attr: fin }, { char: '/', attr: fin }, U]
                 ],
                 [
-                    [U, { char: '/', attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '\\', attr: fin }, U],
-                    [{ char: '<', attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: 'O', attr: eye }, { char: '>', attr: body2 }]
+                    [U, U, { char: '/', attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body2 }, { char: '<', attr: body2 }, { char: GLYPH.FULL_BLOCK, attr: body2 }, { char: '|', attr: stripe }, { char: 'O', attr: eye }, { char: '>', attr: body2 }],
+                    [U, U, { char: '\\', attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '/', attr: fin }, U]
                 ],
                 [
-                    [U, U, { char: '/', attr: fin }, { char: '_', attr: fin }, { char: '\\', attr: fin }, U],
-                    [{ char: '<', attr: body1 }, { char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: 'O', attr: eye }, { char: '>', attr: body1 }],
-                    [U, U, { char: '\\', attr: fin }, { char: '-', attr: fin }, { char: '/', attr: fin }, U]
+                    [U, U, { char: '/', attr: fin }, { char: '_', attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '\\', attr: fin }, U],
+                    [{ char: '<', attr: body1 }, { char: '<', attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: '|', attr: stripe }, { char: 'O', attr: eye }, { char: '>', attr: body1 }],
+                    [U, U, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: GLYPH.FULL_BLOCK, attr: body1 }, { char: '|', attr: stripe }, { char: GLYPH.FULL_BLOCK, attr: body1 }, U],
+                    [U, U, { char: '\\', attr: fin }, { char: GLYPH.LOWER_HALF, attr: fin }, { char: GLYPH.FULL_BLOCK, attr: fin }, { char: '/', attr: fin }, U]
                 ]
             ]
         };
@@ -103,34 +108,40 @@ var UnderwaterSprites = {
             ]
         };
     },
-    createRock: function () {
-        var rock1 = makeAttr(LIGHTGRAY, BG_BLUE);
-        var rock2 = makeAttr(DARKGRAY, BG_BLUE);
-        var moss = makeAttr(GREEN, BG_BLUE);
+    createAnemone: function () {
+        var tentacle1 = makeAttr(LIGHTMAGENTA, BG_BLUE);
+        var tentacle2 = makeAttr(MAGENTA, BG_BLUE);
+        var center = makeAttr(YELLOW, BG_BLUE);
+        var fish = makeAttr(LIGHTRED, BG_BLUE);
+        var base = makeAttr(BROWN, BG_BLUE);
         var U = null;
         return {
-            name: 'underwater_rock',
+            name: 'underwater_anemone',
             variants: [
                 [
-                    [{ char: 'o', attr: rock2 }]
+                    [{ char: '*', attr: tentacle1 }]
                 ],
                 [
-                    [{ char: '(', attr: rock1 }, { char: ')', attr: rock1 }]
+                    [{ char: ')', attr: tentacle1 }, { char: '(', attr: tentacle1 }],
+                    [{ char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }]
                 ],
                 [
-                    [U, { char: '^', attr: moss }, U],
-                    [{ char: '(', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock1 }]
+                    [{ char: ')', attr: tentacle1 }, { char: '|', attr: tentacle2 }, { char: '(', attr: tentacle1 }],
+                    [{ char: '(', attr: tentacle2 }, { char: 'O', attr: center }, { char: ')', attr: tentacle2 }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: base }, U]
                 ],
                 [
-                    [U, { char: '"', attr: moss }, { char: '"', attr: moss }, U],
-                    [{ char: '/', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: '\\', attr: rock1 }],
-                    [{ char: '(', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock2 }]
+                    [{ char: '~', attr: tentacle1 }, { char: ')', attr: tentacle1 }, { char: '(', attr: tentacle1 }, { char: '~', attr: tentacle1 }],
+                    [{ char: ')', attr: tentacle2 }, { char: '|', attr: tentacle2 }, { char: '|', attr: tentacle2 }, { char: '(', attr: tentacle2 }],
+                    [{ char: '(', attr: tentacle2 }, { char: GLYPH.FULL_BLOCK, attr: center }, { char: GLYPH.FULL_BLOCK, attr: center }, { char: ')', attr: tentacle2 }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, U]
                 ],
                 [
-                    [U, { char: '"', attr: moss }, { char: '~', attr: moss }, { char: '"', attr: moss }, U],
-                    [{ char: '/', attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock1 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock1 }, { char: '\\', attr: rock1 }],
-                    [{ char: '|', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: '|', attr: rock2 }],
-                    [{ char: '(', attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: GLYPH.FULL_BLOCK, attr: rock2 }, { char: ')', attr: rock2 }]
+                    [{ char: '~', attr: tentacle1 }, { char: ')', attr: tentacle1 }, { char: '<', attr: fish }, { char: '(', attr: tentacle1 }, { char: '~', attr: tentacle1 }],
+                    [{ char: ')', attr: tentacle1 }, { char: '|', attr: tentacle2 }, { char: '>', attr: fish }, { char: '|', attr: tentacle2 }, { char: '(', attr: tentacle1 }],
+                    [{ char: '(', attr: tentacle2 }, { char: ')', attr: tentacle2 }, { char: 'O', attr: center }, { char: '(', attr: tentacle2 }, { char: ')', attr: tentacle2 }],
+                    [{ char: '|', attr: tentacle2 }, { char: GLYPH.FULL_BLOCK, attr: center }, { char: GLYPH.FULL_BLOCK, attr: center }, { char: GLYPH.FULL_BLOCK, attr: center }, { char: '|', attr: tentacle2 }],
+                    [U, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, { char: GLYPH.FULL_BLOCK, attr: base }, U]
                 ]
             ]
         };
@@ -144,27 +155,32 @@ var UnderwaterSprites = {
             name: 'underwater_jellyfish',
             variants: [
                 [
-                    [{ char: 'o', attr: body }]
+                    [{ char: 'n', attr: body }],
+                    [{ char: '|', attr: tent }]
                 ],
                 [
+                    [{ char: '/', attr: glow }, { char: '\\', attr: glow }],
                     [{ char: '(', attr: body }, { char: ')', attr: body }],
                     [{ char: '|', attr: tent }, { char: '|', attr: tent }]
                 ],
                 [
-                    [U, { char: '_', attr: glow }, U],
-                    [{ char: '(', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: ')', attr: body }],
-                    [{ char: '~', attr: tent }, { char: '|', attr: tent }, { char: '~', attr: tent }]
+                    [U, { char: GLYPH.UPPER_HALF, attr: glow }, U],
+                    [{ char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }],
+                    [{ char: '(', attr: tent }, { char: '~', attr: tent }, { char: ')', attr: tent }],
+                    [{ char: '|', attr: tent }, U, { char: '|', attr: tent }]
                 ],
                 [
                     [U, { char: '_', attr: glow }, { char: '_', attr: glow }, U],
                     [{ char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }],
+                    [{ char: '|', attr: body }, { char: GLYPH.LIGHT_SHADE, attr: glow }, { char: GLYPH.LIGHT_SHADE, attr: glow }, { char: '|', attr: body }],
                     [{ char: '(', attr: tent }, { char: '~', attr: tent }, { char: '~', attr: tent }, { char: ')', attr: tent }],
                     [{ char: '|', attr: tent }, { char: '|', attr: tent }, { char: '|', attr: tent }, { char: '|', attr: tent }]
                 ],
                 [
                     [U, { char: '_', attr: glow }, { char: '_', attr: glow }, { char: '_', attr: glow }, U],
                     [{ char: '/', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '\\', attr: body }],
-                    [{ char: '|', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '|', attr: body }],
+                    [{ char: '|', attr: body }, { char: GLYPH.LIGHT_SHADE, attr: glow }, { char: GLYPH.LIGHT_SHADE, attr: glow }, { char: GLYPH.LIGHT_SHADE, attr: glow }, { char: '|', attr: body }],
+                    [{ char: '\\', attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: GLYPH.FULL_BLOCK, attr: body }, { char: '/', attr: body }],
                     [{ char: '(', attr: tent }, { char: '~', attr: tent }, { char: '|', attr: tent }, { char: '~', attr: tent }, { char: ')', attr: tent }],
                     [{ char: '|', attr: tent }, U, { char: '|', attr: tent }, U, { char: '|', attr: tent }]
                 ]
@@ -186,7 +202,7 @@ var UnderwaterSprites = {
                     [{ char: '[', attr: chest }, { char: ']', attr: chest }]
                 ],
                 [
-                    [{ char: '*', attr: gold }, { char: '*', attr: gold }, { char: '*', attr: gold }],
+                    [{ char: '$', attr: gold }, { char: '*', attr: shine }, { char: '$', attr: gold }],
                     [{ char: '[', attr: chest }, { char: GLYPH.FULL_BLOCK, attr: chest }, { char: ']', attr: chest }]
                 ],
                 [
@@ -207,6 +223,6 @@ var UnderwaterSprites = {
 registerRoadsideSprite('underwater_fish', function () { return UnderwaterSprites.createFish(); });
 registerRoadsideSprite('underwater_coral', function () { return UnderwaterSprites.createCoral(); });
 registerRoadsideSprite('underwater_seaweed', function () { return UnderwaterSprites.createSeaweed(); });
-registerRoadsideSprite('underwater_rock', function () { return UnderwaterSprites.createRock(); });
+registerRoadsideSprite('underwater_anemone', function () { return UnderwaterSprites.createAnemone(); });
 registerRoadsideSprite('underwater_jellyfish', function () { return UnderwaterSprites.createJellyfish(); });
 registerRoadsideSprite('underwater_treasure', function () { return UnderwaterSprites.createTreasure(); });

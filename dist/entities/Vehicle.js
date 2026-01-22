@@ -54,6 +54,8 @@ var Vehicle = (function (_super) {
         _this.isRacer = false;
         _this.npcType = 'sedan';
         _this.npcColorIndex = 0;
+        _this.carId = 'sports';
+        _this.carColorId = 'yellow';
         return _this;
     }
     Vehicle.prototype.hasEffect = function (type) {
@@ -66,6 +68,10 @@ var Vehicle = (function (_super) {
     Vehicle.prototype.addEffect = function (type, duration, sourceId) {
         this.removeEffect(type);
         this.activeEffects.push({ type: type, duration: duration, sourceVehicleId: sourceId });
+        if (type === ItemType.LIGHTNING) {
+            this.triggerCrash();
+            logInfo("Vehicle " + this.id + " struck by lightning - crashed!");
+        }
     };
     Vehicle.prototype.removeEffect = function (type) {
         for (var i = this.activeEffects.length - 1; i >= 0; i--) {
@@ -76,9 +82,13 @@ var Vehicle = (function (_super) {
     };
     Vehicle.prototype.updateEffects = function (dt) {
         for (var i = this.activeEffects.length - 1; i >= 0; i--) {
-            this.activeEffects[i].duration -= dt;
-            if (this.activeEffects[i].duration <= 0) {
-                var expiredType = this.activeEffects[i].type;
+            var effect = this.activeEffects[i];
+            if (effect.type === ItemType.LIGHTNING && this.isCrashed) {
+                continue;
+            }
+            effect.duration -= dt;
+            if (effect.duration <= 0) {
+                var expiredType = effect.type;
                 this.activeEffects.splice(i, 1);
                 this.onEffectExpired(expiredType);
             }

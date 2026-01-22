@@ -22,6 +22,12 @@ interface IRenderer {
   // Optional theme support
   setTheme?(themeName: string): void;
   getAvailableThemes?(): string[];
+  
+  // Optional brake light support (for FrameRenderer)
+  setBrakeLightState?(brakeLightsOn: boolean): void;
+  
+  // Optional lightning bolt visual effect
+  triggerLightningStrike?(hitCount: number): void;
 }
 
 class Renderer implements IRenderer {

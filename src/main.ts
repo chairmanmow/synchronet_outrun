@@ -287,6 +287,19 @@ function main(): void {
 
       debugLog.info("Selected track: " + trackSelection.track.name);
 
+      // Show car selector - create a SceneComposer for the UI
+      debugLog.info("Showing car selector");
+      var carComposer = new SceneComposer(80, 24);
+      var carSelection = CarSelector.show(carComposer);
+      
+      if (!carSelection.confirmed) {
+        // User cancelled car selection - go back to track selector
+        debugLog.info("User cancelled car selection");
+        continue;
+      }
+      
+      debugLog.info("Selected car: " + carSelection.carId + " color: " + carSelection.colorId);
+
       // Check if this is a cup (circuit) race
       if (trackSelection.isCircuitMode && trackSelection.circuitTracks) {
         // Cup mode - run multiple races
@@ -295,11 +308,12 @@ function main(): void {
           cupManager,
           highScoreManager,
           trackSelection.circuitId || 'custom_cup',
-          trackSelection.circuitName || 'Circuit Cup'
+          trackSelection.circuitName || 'Circuit Cup',
+          carSelection
         );
       } else {
         // Single race mode
-        runSingleRace(trackSelection.track, highScoreManager);
+        runSingleRace(trackSelection.track, highScoreManager, carSelection);
       }
       
       // Loop continues - back to splash screen
@@ -334,11 +348,11 @@ function main(): void {
 /**
  * Run a single race (non-cup mode).
  */
-function runSingleRace(track: TrackDefinition, highScoreManager: HighScoreManager): void {
+function runSingleRace(track: TrackDefinition, highScoreManager: HighScoreManager, carSelection?: CarSelection): void {
   // Create and initialize game with selected track
   debugLog.separator("GAME INIT");
   var game = new Game(undefined, highScoreManager);
-  game.initWithTrack(track);
+  game.initWithTrack(track, undefined, carSelection ? { carId: carSelection.carId, colorId: carSelection.colorId } : undefined);
 
   // Run game loop
   debugLog.separator("GAME LOOP");
@@ -362,7 +376,8 @@ function runCupMode(
   cupManager: CupManager,
   highScoreManager: HighScoreManager,
   circuitId: string,
-  circuitName: string
+  circuitName: string,
+  carSelection?: CarSelection
 ): void {
   debugLog.separator("CUP MODE START");
   debugLog.info("Starting cup with " + tracks.length + " tracks: " + circuitId);
@@ -403,7 +418,7 @@ function runCupMode(
     
     // Create and run game for this race
     var game = new Game(undefined, highScoreManager);
-    game.initWithTrack(track);
+    game.initWithTrack(track, undefined, carSelection ? { carId: carSelection.carId, colorId: carSelection.colorId } : undefined);
     game.run();
     
     // Get race results before shutdown

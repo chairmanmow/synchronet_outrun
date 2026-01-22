@@ -94,48 +94,166 @@ var HudRenderer = (function () {
         this.composer.writeString(barX + barWidth + 1, y, "]", labelAttr);
     };
     HudRenderer.prototype.renderItemSlot = function (data) {
-        var y = 23;
-        var x = 70;
-        var frameAttr = colorToAttr(PALETTE.HUD_FRAME);
-        this.composer.setCell(x, y, '[', frameAttr);
-        this.composer.setCell(x + 5, y, ']', frameAttr);
-        if (data.heldItem !== null) {
-            var itemAttr;
-            var itemChar;
-            var itemType = data.heldItem.type;
-            switch (itemType) {
-                case ItemType.MUSHROOM:
-                case ItemType.MUSHROOM_TRIPLE:
-                case ItemType.MUSHROOM_GOLDEN:
-                    itemAttr = colorToAttr(PALETTE.ITEM_MUSHROOM);
-                    itemChar = 'MUSH';
-                    break;
-                case ItemType.SHELL:
-                case ItemType.SHELL_TRIPLE:
-                    itemAttr = colorToAttr(PALETTE.ITEM_SHELL);
-                    itemChar = 'SHEL';
-                    break;
-                case ItemType.STAR:
-                    itemAttr = colorToAttr({ fg: YELLOW, bg: BG_BLACK });
-                    itemChar = 'STAR';
-                    break;
-                case ItemType.LIGHTNING:
-                    itemAttr = colorToAttr({ fg: LIGHTCYAN, bg: BG_BLACK });
-                    itemChar = 'BOLT';
-                    break;
-                case ItemType.BULLET:
-                    itemAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
-                    itemChar = 'BULL';
-                    break;
-                default:
-                    itemAttr = colorToAttr(PALETTE.HUD_VALUE);
-                    itemChar = 'ITEM';
+        var bottomY = 23;
+        var rightEdge = 79;
+        if (data.heldItem === null) {
+            var emptyAttr = colorToAttr(PALETTE.HUD_LABEL);
+            this.composer.writeString(rightEdge - 3, bottomY, "----", emptyAttr);
+            return;
+        }
+        var itemType = data.heldItem.type;
+        var uses = data.heldItem.uses;
+        var icon = this.getItemIcon(itemType);
+        var iconWidth = icon.lines[0].length;
+        var iconHeight = icon.lines.length;
+        var iconX = rightEdge - iconWidth + 1;
+        var iconY = bottomY - iconHeight + 1;
+        for (var row = 0; row < iconHeight; row++) {
+            var line = icon.lines[row];
+            for (var col = 0; col < line.length; col++) {
+                var ch = line.charAt(col);
+                if (ch !== ' ') {
+                    var attr = this.getIconCharAttr(ch, icon, itemType);
+                    this.composer.setCell(iconX + col, iconY + row, ch, attr);
+                }
             }
-            this.composer.writeString(x + 1, y, itemChar, itemAttr);
         }
-        else {
-            this.composer.writeString(x + 1, y, "----", colorToAttr(PALETTE.HUD_LABEL));
+        if (uses > 1) {
+            var countAttr = colorToAttr({ fg: WHITE, bg: BG_BLACK });
+            this.composer.setCell(iconX - 2, bottomY, 'x', colorToAttr(PALETTE.HUD_LABEL));
+            this.composer.setCell(iconX - 1, bottomY, String(uses).charAt(0), countAttr);
         }
+    };
+    HudRenderer.prototype.getItemIcon = function (type) {
+        switch (type) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+                return {
+                    lines: [
+                        ' @@ ',
+                        '@##@',
+                        ' || '
+                    ],
+                    color: { fg: LIGHTRED, bg: BG_BLACK },
+                    altColor: { fg: WHITE, bg: BG_BLACK }
+                };
+            case ItemType.MUSHROOM_GOLDEN:
+                return {
+                    lines: [
+                        ' @@ ',
+                        '@##@',
+                        ' || '
+                    ],
+                    color: { fg: YELLOW, bg: BG_BLACK },
+                    altColor: { fg: WHITE, bg: BG_BLACK }
+                };
+            case ItemType.GREEN_SHELL:
+            case ItemType.GREEN_SHELL_TRIPLE:
+                return {
+                    lines: [
+                        ' /^\\ ',
+                        '(O O)',
+                        ' \\_/ '
+                    ],
+                    color: { fg: LIGHTGREEN, bg: BG_BLACK }
+                };
+            case ItemType.RED_SHELL:
+            case ItemType.RED_SHELL_TRIPLE:
+            case ItemType.SHELL:
+            case ItemType.SHELL_TRIPLE:
+                return {
+                    lines: [
+                        ' /^\\ ',
+                        '(O O)',
+                        ' \\_/ '
+                    ],
+                    color: { fg: LIGHTRED, bg: BG_BLACK }
+                };
+            case ItemType.BLUE_SHELL:
+                return {
+                    lines: [
+                        ' ~*~ ',
+                        '<(@)>',
+                        ' \\_/ '
+                    ],
+                    color: { fg: LIGHTBLUE, bg: BG_BLACK },
+                    altColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+                };
+            case ItemType.BANANA:
+            case ItemType.BANANA_TRIPLE:
+                return {
+                    lines: [
+                        '  /\\ ',
+                        ' (  )',
+                        '  \\/ '
+                    ],
+                    color: { fg: YELLOW, bg: BG_BLACK }
+                };
+            case ItemType.STAR:
+                return {
+                    lines: [
+                        '  *  ',
+                        ' *** ',
+                        '*****',
+                        ' * * '
+                    ],
+                    color: { fg: YELLOW, bg: BG_BLACK }
+                };
+            case ItemType.LIGHTNING:
+                return {
+                    lines: [
+                        ' /| ',
+                        '/-\' ',
+                        '|/  '
+                    ],
+                    color: { fg: YELLOW, bg: BG_BLACK },
+                    altColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+                };
+            case ItemType.BULLET:
+                return {
+                    lines: [
+                        ' __ ',
+                        '|==>',
+                        ' -- '
+                    ],
+                    color: { fg: WHITE, bg: BG_BLACK },
+                    altColor: { fg: DARKGRAY, bg: BG_BLACK }
+                };
+            default:
+                return {
+                    lines: [
+                        ' ? '
+                    ],
+                    color: { fg: YELLOW, bg: BG_BLACK }
+                };
+        }
+    };
+    HudRenderer.prototype.getIconCharAttr = function (ch, icon, itemType) {
+        var useAlt = false;
+        switch (itemType) {
+            case ItemType.MUSHROOM:
+            case ItemType.MUSHROOM_TRIPLE:
+            case ItemType.MUSHROOM_GOLDEN:
+                useAlt = (ch === '#' || ch === '|');
+                break;
+            case ItemType.BLUE_SHELL:
+                useAlt = (ch === '<' || ch === '>' || ch === '~');
+                break;
+            case ItemType.LIGHTNING:
+                useAlt = (Math.floor(Date.now() / 150) % 2 === 0);
+                break;
+            case ItemType.STAR:
+                var starColors = [YELLOW, LIGHTRED, LIGHTGREEN, LIGHTCYAN, LIGHTMAGENTA, WHITE];
+                var colorIdx = Math.floor(Date.now() / 100) % starColors.length;
+                return makeAttr(starColors[colorIdx], BG_BLACK);
+            case ItemType.BULLET:
+                useAlt = (ch !== '=' && ch !== '>');
+                break;
+        }
+        if (useAlt && icon.altColor) {
+            return makeAttr(icon.altColor.fg, icon.altColor.bg);
+        }
+        return makeAttr(icon.color.fg, icon.color.bg);
     };
     HudRenderer.prototype.padLeft = function (str, len) {
         while (str.length < len) {

@@ -26,7 +26,7 @@ var Game = (function () {
         this.highScoreManager = highScoreManager || null;
         this.state = null;
     }
-    Game.prototype.initWithTrack = function (trackDef, raceMode) {
+    Game.prototype.initWithTrack = function (trackDef, raceMode, carSelection) {
         logInfo("Game.initWithTrack(): " + trackDef.name + " mode: " + (raceMode || RaceMode.GRAND_PRIX));
         var mode = raceMode || RaceMode.GRAND_PRIX;
         this.renderer.init();
@@ -57,10 +57,16 @@ var Game = (function () {
         var track = this.trackLoader.load("neon_coast_01");
         track.laps = trackDef.laps;
         track.name = trackDef.name;
+        var selectedCarId = carSelection ? carSelection.carId : 'sports';
+        var selectedColorId = carSelection ? carSelection.colorId : 'yellow';
+        applyCarStats(selectedCarId);
         var playerVehicle = new Vehicle();
         playerVehicle.driver = new HumanDriver(this.controls);
-        playerVehicle.color = YELLOW;
         playerVehicle.isNPC = false;
+        playerVehicle.carId = selectedCarId;
+        playerVehicle.carColorId = selectedColorId;
+        var carColor = getCarColor(selectedColorId);
+        playerVehicle.color = carColor ? carColor.body : YELLOW;
         this.state = createInitialState(track, trackDef, road, playerVehicle, mode);
         if (mode === RaceMode.GRAND_PRIX) {
             this.spawnRacers(7, road);
@@ -82,6 +88,14 @@ var Game = (function () {
         this.physicsSystem.init(this.state);
         this.raceSystem.init(this.state);
         this.itemSystem.initFromTrack(track, road);
+        var renderer = this.renderer;
+        this.itemSystem.setCallbacks({
+            onLightningStrike: function (hitCount) {
+                if (renderer.triggerLightningStrike) {
+                    renderer.triggerLightningStrike(hitCount);
+                }
+            }
+        });
         this.hud.init(this.state.time);
         this.running = true;
         this.state.racing = false;
@@ -195,7 +209,7 @@ var Game = (function () {
             this.applyNPCPacing();
         }
         this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
-        this.itemSystem.checkPickups(this.state.vehicles);
+        this.itemSystem.checkPickups(this.state.vehicles, this.state.road);
         if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
             var fireBackward = this.controls.getLastAccelAction() < 0;
             var currentSpeed = this.state.playerVehicle.speed;
@@ -438,6 +452,11 @@ var Game = (function () {
         var playerSteer = vehicle.playerX;
         var speed = this.paused ? 0 : vehicle.speed;
         var dt = 1.0 / this.config.tickRate;
+        var accel = this.controls.getAcceleration();
+        var brakeLightsOn = accel <= 0;
+        if (this.renderer.setBrakeLightState) {
+            this.renderer.setBrakeLightState(brakeLightsOn);
+        }
         this.renderer.beginFrame();
         this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);
         this.renderer.renderRoad(trackZ, this.state.cameraX, this.state.track, this.state.road);

@@ -4,23 +4,42 @@ var ItemSystem = (function () {
     function ItemSystem() {
         this.items = [];
         this.projectiles = [];
+        this.callbacks = {};
     }
+    ItemSystem.prototype.setCallbacks = function (callbacks) {
+        this.callbacks = callbacks;
+    };
     ItemSystem.prototype.initFromTrack = function (_track, road) {
         this.items = [];
         var trackLength = road.totalLength;
-        var numBoxes = Math.max(5, Math.floor(trackLength / 300));
-        var spacing = trackLength / (numBoxes + 1);
-        for (var i = 1; i <= numBoxes; i++) {
-            var z = spacing * i;
-            var side = i % 3;
-            var x = side === 0 ? 0 : (side === 1 ? -8 : 8);
-            var item = new Item(ItemType.NONE);
-            item.x = x;
-            item.z = z;
-            item.respawnTime = 8;
-            this.items.push(item);
+        var numRows = Math.max(2, Math.floor(trackLength / 1200));
+        var spacing = trackLength / (numRows + 1);
+        var rowPatterns = [
+            [-12, 0, 12],
+            [-10, 0, 10],
+            [-14, -5, 5, 14],
+            [-12, -4, 4, 12],
+            [-14, -7, 0, 7, 14],
+            [-10, 10],
+            [-12, 12],
+            [-14, -6, 2],
+            [-2, 6, 14]
+        ];
+        for (var rowIndex = 1; rowIndex <= numRows; rowIndex++) {
+            var z = spacing * rowIndex;
+            var patternIdx = (rowIndex - 1) % rowPatterns.length;
+            var pattern = rowPatterns[patternIdx];
+            for (var j = 0; j < pattern.length; j++) {
+                var x = pattern[j];
+                x += (globalRand.next() - 0.5) * 2;
+                var item = new Item(ItemType.NONE);
+                item.x = x;
+                item.z = z;
+                item.respawnTime = 8;
+                this.items.push(item);
+            }
         }
-        logInfo("ItemSystem: Placed " + numBoxes + " item boxes across track length " + trackLength);
+        logInfo("ItemSystem: Placed " + this.items.length + " item boxes in " + numRows + " rows across track length " + trackLength);
     };
     ItemSystem.prototype.update = function (dt, vehicles, roadLength) {
         for (var i = 0; i < this.items.length; i++) {
@@ -38,7 +57,7 @@ var ItemSystem = (function () {
     ItemSystem.prototype.getProjectiles = function () {
         return this.projectiles;
     };
-    ItemSystem.prototype.checkPickups = function (vehicles) {
+    ItemSystem.prototype.checkPickups = function (vehicles, road) {
         for (var i = 0; i < vehicles.length; i++) {
             var vehicle = vehicles[i];
             if (vehicle.heldItem !== null)
@@ -47,10 +66,23 @@ var ItemSystem = (function () {
                 var item = this.items[j];
                 if (!item.isAvailable())
                     continue;
-                var dx = vehicle.x - item.x;
                 var dz = vehicle.trackZ - item.z;
-                if (Math.abs(dx) < 15 && Math.abs(dz) < 20) {
-                    item.pickup();
+                if (dz < -5 || dz > 15)
+                    continue;
+                var vehicleX = vehicle.x;
+                var itemX = item.x;
+                if (road) {
+                    var seg = road.getSegment(item.z);
+                    if (seg && seg.curve !== 0) {
+                        var curveShift = seg.curve * Math.max(0, dz) * 0.3;
+                        itemX += curveShift;
+                    }
+                }
+                var dx = vehicleX - itemX;
+                var lateralRadius = 12;
+                if (Math.abs(dx) < lateralRadius) {
+                    var isPlayer = !vehicle.isNPC;
+                    item.pickup(isPlayer);
                     var itemType = this.randomItemType(vehicle.racePosition, vehicles.length);
                     vehicle.heldItem = {
                         type: itemType,
@@ -176,6 +208,9 @@ var ItemSystem = (function () {
             }
             v.addEffect(ItemType.LIGHTNING, duration, user.id);
             hitCount++;
+        }
+        if (this.callbacks.onLightningStrike) {
+            this.callbacks.onLightningStrike(hitCount);
         }
         logInfo("Lightning struck " + hitCount + " opponents ahead (positions 1-" + (user.racePosition - 1) + ")!");
     };

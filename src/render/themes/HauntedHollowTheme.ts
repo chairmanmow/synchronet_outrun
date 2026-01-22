@@ -41,6 +41,13 @@ var HauntedHollowTheme: Theme = {
     shoulderPrimary: { fg: DARKGRAY, bg: BG_BLACK },    // Dark earth
     shoulderSecondary: { fg: GREEN, bg: BG_BLACK },     // Dead grass patches
     
+    // Item box colors - spooky green/purple
+    itemBox: {
+      border: { fg: LIGHTGREEN, bg: BG_BLACK },
+      fill: { fg: GREEN, bg: BG_BLACK },
+      symbol: { fg: LIGHTMAGENTA, bg: BG_BLACK }
+    },
+    
     // Roadside colors - spooky palette
     roadsideColors: {
       'deadtree': {

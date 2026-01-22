@@ -30,6 +30,8 @@ var GLYPH = {
     DBOX_HD: String.fromCharCode(203),
     DBOX_HU: String.fromCharCode(202),
     DBOX_CROSS: String.fromCharCode(206),
+    BOX_VD_HD: String.fromCharCode(209),
+    BOX_VD_HU: String.fromCharCode(207),
     TRIANGLE_UP: String.fromCharCode(30),
     TRIANGLE_DOWN: String.fromCharCode(31),
     TRIANGLE_LEFT: String.fromCharCode(17),

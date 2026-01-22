@@ -25,44 +25,92 @@ interface ItemBoxData {
  */
 var DEBUG_FORCE_ITEM: ItemType | null = null;  // <-- CHANGE THIS TO TEST
 
+/**
+ * Callback type for item system events.
+ */
+interface ItemSystemCallbacks {
+  onLightningStrike?: (hitCount: number) => void;
+}
+
 class ItemSystem {
   private items: Item[];
   private projectiles: IProjectile[];
+  
+  // Event callbacks for visual/audio effects
+  private callbacks: ItemSystemCallbacks;
 
   constructor() {
     this.items = [];
     this.projectiles = [];
+    this.callbacks = {};
+  }
+  
+  /**
+   * Register callbacks for item system events.
+   * This allows the Game to respond to events like lightning strikes
+   * with visual effects without tight coupling.
+   */
+  setCallbacks(callbacks: ItemSystemCallbacks): void {
+    this.callbacks = callbacks;
   }
 
   /**
    * Initialize item boxes from track data.
+   * Places ROWS of boxes side-by-side (like Mario Kart) to encourage steering.
    */
   initFromTrack(_track: ITrack, road: Road): void {
     this.items = [];  // Clear existing items
     
-    // Get track length and distribute item boxes evenly
+    // Get track length and distribute item box ROWS evenly
     var trackLength = road.totalLength;
-    var numBoxes = Math.max(5, Math.floor(trackLength / 300));  // One box every ~300 units
-    var spacing = trackLength / (numBoxes + 1);
+    var numRows = Math.max(2, Math.floor(trackLength / 1200));  // One row every ~1200 units
+    var spacing = trackLength / (numRows + 1);
     
-    // Place item boxes at regular intervals
-    for (var i = 1; i <= numBoxes; i++) {
-      var z = spacing * i;
+    // Row patterns - each pattern defines X positions for boxes in that row
+    // x values: playerX range is -1 to 1, scaled by 20, so road is -20 to +20
+    // MOST patterns have multiple boxes to create that Mario Kart feel
+    var rowPatterns = [
+      // 3 boxes spread across track (most common - classic MK style)
+      [-12, 0, 12],
+      [-10, 0, 10],
+      // 4 boxes - need to steer between them
+      [-14, -5, 5, 14],
+      [-12, -4, 4, 12],
+      // 5 boxes - full spread, easy to hit something
+      [-14, -7, 0, 7, 14],
+      // 2 boxes with gap - choose your side
+      [-10, 10],
+      [-12, 12],
+      // 3 boxes offset patterns
+      [-14, -6, 2],
+      [-2, 6, 14]
+    ];
+    
+    // Place rows of item boxes at regular intervals
+    for (var rowIndex = 1; rowIndex <= numRows; rowIndex++) {
+      var z = spacing * rowIndex;
       
-      // Alternate between center, left, and right sides of road
-      // x values: 0 = center, negative = left, positive = right
-      // playerX range is -1 to 1, scaled by 20, so road is -20 to +20
-      var side = i % 3;
-      var x = side === 0 ? 0 : (side === 1 ? -8 : 8);
+      // Cycle through patterns sequentially with small variation
+      // This ensures good variety while guaranteeing multi-box rows
+      var patternIdx = (rowIndex - 1) % rowPatterns.length;
+      var pattern = rowPatterns[patternIdx];
       
-      var item = new Item(ItemType.NONE);
-      item.x = x;
-      item.z = z;
-      item.respawnTime = 8;  // Respawn after 8 seconds
-      this.items.push(item);
+      // Place all boxes in this row at the SAME Z position
+      for (var j = 0; j < pattern.length; j++) {
+        var x = pattern[j];
+        
+        // Add tiny randomness to x position (+/- 1 unit) - keeps them aligned
+        x += (globalRand.next() - 0.5) * 2;
+        
+        var item = new Item(ItemType.NONE);
+        item.x = x;
+        item.z = z;
+        item.respawnTime = 8;  // Respawn after 8 seconds
+        this.items.push(item);
+      }
     }
     
-    logInfo("ItemSystem: Placed " + numBoxes + " item boxes across track length " + trackLength);
+    logInfo("ItemSystem: Placed " + this.items.length + " item boxes in " + numRows + " rows across track length " + trackLength);
   }
 
   /**
@@ -95,8 +143,9 @@ class ItemSystem {
 
   /**
    * Check for vehicle-item collisions.
+   * Hitbox scales with visual size - larger boxes are easier to collect.
    */
-  checkPickups(vehicles: IVehicle[]): void {
+  checkPickups(vehicles: IVehicle[], road?: Road): void {
     for (var i = 0; i < vehicles.length; i++) {
       var vehicle = vehicles[i];
       if (vehicle.heldItem !== null) continue;  // Already holding an item
@@ -106,13 +155,38 @@ class ItemSystem {
         if (!item.isAvailable()) continue;
 
         // Distance check using track coordinates
-        var dx = vehicle.x - item.x;
         var dz = vehicle.trackZ - item.z;
         
-        // Pickup radius: ~15 units lateral, ~20 units along track
-        if (Math.abs(dx) < 15 && Math.abs(dz) < 20) {
-          // Pickup!
-          item.pickup();
+        // Only check items that are slightly ahead or right at the vehicle
+        // This prevents NPCs behind you from "stealing" boxes you're about to hit
+        // Range: -5 (slightly behind) to +15 (ahead)
+        if (dz < -5 || dz > 15) continue;
+        
+        // Calculate lateral distance
+        // Account for road curve at item position for more accurate collision
+        var vehicleX = vehicle.x;  // Already scaled (playerX * 20)
+        var itemX = item.x;
+        
+        // Adjust for road curvature if available
+        if (road) {
+          var seg = road.getSegment(item.z);
+          if (seg && seg.curve !== 0) {
+            // On curves, the visual position shifts - match the collision to visual
+            // Curve effect is stronger the further ahead the item is
+            var curveShift = seg.curve * Math.max(0, dz) * 0.3;
+            itemX += curveShift;
+          }
+        }
+        
+        var dx = vehicleX - itemX;
+        
+        // Base pickup radius - slightly tighter than before for precision
+        var lateralRadius = 12;
+        
+        if (Math.abs(dx) < lateralRadius) {
+          // Pickup! Track whether player or NPC picked it up
+          var isPlayer = !vehicle.isNPC;
+          item.pickup(isPlayer);
           var itemType = this.randomItemType(vehicle.racePosition, vehicles.length);
           vehicle.heldItem = {
             type: itemType,
@@ -293,6 +367,12 @@ class ItemSystem {
       v.addEffect(ItemType.LIGHTNING, duration, user.id);
       hitCount++;
     }
+    
+    // Trigger visual effect callback
+    if (this.callbacks.onLightningStrike) {
+      this.callbacks.onLightningStrike(hitCount);
+    }
+    
     logInfo("Lightning struck " + hitCount + " opponents ahead (positions 1-" + (user.racePosition - 1) + ")!");
   }
 

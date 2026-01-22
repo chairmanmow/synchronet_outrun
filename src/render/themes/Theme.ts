@@ -48,6 +48,13 @@ interface ThemeColors {
   shoulderPrimary: ColorPair;     // Immediate road edge (dirt, curb)
   shoulderSecondary: ColorPair;   // Further out
   
+  // Item box colors (optional - uses defaults if not set)
+  itemBox?: {
+    border: ColorPair;    // Box border color
+    fill: ColorPair;      // Box fill/background
+    symbol: ColorPair;    // The "?" symbol
+  };
+  
   // Roadside object color overrides (optional - uses sprite defaults if not set)
   roadsideColors?: {
     [spriteName: string]: {
@@ -61,7 +68,7 @@ interface ThemeColors {
 interface ThemeBackgroundElement {
   type: 'mountains' | 'skyscrapers' | 'dunes' | 'forest' | 'hills' | 'ocean' | 
         'jungle_canopy' | 'candy_hills' | 'nebula' | 'castle_fortress' | 
-        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city' | 'underwater';
+        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city' | 'underwater' | 'aquarium';
   // Configuration varies by type
   config: {
     // Mountains/hills
@@ -110,7 +117,7 @@ interface ThemeStars {
 }
 
 interface ThemeSkyBackground {
-  type: 'grid' | 'stars' | 'gradient' | 'plain';  // What to render in sky background layer
+  type: 'grid' | 'stars' | 'gradient' | 'plain' | 'water';  // What to render in sky background layer
   // Grid-specific config
   gridDensity?: number;   // For grid spacing
   gridChar?: string;      // Character to use for grid lines

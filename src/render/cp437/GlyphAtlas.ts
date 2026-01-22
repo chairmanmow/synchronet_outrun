@@ -39,6 +39,10 @@ var GLYPH = {
   DBOX_HD: String.fromCharCode(203),        // ╦
   DBOX_HU: String.fromCharCode(202),        // ╩
   DBOX_CROSS: String.fromCharCode(206),     // ╬
+  
+  // Box drawing - mixed single/double (CP437)
+  BOX_VD_HD: String.fromCharCode(209),      // ╤ (single vertical, double horizontal down)
+  BOX_VD_HU: String.fromCharCode(207),      // ╧ (single vertical, double horizontal up)
 
   // Geometric shapes (CP437)
   TRIANGLE_UP: String.fromCharCode(30),     // ▲

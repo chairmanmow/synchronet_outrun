@@ -68,8 +68,9 @@ class Game {
    * Initialize the game with a track definition.
    * @param trackDef - Track definition
    * @param raceMode - Race mode (defaults to GRAND_PRIX)
+   * @param carSelection - Optional car selection (carId and colorId)
    */
-  initWithTrack(trackDef: TrackDefinition, raceMode?: RaceMode): void {
+  initWithTrack(trackDef: TrackDefinition, raceMode?: RaceMode, carSelection?: { carId: string; colorId: string }): void {
     logInfo("Game.initWithTrack(): " + trackDef.name + " mode: " + (raceMode || RaceMode.GRAND_PRIX));
 
     // Default to Grand Prix mode (racing against opponents)
@@ -111,11 +112,21 @@ class Game {
     track.laps = trackDef.laps;  // Override with definition's lap count
     track.name = trackDef.name;
 
-    // Create player vehicle
+    // Apply car stats if a car was selected
+    var selectedCarId = carSelection ? carSelection.carId : 'sports';
+    var selectedColorId = carSelection ? carSelection.colorId : 'yellow';
+    applyCarStats(selectedCarId);
+
+    // Create player vehicle with selected car
     var playerVehicle = new Vehicle();
     playerVehicle.driver = new HumanDriver(this.controls);
-    playerVehicle.color = YELLOW;
     playerVehicle.isNPC = false;  // Ensure player is not marked as NPC
+    playerVehicle.carId = selectedCarId;
+    playerVehicle.carColorId = selectedColorId;
+    
+    // Get the car color for display
+    var carColor = getCarColor(selectedColorId);
+    playerVehicle.color = carColor ? carColor.body : YELLOW;
 
     // Create game state with road and race mode
     this.state = createInitialState(track, trackDef, road, playerVehicle, mode);
@@ -148,6 +159,16 @@ class Game {
     this.physicsSystem.init(this.state);
     this.raceSystem.init(this.state);
     this.itemSystem.initFromTrack(track, road);
+    
+    // Register item system callbacks for visual effects
+    var renderer = this.renderer;
+    this.itemSystem.setCallbacks({
+      onLightningStrike: function(hitCount: number) {
+        if (renderer.triggerLightningStrike) {
+          renderer.triggerLightningStrike(hitCount);
+        }
+      }
+    });
 
     // Initialize HUD with race start time (will be reset to 0 when countdown finishes)
     this.hud.init(this.state.time);
@@ -326,7 +347,7 @@ class Game {
 
     // Update items (including shell projectiles)
     this.itemSystem.update(dt, this.state.vehicles, this.state.road.totalLength);
-    this.itemSystem.checkPickups(this.state.vehicles);
+    this.itemSystem.checkPickups(this.state.vehicles, this.state.road);
 
     // Use item if requested (consume to prevent multi-tick triggering)
     if (this.controls.consumeJustPressed(GameAction.USE_ITEM)) {
@@ -716,6 +737,14 @@ class Game {
     // Pass 0 speed when paused so animations freeze
     var speed = this.paused ? 0 : vehicle.speed;
     var dt = 1.0 / this.config.tickRate;  // Fixed timestep
+
+    // Set brake light state based on acceleration input
+    // Brake lights on when: actively braking, stopped, or coasting (not accelerating)
+    var accel = this.controls.getAcceleration();
+    var brakeLightsOn = accel <= 0;  // On when braking (accel < 0) or not accelerating (accel === 0)
+    if (this.renderer.setBrakeLightState) {
+      this.renderer.setBrakeLightState(brakeLightsOn);
+    }
 
     this.renderer.beginFrame();
     this.renderer.renderSky(trackZ, curvature, playerSteer, speed, dt);

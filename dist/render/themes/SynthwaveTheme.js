@@ -22,6 +22,11 @@ var SynthwaveTheme = {
         roadGrid: { fg: WHITE, bg: BG_CYAN },
         shoulderPrimary: { fg: BLUE, bg: BG_BLACK },
         shoulderSecondary: { fg: MAGENTA, bg: BG_BLACK },
+        itemBox: {
+            border: { fg: LIGHTMAGENTA, bg: BG_BLACK },
+            fill: { fg: MAGENTA, bg: BG_BLACK },
+            symbol: { fg: WHITE, bg: BG_BLACK }
+        },
         roadsideColors: {
             'neon_pillar': {
                 primary: { fg: LIGHTCYAN, bg: BG_BLACK },

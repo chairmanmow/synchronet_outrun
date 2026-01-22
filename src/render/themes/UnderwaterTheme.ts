@@ -8,27 +8,27 @@ var UnderwaterTheme: Theme = {
   description: 'Race through a magical underwater world filled with marine life',
   
   colors: {
-    // Deep ocean sky - dark blues fading to lighter
-    skyTop: { fg: BLUE, bg: BG_BLUE },
-    skyMid: { fg: LIGHTBLUE, bg: BG_BLUE },
-    skyHorizon: { fg: LIGHTCYAN, bg: BG_CYAN },
+    // Deep ocean water - blues all the way
+    skyTop: { fg: CYAN, bg: BG_CYAN },
+    skyMid: { fg: LIGHTCYAN, bg: BG_BLUE },
+    skyHorizon: { fg: LIGHTBLUE, bg: BG_BLUE },
     
-    // Water caustics/ripple grid
+    // Water ripple patterns (not used for water sky but kept for consistency)
     skyGrid: { fg: LIGHTCYAN, bg: BG_BLUE },
-    skyGridGlow: { fg: WHITE, bg: BG_BLUE },
+    skyGridGlow: { fg: WHITE, bg: BG_CYAN },
     
-    // Mermaid silhouette glow
+    // Mermaid colors
     celestialCore: { fg: LIGHTMAGENTA, bg: BG_BLUE },
     celestialGlow: { fg: LIGHTCYAN, bg: BG_BLUE },
     
-    // Bioluminescent particles
-    starBright: { fg: LIGHTCYAN, bg: BG_BLUE },
-    starDim: { fg: CYAN, bg: BG_BLUE },
+    // Bioluminescent particles / bubbles
+    starBright: { fg: WHITE, bg: BG_BLUE },
+    starDim: { fg: LIGHTCYAN, bg: BG_BLUE },
     
-    // Underwater rock formations
-    sceneryPrimary: { fg: DARKGRAY, bg: BG_BLUE },
-    scenerySecondary: { fg: LIGHTGRAY, bg: BG_BLUE },
-    sceneryTertiary: { fg: GREEN, bg: BG_BLUE },  // Kelp/seaweed accents
+    // Aquarium glass panels (gray columns)
+    sceneryPrimary: { fg: LIGHTGRAY, bg: BG_BLACK },
+    scenerySecondary: { fg: WHITE, bg: BG_BLUE },
+    sceneryTertiary: { fg: LIGHTGREEN, bg: BG_BLUE },  // Kelp/seaweed accents
     
     // Blue coral road
     roadSurface: { fg: LIGHTBLUE, bg: BG_BLUE },
@@ -40,6 +40,13 @@ var UnderwaterTheme: Theme = {
     // Sandy/rocky shoulders
     shoulderPrimary: { fg: YELLOW, bg: BG_BLUE },
     shoulderSecondary: { fg: BROWN, bg: BG_CYAN },
+    
+    // Item box colors - underwater treasure chest style
+    itemBox: {
+      border: { fg: LIGHTCYAN, bg: BG_BLUE },
+      fill: { fg: CYAN, bg: BG_BLUE },
+      symbol: { fg: YELLOW, bg: BG_BLUE }
+    },
     
     // Roadside colors - underwater palette
     roadsideColors: {
@@ -55,9 +62,9 @@ var UnderwaterTheme: Theme = {
         primary: { fg: LIGHTGREEN, bg: BG_BLUE },
         secondary: { fg: GREEN, bg: BG_BLUE }
       },
-      'underwater_rock': {
-        primary: { fg: LIGHTGRAY, bg: BG_BLUE },
-        secondary: { fg: DARKGRAY, bg: BG_BLUE }
+      'underwater_anemone': {
+        primary: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+        secondary: { fg: YELLOW, bg: BG_BLUE }
       },
       'underwater_jellyfish': {
         primary: { fg: LIGHTMAGENTA, bg: BG_BLUE },
@@ -70,16 +77,16 @@ var UnderwaterTheme: Theme = {
     }
   },
   
-  // Rippling water caustics in the "sky" (water above)
+  // Wavy water sky with fish and bubbles
   sky: {
-    type: 'grid',  // Use grid animation for caustics
+    type: 'water',  // New water animation type
     converging: false,
-    horizontal: true  // Horizontal caustic lines
+    horizontal: false
   },
   
-  // Underwater rock formations and kelp forest background
+  // Aquarium background with glass panels and mermaid
   background: {
-    type: 'underwater',
+    type: 'aquarium',
     config: {
       kelp: true,
       bubbles: true,
@@ -87,24 +94,24 @@ var UnderwaterTheme: Theme = {
     }
   },
   
-  // Mermaid silhouette as celestial object
+  // Mermaid inside aquarium
   celestial: {
     type: 'mermaid',
     size: 4,
-    positionX: 0.7,
-    positionY: 0.3
+    positionX: 0.5,
+    positionY: 0.5
   },
   
   // Bioluminescent particles / bubbles
   stars: {
     enabled: true,
-    density: 0.5,
+    density: 0.3,
     twinkle: true
   },
   
   // Animated water/sand floor
   ground: {
-    type: 'water',  // New animated water type
+    type: 'water',
     primary: { fg: LIGHTBLUE, bg: BG_BLUE },
     secondary: { fg: LIGHTCYAN, bg: BG_CYAN },
     pattern: {
@@ -116,10 +123,10 @@ var UnderwaterTheme: Theme = {
   // Marine life roadside
   roadside: {
     pool: [
-      { sprite: 'underwater_fish', weight: 5, side: 'both' },
+      { sprite: 'underwater_fish', weight: 4, side: 'both' },
       { sprite: 'underwater_coral', weight: 4, side: 'both' },
-      { sprite: 'underwater_seaweed', weight: 4, side: 'both' },
-      { sprite: 'underwater_rock', weight: 3, side: 'both' },
+      { sprite: 'underwater_seaweed', weight: 3, side: 'both' },
+      { sprite: 'underwater_anemone', weight: 4, side: 'both' },
       { sprite: 'underwater_jellyfish', weight: 3, side: 'both' },
       { sprite: 'underwater_treasure', weight: 1, side: 'both' }
     ],

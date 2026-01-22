@@ -3,18 +3,18 @@ var UnderwaterTheme = {
     name: 'underwater_grotto',
     description: 'Race through a magical underwater world filled with marine life',
     colors: {
-        skyTop: { fg: BLUE, bg: BG_BLUE },
-        skyMid: { fg: LIGHTBLUE, bg: BG_BLUE },
-        skyHorizon: { fg: LIGHTCYAN, bg: BG_CYAN },
+        skyTop: { fg: CYAN, bg: BG_CYAN },
+        skyMid: { fg: LIGHTCYAN, bg: BG_BLUE },
+        skyHorizon: { fg: LIGHTBLUE, bg: BG_BLUE },
         skyGrid: { fg: LIGHTCYAN, bg: BG_BLUE },
-        skyGridGlow: { fg: WHITE, bg: BG_BLUE },
+        skyGridGlow: { fg: WHITE, bg: BG_CYAN },
         celestialCore: { fg: LIGHTMAGENTA, bg: BG_BLUE },
         celestialGlow: { fg: LIGHTCYAN, bg: BG_BLUE },
-        starBright: { fg: LIGHTCYAN, bg: BG_BLUE },
-        starDim: { fg: CYAN, bg: BG_BLUE },
-        sceneryPrimary: { fg: DARKGRAY, bg: BG_BLUE },
-        scenerySecondary: { fg: LIGHTGRAY, bg: BG_BLUE },
-        sceneryTertiary: { fg: GREEN, bg: BG_BLUE },
+        starBright: { fg: WHITE, bg: BG_BLUE },
+        starDim: { fg: LIGHTCYAN, bg: BG_BLUE },
+        sceneryPrimary: { fg: LIGHTGRAY, bg: BG_BLACK },
+        scenerySecondary: { fg: WHITE, bg: BG_BLUE },
+        sceneryTertiary: { fg: LIGHTGREEN, bg: BG_BLUE },
         roadSurface: { fg: LIGHTBLUE, bg: BG_BLUE },
         roadSurfaceAlt: { fg: CYAN, bg: BG_CYAN },
         roadStripe: { fg: WHITE, bg: BG_BLUE },
@@ -22,6 +22,11 @@ var UnderwaterTheme = {
         roadGrid: { fg: BLUE, bg: BG_BLUE },
         shoulderPrimary: { fg: YELLOW, bg: BG_BLUE },
         shoulderSecondary: { fg: BROWN, bg: BG_CYAN },
+        itemBox: {
+            border: { fg: LIGHTCYAN, bg: BG_BLUE },
+            fill: { fg: CYAN, bg: BG_BLUE },
+            symbol: { fg: YELLOW, bg: BG_BLUE }
+        },
         roadsideColors: {
             'underwater_fish': {
                 primary: { fg: YELLOW, bg: BG_BLUE },
@@ -35,9 +40,9 @@ var UnderwaterTheme = {
                 primary: { fg: LIGHTGREEN, bg: BG_BLUE },
                 secondary: { fg: GREEN, bg: BG_BLUE }
             },
-            'underwater_rock': {
-                primary: { fg: LIGHTGRAY, bg: BG_BLUE },
-                secondary: { fg: DARKGRAY, bg: BG_BLUE }
+            'underwater_anemone': {
+                primary: { fg: LIGHTMAGENTA, bg: BG_BLUE },
+                secondary: { fg: YELLOW, bg: BG_BLUE }
             },
             'underwater_jellyfish': {
                 primary: { fg: LIGHTMAGENTA, bg: BG_BLUE },
@@ -50,12 +55,12 @@ var UnderwaterTheme = {
         }
     },
     sky: {
-        type: 'grid',
+        type: 'water',
         converging: false,
-        horizontal: true
+        horizontal: false
     },
     background: {
-        type: 'underwater',
+        type: 'aquarium',
         config: {
             kelp: true,
             bubbles: true,
@@ -65,12 +70,12 @@ var UnderwaterTheme = {
     celestial: {
         type: 'mermaid',
         size: 4,
-        positionX: 0.7,
-        positionY: 0.3
+        positionX: 0.5,
+        positionY: 0.5
     },
     stars: {
         enabled: true,
-        density: 0.5,
+        density: 0.3,
         twinkle: true
     },
     ground: {
@@ -84,10 +89,10 @@ var UnderwaterTheme = {
     },
     roadside: {
         pool: [
-            { sprite: 'underwater_fish', weight: 5, side: 'both' },
+            { sprite: 'underwater_fish', weight: 4, side: 'both' },
             { sprite: 'underwater_coral', weight: 4, side: 'both' },
-            { sprite: 'underwater_seaweed', weight: 4, side: 'both' },
-            { sprite: 'underwater_rock', weight: 3, side: 'both' },
+            { sprite: 'underwater_seaweed', weight: 3, side: 'both' },
+            { sprite: 'underwater_anemone', weight: 4, side: 'both' },
             { sprite: 'underwater_jellyfish', weight: 3, side: 'both' },
             { sprite: 'underwater_treasure', weight: 1, side: 'both' }
         ],
