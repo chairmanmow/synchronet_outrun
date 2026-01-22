@@ -68,7 +68,7 @@ interface ThemeColors {
 interface ThemeBackgroundElement {
   type: 'mountains' | 'skyscrapers' | 'dunes' | 'forest' | 'hills' | 'ocean' | 
         'jungle_canopy' | 'candy_hills' | 'nebula' | 'castle_fortress' | 
-        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city' | 'underwater' | 'aquarium';
+        'volcanic' | 'pyramids' | 'stadium' | 'destroyed_city' | 'underwater' | 'aquarium' | 'ansi';
   // Configuration varies by type
   config: {
     // Mountains/hills
@@ -117,7 +117,7 @@ interface ThemeStars {
 }
 
 interface ThemeSkyBackground {
-  type: 'grid' | 'stars' | 'gradient' | 'plain' | 'water';  // What to render in sky background layer
+  type: 'grid' | 'stars' | 'gradient' | 'plain' | 'water' | 'ansi';  // What to render in sky background layer
   // Grid-specific config
   gridDensity?: number;   // For grid spacing
   gridChar?: string;      // Character to use for grid lines
@@ -205,6 +205,15 @@ interface Theme {
   road?: {
     rainbow?: boolean;        // Cycles through rainbow colors
     hideEdgeMarkers?: boolean; // Hide edge markers (for rainbow road blend)
+  };
+  
+  // HUD customization (optional) - for themed HUD labels
+  hud?: {
+    speedLabel?: string;      // Label for speed (default: none, just number)
+    speedMultiplier?: number; // Multiply speed by this (e.g., 0.24 for "Kbps")
+    positionPrefix?: string;  // Prefix for position (e.g., "Node " instead of "")
+    lapLabel?: string;        // Label for lap (e.g., "SECTOR" instead of "LAP")
+    timeLabel?: string;       // Label for time (e.g., "CONNECT" instead of "TIME")
   };
 }
 

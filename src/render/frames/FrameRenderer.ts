@@ -4473,9 +4473,17 @@ class FrameRenderer implements IRenderer {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
     var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
     
-    // Top bar - Only TIME (centered)
-    this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
-    this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
+    // Get HUD customization from theme (if any)
+    var hudConfig = this.activeTheme.hud;
+    var timeLabel = (hudConfig && hudConfig.timeLabel) ? hudConfig.timeLabel : 'TIME';
+    var lapLabel = (hudConfig && hudConfig.lapLabel) ? hudConfig.lapLabel : 'LAP';
+    var positionPrefix = (hudConfig && hudConfig.positionPrefix) ? hudConfig.positionPrefix : '';
+    var speedMultiplier = (hudConfig && hudConfig.speedMultiplier) ? hudConfig.speedMultiplier : 1;
+    var speedSuffix = (hudConfig && hudConfig.speedLabel) ? ' ' + hudConfig.speedLabel : '';
+    
+    // Top bar - TIME or custom label (centered)
+    this.writeStringToFrame(frame, 35, 0, timeLabel, labelAttr);
+    this.writeStringToFrame(frame, 35 + timeLabel.length + 1, 0, LapTimer.format(hudData.lapTime), valueAttr);
     
     // Bottom bar (row 23):
     // LEFT:  [====LAP 2/3====]
@@ -4483,17 +4491,25 @@ class FrameRenderer implements IRenderer {
     // Position (8th) on row above, far left
     var bottomY = this.height - 1;
     
-    // POSITION - One row up, far left
-    var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+    // POSITION - One row up, far left (with optional prefix like "Node ")
+    var posStr = positionPrefix + hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
     this.writeStringToFrame(frame, 0, bottomY - 1, posStr, valueAttr);
     
-    // LEFT SIDE - Lap progress bar with "LAP 2/3" centered inside
-    this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16);
+    // LEFT SIDE - Lap progress bar with "LAP 2/3" or custom label centered inside
+    this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16, lapLabel);
     
     // RIGHT SIDE - Speed numeric and bar (full width)
-    var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
-    var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
-    this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+    // Apply speed multiplier for themed display (e.g., MPH -> Kbps)
+    var displaySpeed = Math.round(hudData.speed * speedMultiplier);
+    var maxDisplaySpeed = Math.round(300 * speedMultiplier);
+    var speedDisplay = displaySpeed > maxDisplaySpeed ? maxDisplaySpeed + '+' : this.padLeft(displaySpeed.toString(), 3);
+    if (speedSuffix && displaySpeed <= maxDisplaySpeed) {
+      // For themed speed with suffix (e.g., "28.8 Kbps"), adjust display
+      speedDisplay = displaySpeed.toFixed(1) + speedSuffix;
+    }
+    var speedAttr = displaySpeed > maxDisplaySpeed ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+    var speedX = 79 - speedDisplay.length;  // Right-align before bar
+    this.writeStringToFrame(frame, speedX - 12, bottomY, speedDisplay, speedAttr);
     this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 11);
     
     // Held item display - ABOVE speedometer (rows 20-22, right side)
@@ -4839,7 +4855,7 @@ class FrameRenderer implements IRenderer {
    * Background fills from BG_BLACK to BG_BLUE as progress increases.
    * Text is always YELLOW to stand out on either background.
    */
-  private renderLapProgressBar(frame: Frame, lap: number, totalLaps: number, progress: number, x: number, y: number, width: number): void {
+  private renderLapProgressBar(frame: Frame, lap: number, totalLaps: number, progress: number, x: number, y: number, width: number, label?: string): void {
     var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
     
     // Draw brackets
@@ -4849,8 +4865,9 @@ class FrameRenderer implements IRenderer {
     // Calculate fill width (inside the brackets)
     var fillWidth = Math.round(progress * width);
     
-    // Build the "LAP X/Y" text to center inside
-    var lapText = 'LAP ' + lap + '/' + totalLaps;
+    // Build the "LAP X/Y" text to center inside (use custom label if provided)
+    var lapLabel = label || 'LAP';
+    var lapText = lapLabel + ' ' + lap + '/' + totalLaps;
     var textStart = Math.floor((width - lapText.length) / 2);
     
     // Render each character inside the bar

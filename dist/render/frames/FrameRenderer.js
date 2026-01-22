@@ -3163,15 +3163,27 @@ var FrameRenderer = (function () {
         frame.clear();
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
-        this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
-        this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
+        var hudConfig = this.activeTheme.hud;
+        var timeLabel = (hudConfig && hudConfig.timeLabel) ? hudConfig.timeLabel : 'TIME';
+        var lapLabel = (hudConfig && hudConfig.lapLabel) ? hudConfig.lapLabel : 'LAP';
+        var positionPrefix = (hudConfig && hudConfig.positionPrefix) ? hudConfig.positionPrefix : '';
+        var speedMultiplier = (hudConfig && hudConfig.speedMultiplier) ? hudConfig.speedMultiplier : 1;
+        var speedSuffix = (hudConfig && hudConfig.speedLabel) ? ' ' + hudConfig.speedLabel : '';
+        this.writeStringToFrame(frame, 35, 0, timeLabel, labelAttr);
+        this.writeStringToFrame(frame, 35 + timeLabel.length + 1, 0, LapTimer.format(hudData.lapTime), valueAttr);
         var bottomY = this.height - 1;
-        var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+        var posStr = positionPrefix + hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
         this.writeStringToFrame(frame, 0, bottomY - 1, posStr, valueAttr);
-        this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16);
-        var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
-        var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
-        this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+        this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16, lapLabel);
+        var displaySpeed = Math.round(hudData.speed * speedMultiplier);
+        var maxDisplaySpeed = Math.round(300 * speedMultiplier);
+        var speedDisplay = displaySpeed > maxDisplaySpeed ? maxDisplaySpeed + '+' : this.padLeft(displaySpeed.toString(), 3);
+        if (speedSuffix && displaySpeed <= maxDisplaySpeed) {
+            speedDisplay = displaySpeed.toFixed(1) + speedSuffix;
+        }
+        var speedAttr = displaySpeed > maxDisplaySpeed ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+        var speedX = 79 - speedDisplay.length;
+        this.writeStringToFrame(frame, speedX - 12, bottomY, speedDisplay, speedAttr);
         this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 11);
         this.renderItemSlotWithIcon(frame, hudData.heldItem);
         if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
@@ -3387,12 +3399,13 @@ var FrameRenderer = (function () {
         }
         frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
-    FrameRenderer.prototype.renderLapProgressBar = function (frame, lap, totalLaps, progress, x, y, width) {
+    FrameRenderer.prototype.renderLapProgressBar = function (frame, lap, totalLaps, progress, x, y, width, label) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         frame.setData(x, y, '[', labelAttr);
         frame.setData(x + width + 1, y, ']', labelAttr);
         var fillWidth = Math.round(progress * width);
-        var lapText = 'LAP ' + lap + '/' + totalLaps;
+        var lapLabel = label || 'LAP';
+        var lapText = lapLabel + ' ' + lap + '/' + totalLaps;
         var textStart = Math.floor((width - lapText.length) / 2);
         for (var i = 0; i < width; i++) {
             var isFilled = i < fillWidth;

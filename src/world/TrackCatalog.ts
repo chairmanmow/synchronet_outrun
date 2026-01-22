@@ -621,6 +621,37 @@ var TRACK_THEMES: { [id: string]: TrackTheme } = {
       color: { fg: DARKGRAY, bg: BG_BLACK },
       highlightColor: { fg: LIGHTRED, bg: BG_BLACK }
     }
+  },
+
+  'ansi_tunnel': {
+    id: 'ansi_tunnel',
+    name: 'ANSI Tunnel',
+    sky: {
+      top: { fg: BLACK, bg: BG_BLACK },
+      horizon: { fg: CYAN, bg: BG_BLACK },
+      gridColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+    },
+    sun: {
+      color: { fg: WHITE, bg: BG_BLACK },
+      glowColor: { fg: CYAN, bg: BG_BLACK },
+      position: 0.5
+    },
+    road: {
+      surface: { fg: DARKGRAY, bg: BG_BLACK },
+      stripe: { fg: LIGHTCYAN, bg: BG_BLACK },
+      edge: { fg: CYAN, bg: BG_BLACK },
+      grid: { fg: DARKGRAY, bg: BG_BLACK }
+    },
+    offroad: {
+      groundColor: { fg: BLACK, bg: BG_BLACK },
+      sceneryTypes: ['data_beacon', 'data_node', 'signal_pole', 'binary_pillar'],
+      sceneryDensity: 0.15
+    },
+    background: {
+      type: 'ansi',
+      color: { fg: CYAN, bg: BG_BLACK },
+      highlightColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+    }
   }
 };
 
@@ -690,6 +721,28 @@ var TRACK_CATALOG: TrackDefinition[] = [
       { type: 'curve', length: 6, curve: 0.5 },
       { type: 'ease_out', length: 2 },
       { type: 'straight', length: 6 }
+    ]
+  },
+
+  // ---- DATA HIGHWAY (ANSI Tunnel) ----
+  {
+    id: 'data_highway',
+    name: 'Data Highway',
+    description: 'Race through scrolling ANSI art at 28.8 Kbps!',
+    difficulty: 2,
+    laps: 3,
+    themeId: 'ansi_tunnel',
+    estimatedLapTime: 30,
+    npcCount: 5,
+    sections: [
+      { type: 'straight', length: 8 },
+      { type: 'ease_in', length: 3, targetCurve: 0.35 },
+      { type: 'curve', length: 6, curve: 0.35 },
+      { type: 'ease_out', length: 3 },
+      { type: 'straight', length: 6 },
+      { type: 'ease_in', length: 2, targetCurve: -0.4 },
+      { type: 'curve', length: 5, curve: -0.4 },
+      { type: 'ease_out', length: 2 }
     ]
   },
 

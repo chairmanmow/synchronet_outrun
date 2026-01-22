@@ -39,6 +39,7 @@
 /// <reference path="render/cp437/SkylineRenderer.ts" />
 /// <reference path="render/cp437/SpriteRenderer.ts" />
 /// <reference path="render/cp437/HudRenderer.ts" />
+/// <reference path="render/ansi/ANSILoader.ts" />
 /// <reference path="render/Renderer.ts" />
 /// <reference path="game/GameState.ts" />
 /// <reference path="game/Systems.ts" />

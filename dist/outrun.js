@@ -1763,6 +1763,36 @@ var TRACK_THEMES = {
             color: { fg: DARKGRAY, bg: BG_BLACK },
             highlightColor: { fg: LIGHTRED, bg: BG_BLACK }
         }
+    },
+    'ansi_tunnel': {
+        id: 'ansi_tunnel',
+        name: 'ANSI Tunnel',
+        sky: {
+            top: { fg: BLACK, bg: BG_BLACK },
+            horizon: { fg: CYAN, bg: BG_BLACK },
+            gridColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+        },
+        sun: {
+            color: { fg: WHITE, bg: BG_BLACK },
+            glowColor: { fg: CYAN, bg: BG_BLACK },
+            position: 0.5
+        },
+        road: {
+            surface: { fg: DARKGRAY, bg: BG_BLACK },
+            stripe: { fg: LIGHTCYAN, bg: BG_BLACK },
+            edge: { fg: CYAN, bg: BG_BLACK },
+            grid: { fg: DARKGRAY, bg: BG_BLACK }
+        },
+        offroad: {
+            groundColor: { fg: BLACK, bg: BG_BLACK },
+            sceneryTypes: ['data_beacon', 'data_node', 'signal_pole', 'binary_pillar'],
+            sceneryDensity: 0.15
+        },
+        background: {
+            type: 'ansi',
+            color: { fg: CYAN, bg: BG_BLACK },
+            highlightColor: { fg: LIGHTCYAN, bg: BG_BLACK }
+        }
     }
 };
 var TRACK_CATALOG = [
@@ -1818,6 +1848,26 @@ var TRACK_CATALOG = [
             { type: 'curve', length: 6, curve: 0.5 },
             { type: 'ease_out', length: 2 },
             { type: 'straight', length: 6 }
+        ]
+    },
+    {
+        id: 'data_highway',
+        name: 'Data Highway',
+        description: 'Race through scrolling ANSI art at 28.8 Kbps!',
+        difficulty: 2,
+        laps: 3,
+        themeId: 'ansi_tunnel',
+        estimatedLapTime: 30,
+        npcCount: 5,
+        sections: [
+            { type: 'straight', length: 8 },
+            { type: 'ease_in', length: 3, targetCurve: 0.35 },
+            { type: 'curve', length: 6, curve: 0.35 },
+            { type: 'ease_out', length: 3 },
+            { type: 'straight', length: 6 },
+            { type: 'ease_in', length: 2, targetCurve: -0.4 },
+            { type: 'curve', length: 5, curve: -0.4 },
+            { type: 'ease_out', length: 2 }
         ]
     },
     {
@@ -5081,6 +5131,205 @@ var HudRenderer = (function () {
         }
     };
     return HudRenderer;
+}());
+"use strict";
+var ANSILoader = (function () {
+    function ANSILoader() {
+    }
+    ANSILoader.load = function (filename, directory) {
+        var dir = directory || ANSILoader.defaultDirectory;
+        var path = dir + '/' + filename;
+        try {
+            if (typeof file_exists !== 'undefined' && !file_exists(path)) {
+                logWarning("ANSI file not found: " + path);
+                return null;
+            }
+            var content;
+            if (typeof read !== 'undefined') {
+                content = read(path);
+            }
+            else {
+                logWarning("Cannot read ANSI file outside Synchronet: " + path);
+                return null;
+            }
+            return ANSILoader.parse(content);
+        }
+        catch (e) {
+            logWarning("Error loading ANSI file: " + path + " - " + e);
+            return null;
+        }
+    };
+    ANSILoader.scanDirectory = function (directory) {
+        var dir = directory || ANSILoader.defaultDirectory;
+        var files = [];
+        try {
+            if (typeof directory_list !== 'undefined') {
+                var allFiles = directory_list(dir);
+                for (var i = 0; i < allFiles.length; i++) {
+                    var f = allFiles[i];
+                    if (f.toLowerCase().endsWith('.ans')) {
+                        files.push(f);
+                    }
+                }
+            }
+        }
+        catch (e) {
+            logWarning("Error scanning ANSI directory: " + dir + " - " + e);
+        }
+        return files;
+    };
+    ANSILoader.parse = function (content) {
+        var width = 80;
+        var maxHeight = 500;
+        var cells = [];
+        for (var row = 0; row < maxHeight; row++) {
+            cells[row] = [];
+            for (var col = 0; col < width; col++) {
+                cells[row][col] = { char: ' ', attr: makeAttr(LIGHTGRAY, BG_BLACK) };
+            }
+        }
+        var cursorX = 0;
+        var cursorY = 0;
+        var currentAttr = makeAttr(LIGHTGRAY, BG_BLACK);
+        var maxY = 0;
+        var i = 0;
+        while (i < content.length) {
+            var ch = content.charAt(i);
+            var code = content.charCodeAt(i);
+            if (code === 27 && i + 1 < content.length && content.charAt(i + 1) === '[') {
+                i += 2;
+                var params = '';
+                while (i < content.length) {
+                    var c = content.charAt(i);
+                    if ((c >= '0' && c <= '9') || c === ';') {
+                        params += c;
+                        i++;
+                    }
+                    else {
+                        break;
+                    }
+                }
+                if (i < content.length) {
+                    var cmd = content.charAt(i);
+                    i++;
+                    var parts = params.split(';');
+                    var nums = [];
+                    for (var p = 0; p < parts.length; p++) {
+                        nums.push(parts[p] === '' ? 0 : parseInt(parts[p], 10));
+                    }
+                    switch (cmd) {
+                        case 'm':
+                            currentAttr = ANSILoader.parseSGR(nums, currentAttr);
+                            break;
+                        case 'H':
+                        case 'f':
+                            cursorY = (nums[0] || 1) - 1;
+                            cursorX = (nums[1] || 1) - 1;
+                            break;
+                        case 'A':
+                            cursorY = Math.max(0, cursorY - (nums[0] || 1));
+                            break;
+                        case 'B':
+                            cursorY = cursorY + (nums[0] || 1);
+                            break;
+                        case 'C':
+                            cursorX = Math.min(width - 1, cursorX + (nums[0] || 1));
+                            break;
+                        case 'D':
+                            cursorX = Math.max(0, cursorX - (nums[0] || 1));
+                            break;
+                        case 'J':
+                        case 'K':
+                        case 's':
+                        case 'u':
+                            break;
+                    }
+                }
+            }
+            else if (code === 13) {
+                cursorX = 0;
+                i++;
+            }
+            else if (code === 10) {
+                cursorY++;
+                cursorX = 0;
+                i++;
+            }
+            else if (code === 9) {
+                cursorX = Math.min(width - 1, (Math.floor(cursorX / 8) + 1) * 8);
+                i++;
+            }
+            else {
+                if (cursorY < maxHeight && cursorX < width) {
+                    cells[cursorY][cursorX] = { char: ch, attr: currentAttr };
+                    if (cursorY > maxY)
+                        maxY = cursorY;
+                }
+                cursorX++;
+                if (cursorX >= width) {
+                    cursorX = 0;
+                    cursorY++;
+                }
+                i++;
+            }
+        }
+        var actualHeight = maxY + 1;
+        cells.length = actualHeight;
+        return {
+            width: width,
+            height: actualHeight,
+            cells: cells
+        };
+    };
+    ANSILoader.parseSGR = function (params, currentAttr) {
+        var fg = currentAttr & 0x0F;
+        var bg = (currentAttr >> 4) & 0x0F;
+        var bold = false;
+        if (params.length === 0) {
+            params = [0];
+        }
+        for (var i = 0; i < params.length; i++) {
+            var p = params[i];
+            if (p === 0) {
+                fg = LIGHTGRAY;
+                bg = 0;
+                bold = false;
+            }
+            else if (p === 1) {
+                bold = true;
+                if (fg < 8)
+                    fg += 8;
+            }
+            else if (p === 2 || p === 22) {
+                bold = false;
+                if (fg >= 8)
+                    fg -= 8;
+            }
+            else if (p >= 30 && p <= 37) {
+                fg = p - 30;
+                if (bold)
+                    fg += 8;
+            }
+            else if (p === 39) {
+                fg = bold ? WHITE : LIGHTGRAY;
+            }
+            else if (p >= 40 && p <= 47) {
+                bg = p - 40;
+            }
+            else if (p === 49) {
+                bg = 0;
+            }
+            else if (p >= 90 && p <= 97) {
+                fg = (p - 90) + 8;
+            }
+            else if (p >= 100 && p <= 107) {
+                bg = (p - 100) + 8;
+            }
+        }
+        return makeAttr(fg, bg << 4);
+    };
+    ANSILoader.defaultDirectory = '/sbbs/text/futureland';
+    return ANSILoader;
 }());
 "use strict";
 var ThemeRegistry = {};
@@ -11020,6 +11269,379 @@ var UnderwaterTheme = {
 };
 registerTheme(UnderwaterTheme);
 "use strict";
+var ANSITunnelSprites = {
+    left: [
+        {
+            lines: [
+                '│',
+                '│',
+                '│',
+                '│'
+            ],
+            colors: [LIGHTCYAN, CYAN, LIGHTCYAN, CYAN],
+            width: 1,
+            height: 4
+        },
+        {
+            lines: [
+                '┌┐',
+                '└┘'
+            ],
+            colors: [CYAN, CYAN],
+            width: 2,
+            height: 2
+        },
+        {
+            lines: [
+                ' ◊',
+                ' │',
+                ' │'
+            ],
+            colors: [LIGHTCYAN, DARKGRAY, DARKGRAY],
+            width: 2,
+            height: 3
+        },
+        {
+            lines: [
+                '1',
+                '0',
+                '1',
+                '0'
+            ],
+            colors: [LIGHTCYAN, CYAN, LIGHTCYAN, CYAN],
+            width: 1,
+            height: 4
+        }
+    ],
+    right: [
+        {
+            lines: [
+                '│',
+                '│',
+                '│',
+                '│'
+            ],
+            colors: [LIGHTCYAN, CYAN, LIGHTCYAN, CYAN],
+            width: 1,
+            height: 4
+        },
+        {
+            lines: [
+                '┌┐',
+                '└┘'
+            ],
+            colors: [CYAN, CYAN],
+            width: 2,
+            height: 2
+        },
+        {
+            lines: [
+                '◊ ',
+                '│ ',
+                '│ '
+            ],
+            colors: [LIGHTCYAN, DARKGRAY, DARKGRAY],
+            width: 2,
+            height: 3
+        },
+        {
+            lines: [
+                '0',
+                '1',
+                '0',
+                '1'
+            ],
+            colors: [CYAN, LIGHTCYAN, CYAN, LIGHTCYAN],
+            width: 1,
+            height: 4
+        }
+    ],
+    background: {
+        layers: [
+            {
+                speed: 0.1,
+                sprites: [
+                    {
+                        x: 10,
+                        lines: ['·'],
+                        colors: [DARKGRAY],
+                        width: 1,
+                        height: 1
+                    },
+                    {
+                        x: 30,
+                        lines: ['·'],
+                        colors: [CYAN],
+                        width: 1,
+                        height: 1
+                    },
+                    {
+                        x: 50,
+                        lines: ['·'],
+                        colors: [DARKGRAY],
+                        width: 1,
+                        height: 1
+                    },
+                    {
+                        x: 70,
+                        lines: ['·'],
+                        colors: [CYAN],
+                        width: 1,
+                        height: 1
+                    }
+                ]
+            }
+        ]
+    }
+};
+"use strict";
+var ANSITunnelConfig = {
+    directory: '/sbbs/text/futureland',
+    scrollSpeed: 1.0,
+    mirrorSky: true,
+    colorShift: true
+};
+var ANSITunnelTheme = {
+    name: 'ansi_tunnel',
+    description: 'Race through scrolling ANSI art - a digital cyberspace tunnel',
+    colors: {
+        skyTop: { fg: BLACK, bg: BG_BLACK },
+        skyMid: { fg: DARKGRAY, bg: BG_BLACK },
+        skyHorizon: { fg: CYAN, bg: BG_BLACK },
+        skyGrid: { fg: CYAN, bg: BG_BLACK },
+        skyGridGlow: { fg: LIGHTCYAN, bg: BG_BLACK },
+        celestialCore: { fg: WHITE, bg: BG_BLACK },
+        celestialGlow: { fg: CYAN, bg: BG_BLACK },
+        starBright: { fg: LIGHTCYAN, bg: BG_BLACK },
+        starDim: { fg: CYAN, bg: BG_BLACK },
+        sceneryPrimary: { fg: CYAN, bg: BG_BLACK },
+        scenerySecondary: { fg: LIGHTCYAN, bg: BG_BLACK },
+        sceneryTertiary: { fg: WHITE, bg: BG_BLACK },
+        roadSurface: { fg: DARKGRAY, bg: BG_BLACK },
+        roadSurfaceAlt: { fg: BLACK, bg: BG_BLACK },
+        roadStripe: { fg: LIGHTCYAN, bg: BG_BLACK },
+        roadEdge: { fg: CYAN, bg: BG_BLACK },
+        roadGrid: { fg: DARKGRAY, bg: BG_BLACK },
+        shoulderPrimary: { fg: DARKGRAY, bg: BG_BLACK },
+        shoulderSecondary: { fg: BLACK, bg: BG_BLACK },
+        roadsideColors: {
+            'data_beacon': {
+                primary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK }
+            },
+            'data_node': {
+                primary: { fg: CYAN, bg: BG_BLACK },
+                secondary: { fg: DARKGRAY, bg: BG_BLACK }
+            },
+            'signal_pole': {
+                primary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                secondary: { fg: DARKGRAY, bg: BG_BLACK }
+            },
+            'binary_pillar': {
+                primary: { fg: LIGHTCYAN, bg: BG_BLACK },
+                secondary: { fg: CYAN, bg: BG_BLACK }
+            }
+        },
+        itemBox: {
+            border: { fg: LIGHTCYAN, bg: BG_BLACK },
+            fill: { fg: DARKGRAY, bg: BG_BLACK },
+            symbol: { fg: WHITE, bg: BG_BLACK }
+        }
+    },
+    sky: {
+        type: 'ansi',
+        converging: false,
+        horizontal: false
+    },
+    background: {
+        type: 'ansi',
+        config: {
+            parallaxSpeed: 0.0
+        }
+    },
+    celestial: {
+        type: 'none',
+        size: 0,
+        positionX: 0.5,
+        positionY: 0.5
+    },
+    stars: {
+        enabled: true,
+        density: 0.1,
+        twinkle: true
+    },
+    ground: {
+        type: 'solid',
+        primary: { fg: BLACK, bg: BG_BLACK },
+        secondary: { fg: DARKGRAY, bg: BG_BLACK },
+        pattern: {
+            ditherDensity: 0.1,
+            ditherChars: ['.', GLYPH.LIGHT_SHADE]
+        }
+    },
+    roadside: {
+        pool: [
+            { sprite: 'data_beacon', weight: 3, side: 'both' },
+            { sprite: 'data_node', weight: 2, side: 'both' },
+            { sprite: 'signal_pole', weight: 2, side: 'both' },
+            { sprite: 'binary_pillar', weight: 3, side: 'both' }
+        ],
+        spacing: 60,
+        density: 0.5
+    },
+    hud: {
+        speedLabel: 'Kbps',
+        speedMultiplier: 0.24,
+        positionPrefix: 'Node ',
+        lapLabel: 'SECTOR',
+        timeLabel: 'CONNECT'
+    }
+};
+registerTheme(ANSITunnelTheme);
+var ANSITunnelRenderer = (function () {
+    function ANSITunnelRenderer() {
+        this.ansiImages = [];
+        this.currentImageIndex = 0;
+        this.scrollOffset = 0;
+        this.loaded = false;
+        this.loadANSIFiles();
+    }
+    ANSITunnelRenderer.prototype.loadANSIFiles = function () {
+        var files = ANSILoader.scanDirectory(ANSITunnelConfig.directory);
+        if (files.length === 0) {
+            logWarning("ANSITunnelRenderer: No ANSI files found in " + ANSITunnelConfig.directory);
+            return;
+        }
+        var maxFiles = Math.min(files.length, 5);
+        for (var i = 0; i < maxFiles; i++) {
+            var img = ANSILoader.load(files[i], ANSITunnelConfig.directory);
+            if (img) {
+                this.ansiImages.push(img);
+                logInfo("ANSITunnelRenderer: Loaded " + files[i] + " (" + img.width + "x" + img.height + ")");
+            }
+        }
+        this.loaded = this.ansiImages.length > 0;
+        logInfo("ANSITunnelRenderer: Loaded " + this.ansiImages.length + " ANSI images");
+    };
+    ANSITunnelRenderer.prototype.getCurrentImage = function () {
+        if (!this.loaded || this.ansiImages.length === 0)
+            return null;
+        return this.ansiImages[this.currentImageIndex % this.ansiImages.length];
+    };
+    ANSITunnelRenderer.prototype.updateScroll = function (trackZ, trackLength) {
+        var img = this.getCurrentImage();
+        if (!img)
+            return;
+        var progress = (trackZ % trackLength) / trackLength;
+        this.scrollOffset = progress * img.height;
+        var lapNumber = Math.floor(trackZ / trackLength);
+        if (lapNumber !== this.currentImageIndex && this.ansiImages.length > 1) {
+            this.currentImageIndex = lapNumber % this.ansiImages.length;
+        }
+    };
+    ANSITunnelRenderer.prototype.renderTunnel = function (frame, horizonY, roadBottom, screenWidth) {
+        var img = this.getCurrentImage();
+        if (!img) {
+            this.renderFallback(frame, horizonY, roadBottom, screenWidth);
+            return;
+        }
+        if (ANSITunnelConfig.mirrorSky) {
+            this.renderSkyReflection(frame, img, horizonY, screenWidth);
+        }
+        this.renderRoadSurface(frame, img, horizonY, roadBottom, screenWidth);
+    };
+    ANSITunnelRenderer.prototype.renderSkyReflection = function (frame, img, horizonY, screenWidth) {
+        for (var screenY = 0; screenY < horizonY; screenY++) {
+            var distFromHorizon = horizonY - screenY;
+            var t = distFromHorizon / horizonY;
+            var ansiRow = Math.floor(this.scrollOffset + t * 20) % img.height;
+            if (ansiRow < 0)
+                ansiRow += img.height;
+            var compression = 0.3 + t * 0.7;
+            var centerX = screenWidth / 2;
+            for (var screenX = 0; screenX < screenWidth; screenX++) {
+                var offsetFromCenter = screenX - centerX;
+                var ansiX = Math.floor(centerX + offsetFromCenter / compression);
+                if (ansiX >= 0 && ansiX < img.width && ansiRow >= 0 && ansiRow < img.height) {
+                    var cell = img.cells[ansiRow][ansiX];
+                    var attr = cell.attr;
+                    if (ANSITunnelConfig.colorShift) {
+                        attr = this.shiftColorForSky(attr, t);
+                    }
+                    frame.setData(screenX, screenY, cell.char, attr);
+                }
+            }
+        }
+    };
+    ANSITunnelRenderer.prototype.renderRoadSurface = function (frame, img, horizonY, roadBottom, screenWidth) {
+        var roadHeight = roadBottom - horizonY;
+        for (var screenY = horizonY; screenY < roadBottom; screenY++) {
+            var rowInRoad = screenY - horizonY;
+            var t = rowInRoad / roadHeight;
+            var ansiRow = Math.floor(this.scrollOffset + (1 - t) * 30) % img.height;
+            if (ansiRow < 0)
+                ansiRow += img.height;
+            var expansion = 0.5 + t * 1.5;
+            var centerX = screenWidth / 2;
+            for (var screenX = 0; screenX < screenWidth; screenX++) {
+                var offsetFromCenter = screenX - centerX;
+                var ansiX = Math.floor(centerX + offsetFromCenter / expansion);
+                if (ansiX >= 0 && ansiX < img.width && ansiRow >= 0 && ansiRow < img.height) {
+                    var cell = img.cells[ansiRow][ansiX];
+                    frame.setData(screenX, screenY, cell.char, cell.attr);
+                }
+            }
+        }
+    };
+    ANSITunnelRenderer.prototype.shiftColorForSky = function (attr, t) {
+        var fg = attr & 0x0F;
+        var bg = (attr >> 4) & 0x0F;
+        if (t > 0.3) {
+            if (fg === RED || fg === LIGHTRED)
+                fg = MAGENTA;
+            if (fg === YELLOW || fg === BROWN)
+                fg = CYAN;
+            if (fg === LIGHTGREEN || fg === GREEN)
+                fg = LIGHTCYAN;
+            if (fg === WHITE)
+                fg = LIGHTCYAN;
+            if (bg > 0 && bg < 8)
+                bg = 0;
+        }
+        if (t > 0.7) {
+            if (fg >= 8)
+                fg = fg - 8;
+        }
+        return makeAttr(fg, bg << 4);
+    };
+    ANSITunnelRenderer.prototype.renderFallback = function (frame, horizonY, roadBottom, screenWidth) {
+        var gridAttr = makeAttr(DARKGRAY, BG_BLACK);
+        for (var y = 0; y < horizonY; y++) {
+            var skyAttr = y < 2 ? makeAttr(BLACK, BG_BLACK) : makeAttr(DARKGRAY, BG_BLACK);
+            for (var x = 0; x < screenWidth; x++) {
+                frame.setData(x, y, ' ', skyAttr);
+            }
+        }
+        for (var y = horizonY; y < roadBottom; y++) {
+            for (var x = 0; x < screenWidth; x++) {
+                var ch = (y + x) % 4 === 0 ? '.' : ' ';
+                frame.setData(x, y, ch, gridAttr);
+            }
+        }
+    };
+    ANSITunnelRenderer.prototype.isLoaded = function () {
+        return this.loaded;
+    };
+    return ANSITunnelRenderer;
+}());
+var ansiTunnelRenderer = null;
+function getANSITunnelRenderer() {
+    if (!ansiTunnelRenderer) {
+        ansiTunnelRenderer = new ANSITunnelRenderer();
+    }
+    return ansiTunnelRenderer;
+}
+"use strict";
 var FrameManager = (function () {
     function FrameManager(width, height, horizonY) {
         this.width = width;
@@ -14514,15 +15136,27 @@ var FrameRenderer = (function () {
         frame.clear();
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         var valueAttr = colorToAttr(PALETTE.HUD_VALUE);
-        this.writeStringToFrame(frame, 35, 0, 'TIME', labelAttr);
-        this.writeStringToFrame(frame, 40, 0, LapTimer.format(hudData.lapTime), valueAttr);
+        var hudConfig = this.activeTheme.hud;
+        var timeLabel = (hudConfig && hudConfig.timeLabel) ? hudConfig.timeLabel : 'TIME';
+        var lapLabel = (hudConfig && hudConfig.lapLabel) ? hudConfig.lapLabel : 'LAP';
+        var positionPrefix = (hudConfig && hudConfig.positionPrefix) ? hudConfig.positionPrefix : '';
+        var speedMultiplier = (hudConfig && hudConfig.speedMultiplier) ? hudConfig.speedMultiplier : 1;
+        var speedSuffix = (hudConfig && hudConfig.speedLabel) ? ' ' + hudConfig.speedLabel : '';
+        this.writeStringToFrame(frame, 35, 0, timeLabel, labelAttr);
+        this.writeStringToFrame(frame, 35 + timeLabel.length + 1, 0, LapTimer.format(hudData.lapTime), valueAttr);
         var bottomY = this.height - 1;
-        var posStr = hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
+        var posStr = positionPrefix + hudData.position + PositionIndicator.getOrdinalSuffix(hudData.position);
         this.writeStringToFrame(frame, 0, bottomY - 1, posStr, valueAttr);
-        this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16);
-        var speedDisplay = hudData.speed > 300 ? '300+' : this.padLeft(hudData.speed.toString(), 3);
-        var speedAttr = hudData.speed > 300 ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
-        this.writeStringToFrame(frame, 63, bottomY, speedDisplay, speedAttr);
+        this.renderLapProgressBar(frame, hudData.lap, hudData.totalLaps, hudData.lapProgress, 0, bottomY, 16, lapLabel);
+        var displaySpeed = Math.round(hudData.speed * speedMultiplier);
+        var maxDisplaySpeed = Math.round(300 * speedMultiplier);
+        var speedDisplay = displaySpeed > maxDisplaySpeed ? maxDisplaySpeed + '+' : this.padLeft(displaySpeed.toString(), 3);
+        if (speedSuffix && displaySpeed <= maxDisplaySpeed) {
+            speedDisplay = displaySpeed.toFixed(1) + speedSuffix;
+        }
+        var speedAttr = displaySpeed > maxDisplaySpeed ? colorToAttr({ fg: LIGHTRED, bg: BG_BLACK }) : valueAttr;
+        var speedX = 79 - speedDisplay.length;
+        this.writeStringToFrame(frame, speedX - 12, bottomY, speedDisplay, speedAttr);
         this.renderSpeedometerBarCompact(frame, hudData.speed, hudData.speedMax, 67, bottomY, 11);
         this.renderItemSlotWithIcon(frame, hudData.heldItem);
         if (hudData.countdown > 0 && hudData.raceMode === RaceMode.GRAND_PRIX) {
@@ -14738,12 +15372,13 @@ var FrameRenderer = (function () {
         }
         frame.setData(boxX + 14, topY + 2, GLYPH.DBOX_BR, frameAttr);
     };
-    FrameRenderer.prototype.renderLapProgressBar = function (frame, lap, totalLaps, progress, x, y, width) {
+    FrameRenderer.prototype.renderLapProgressBar = function (frame, lap, totalLaps, progress, x, y, width, label) {
         var labelAttr = colorToAttr(PALETTE.HUD_LABEL);
         frame.setData(x, y, '[', labelAttr);
         frame.setData(x + width + 1, y, ']', labelAttr);
         var fillWidth = Math.round(progress * width);
-        var lapText = 'LAP ' + lap + '/' + totalLaps;
+        var lapLabel = label || 'LAP';
+        var lapText = lapLabel + ' ' + lap + '/' + totalLaps;
         var textStart = Math.floor((width - lapText.length) / 2);
         for (var i = 0; i < width; i++) {
             var isFilled = i < fillWidth;
