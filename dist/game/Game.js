@@ -47,7 +47,8 @@ var Game = (function () {
             'thunder_stadium': 'thunder_stadium',
             'glitch_circuit': 'glitch_circuit',
             'kaiju_rampage': 'kaiju_rampage',
-            'underwater_grotto': 'underwater_grotto'
+            'underwater_grotto': 'underwater_grotto',
+            'ansi_tunnel': 'ansi_tunnel'
         };
         var themeName = themeMapping[trackDef.themeId] || 'synthwave';
         if (this.renderer.setTheme) {

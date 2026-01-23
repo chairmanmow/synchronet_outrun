@@ -81,7 +81,7 @@ var CIRCUITS: Circuit[] = [
       '   **   '
     ],
     color: YELLOW,
-    trackIds: ['celestial_circuit', 'thunder_stadium', 'glitch_circuit', 'kaiju_rampage'],
+    trackIds: ['celestial_circuit', 'data_highway', 'glitch_circuit', 'kaiju_rampage'],
     description: 'Ultimate challenge'
   }
 ];
@@ -172,6 +172,14 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
       else if (key === 'Q' || key === KEY_ESC) {
         return { selected: false, track: null };
       }
+      else if (key === '?') {
+        // Secret tracks menu
+        var secretResult = showSecretTracksMenu();
+        if (secretResult.selected && secretResult.track) {
+          return secretResult;
+        }
+        needsRedraw = true;
+      }
     }
     else {
       // Track selection mode within a circuit
@@ -247,6 +255,14 @@ function showTrackSelector(highScoreManager?: HighScoreManager): TrackSelectionR
       else if (key === 'Q') {
         return { selected: false, track: null };
       }
+      else if (key === '?') {
+        // Secret tracks menu
+        var secretResult = showSecretTracksMenu();
+        if (secretResult.selected && secretResult.track) {
+          return secretResult;
+        }
+        needsRedraw = true;
+      }
     }
 
     if (needsRedraw) {
@@ -266,6 +282,135 @@ function getCircuitTracks(circuit: Circuit): TrackDefinition[] {
     if (track) tracks.push(track);
   }
   return tracks;
+}
+
+/**
+ * Get all hidden/secret tracks from the catalog.
+ */
+function getSecretTracks(): TrackDefinition[] {
+  var secrets: TrackDefinition[] = [];
+  var allTracks = getAllTracks();
+  for (var i = 0; i < allTracks.length; i++) {
+    if (allTracks[i].hidden) {
+      secrets.push(allTracks[i]);
+    }
+  }
+  return secrets;
+}
+
+/**
+ * Show the secret tracks menu.
+ * Returns a track selection result if user picks a track, or { selected: false } to go back.
+ */
+function showSecretTracksMenu(): TrackSelectionResult {
+  var secretTracks = getSecretTracks();
+  
+  if (secretTracks.length === 0) {
+    // No secrets yet - show a teaser
+    console.clear(LIGHTGRAY, false);
+    console.gotoxy(1, 10);
+    console.attributes = LIGHTMAGENTA;
+    console.print('       ╔══════════════════════════════════════════╗\r\n');
+    console.print('       ║         NO SECRETS FOUND... YET          ║\r\n');
+    console.print('       ║                                          ║\r\n');
+    console.print('       ║  Keep racing to unlock hidden tracks!    ║\r\n');
+    console.print('       ╚══════════════════════════════════════════╝\r\n');
+    console.print('\r\n');
+    console.attributes = DARKGRAY;
+    console.print('                 Press any key to return...\r\n');
+    console.inkey(K_NONE, 5000);
+    return { selected: false, track: null };
+  }
+  
+  var selectedIndex = 0;
+  
+  while (true) {
+    // Draw secret tracks menu
+    console.clear(LIGHTGRAY, false);
+    
+    // Header with spooky ASCII art
+    console.gotoxy(1, 1);
+    console.attributes = LIGHTRED;
+    console.print('═══════════════════════════════════════════════════════════════════════════════\r\n');
+    console.attributes = YELLOW;
+    console.print('    ╔═╗╔═╗╔═╗╦═╗╔═╗╔╦╗  ╔╦╗╦═╗╔═╗╔═╗╦╔═╔═╗\r\n');
+    console.print('    ╚═╗║╣ ║  ╠╦╝║╣  ║    ║ ╠╦╝╠═╣║  ╠╩╗╚═╗\r\n');
+    console.print('    ╚═╝╚═╝╚═╝╩╚═╚═╝ ╩    ╩ ╩╚═╩ ╩╚═╝╩ ╩╚═╝\r\n');
+    console.attributes = LIGHTRED;
+    console.print('═══════════════════════════════════════════════════════════════════════════════\r\n');
+    console.print('\r\n');
+    
+    console.attributes = DARKGRAY;
+    console.print('  These tracks are hidden from the main menu. Shh, it\'s a secret!\r\n\r\n');
+    
+    // List secret tracks
+    for (var i = 0; i < secretTracks.length; i++) {
+      var track = secretTracks[i];
+      console.gotoxy(5, 9 + i * 2);
+      
+      if (i === selectedIndex) {
+        console.attributes = LIGHTCYAN;
+        console.print('>>  ');
+      } else {
+        console.attributes = DARKGRAY;
+        console.print('    ');
+      }
+      
+      console.attributes = i === selectedIndex ? WHITE : LIGHTGRAY;
+      console.print(track.name);
+      
+      console.attributes = DARKGRAY;
+      console.print(' - ');
+      console.print(track.description);
+      
+      // Difficulty stars
+      console.gotoxy(65, 9 + i * 2);
+      console.attributes = YELLOW;
+      console.print(renderDifficultyStars(track.difficulty));
+    }
+    
+    // Controls
+    console.gotoxy(5, 20);
+    console.attributes = DARKGRAY;
+    console.print('────────────────────────────────────────────────────────────────────\r\n');
+    console.gotoxy(5, 21);
+    console.attributes = CYAN;
+    console.print('[');
+    console.attributes = WHITE;
+    console.print('W/S');
+    console.attributes = CYAN;
+    console.print('] Select   [');
+    console.attributes = WHITE;
+    console.print('ENTER');
+    console.attributes = CYAN;
+    console.print('] Race   [');
+    console.attributes = WHITE;
+    console.print('ESC/Q');
+    console.attributes = CYAN;
+    console.print('] Back');
+    
+    // Handle input
+    var key = console.inkey(K_UPPER, 100);
+    if (key === '') continue;
+    
+    if (key === KEY_UP || key === 'W' || key === '8') {
+      selectedIndex = (selectedIndex - 1 + secretTracks.length) % secretTracks.length;
+    }
+    else if (key === KEY_DOWN || key === 'S' || key === '2') {
+      selectedIndex = (selectedIndex + 1) % secretTracks.length;
+    }
+    else if (key === '\r' || key === '\n' || key === ' ') {
+      return {
+        selected: true,
+        track: secretTracks[selectedIndex],
+        isCircuitMode: false,
+        circuitTracks: null
+      };
+    }
+    else if (key === 'Q' || key === KEY_ESC) {
+      return { selected: false, track: null };
+    }
+  }
 }
 
 // ============================================================
@@ -1196,7 +1341,11 @@ function drawControls(state: SelectorState): void {
     console.attributes = WHITE;
     console.print('Q');
     console.attributes = LIGHTGRAY;
-    console.print(' Quit');
+    console.print(' Quit  ');
+    console.attributes = DARKGRAY;
+    console.print('?');
+    console.attributes = DARKGRAY;
+    console.print(' ???');
   } else {
     console.print('  ');
     console.attributes = WHITE;
@@ -1218,7 +1367,11 @@ function drawControls(state: SelectorState): void {
     console.attributes = WHITE;
     console.print('Q');
     console.attributes = LIGHTGRAY;
-    console.print(' Quit');
+    console.print(' Quit  ');
+    console.attributes = DARKGRAY;
+    console.print('?');
+    console.attributes = DARKGRAY;
+    console.print(' ???');
   }
   
   console.gotoxy(1, 25);

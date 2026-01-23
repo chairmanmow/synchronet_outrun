@@ -44,6 +44,9 @@ class FrameRenderer implements IRenderer {
   // Lightning bolt visual effects
   private _lightningBolts: { x: number; startTime: number; targetY: number }[];
   
+  // ANSI tunnel renderer for ansi_tunnel theme
+  private _ansiTunnelRenderer: ANSITunnelRenderer | null;
+  
   constructor(width: number, height: number) {
     this.width = width;
     this.height = height;
@@ -62,6 +65,9 @@ class FrameRenderer implements IRenderer {
     // Initialize lightning bolt effects
     this._lightningBolts = [];
     
+    // Initialize ANSI tunnel renderer (lazy - created when theme is set)
+    this._ansiTunnelRenderer = null;
+    
     this.frameManager = new FrameManager(width, height, this.horizonY);
     this.composer = new SceneComposer(width, height);
     
@@ -79,6 +85,14 @@ class FrameRenderer implements IRenderer {
       this.activeTheme = theme;
       this._staticElementsDirty = true;
       this.rebuildSpriteCache();
+      
+      // Initialize ANSI tunnel renderer if this is the ansi_tunnel theme
+      if (themeName === 'ansi_tunnel') {
+        this._ansiTunnelRenderer = new ANSITunnelRenderer();
+        logInfo('ANSI Tunnel renderer initialized');
+      } else {
+        this._ansiTunnelRenderer = null;
+      }
       
       // Re-render static elements if already initialized
       if (this.frameManager.getSunFrame()) {
@@ -221,6 +235,9 @@ class FrameRenderer implements IRenderer {
       this.renderUnderwaterBackground();
     } else if (this.activeTheme.background.type === 'aquarium') {
       this.renderAquariumBackground();
+    } else if (this.activeTheme.background.type === 'ansi') {
+      // ANSI tunnel - static elements are minimal, dynamic rendering happens in renderRoad
+      this.renderANSITunnelStatic();
     }
     
     this._staticElementsDirty = false;
@@ -259,6 +276,12 @@ class FrameRenderer implements IRenderer {
       this.renderSkyGradient(trackPosition);
     } else if (this.activeTheme.sky.type === 'water') {
       this.renderSkyWater(trackPosition, speed || 0, dt || 0);
+    } else if (this.activeTheme.sky.type === 'ansi') {
+      // ANSI tunnel sky is rendered dynamically with the road
+      // Just update the scroll position here
+      if (this._ansiTunnelRenderer && this._currentRoad) {
+        this._ansiTunnelRenderer.updateScroll(trackPosition, this._currentRoad.totalLength);
+      }
     }
     // 'plain' type = no sky animation
     
@@ -281,6 +304,27 @@ class FrameRenderer implements IRenderer {
     this._currentRoad = road;
     this._currentTrackPosition = trackPosition;
     this._currentCameraX = cameraX;
+    
+    // Special handling for ANSI tunnel theme - render entire tunnel effect
+    if (this._ansiTunnelRenderer && this.activeTheme.background.type === 'ansi') {
+      this._ansiTunnelRenderer.updateScroll(trackPosition, road.totalLength);
+      var roadFrame = this.frameManager.getRoadFrame();
+      if (roadFrame) {
+        this._ansiTunnelRenderer.renderTunnel(
+          roadFrame,
+          this.horizonY,
+          this.height - 3,  // Leave room for HUD
+          this.width
+        );
+      }
+      // Still render road surface for proper road markings
+      this.renderRoadSurface(trackPosition, cameraX, road);
+      
+      // Build roadside objects from track/road
+      var roadsideObjects = this.buildRoadsideObjects(trackPosition, cameraX, road);
+      this.renderRoadsideSprites(roadsideObjects);
+      return;
+    }
     
     // Render ground pattern based on theme type
     if (this.activeTheme.ground) {
@@ -2020,6 +2064,27 @@ class FrameRenderer implements IRenderer {
     frame.setData(mermaidX + 3, mermaidY - 3, '.', makeAttr(WHITE, BG_BLUE));
     frame.setData(20, 3, 'o', makeAttr(WHITE, BG_BLUE));
     frame.setData(55, 2, 'o', makeAttr(WHITE, BG_BLUE));
+  }
+
+  /**
+   * Render ANSI tunnel static elements - minimal since the tunnel is dynamic.
+   * Just renders a dark backdrop that will be overwritten by the dynamic tunnel.
+   */
+  private renderANSITunnelStatic(): void {
+    var frame = this.frameManager.getMountainsFrame();
+    if (!frame) return;
+    
+    var darkAttr = makeAttr(BLACK, BG_BLACK);
+    var hintAttr = makeAttr(DARKGRAY, BG_BLACK);
+    
+    // Fill sky area with dark
+    for (var y = 0; y < this.horizonY; y++) {
+      for (var x = 0; x < this.width; x++) {
+        // Occasional dim dots for depth
+        var ch = (x + y * 7) % 47 === 0 ? '.' : ' ';
+        frame.setData(x, y, ch, ch === '.' ? hintAttr : darkAttr);
+      }
+    }
   }
 
   /**

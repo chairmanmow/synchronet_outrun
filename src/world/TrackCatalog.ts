@@ -705,7 +705,7 @@ var TRACK_CATALOG: TrackDefinition[] = [
     ]
   },
 
-  // ---- THUNDER STADIUM (oval-style) ----
+  // ---- THUNDER STADIUM (oval-style) - SECRET TRACK ----
   {
     id: 'thunder_stadium',
     name: 'Thunder Stadium',
@@ -715,6 +715,7 @@ var TRACK_CATALOG: TrackDefinition[] = [
     themeId: 'thunder_stadium',
     estimatedLapTime: 22,
     npcCount: 6,
+    hidden: true,  // Secret track - access via ? key
     sections: [
       { type: 'straight', length: 6 },
       { type: 'ease_in', length: 2, targetCurve: 0.5 },

@@ -13,6 +13,7 @@ var FrameRenderer = (function () {
         this._currentTrackPosition = 0;
         this._currentCameraX = 0;
         this._lightningBolts = [];
+        this._ansiTunnelRenderer = null;
         this.frameManager = new FrameManager(width, height, this.horizonY);
         this.composer = new SceneComposer(width, height);
         this.activeTheme = SynthwaveTheme;
@@ -24,6 +25,13 @@ var FrameRenderer = (function () {
             this.activeTheme = theme;
             this._staticElementsDirty = true;
             this.rebuildSpriteCache();
+            if (themeName === 'ansi_tunnel') {
+                this._ansiTunnelRenderer = new ANSITunnelRenderer();
+                logInfo('ANSI Tunnel renderer initialized');
+            }
+            else {
+                this._ansiTunnelRenderer = null;
+            }
             if (this.frameManager.getSunFrame()) {
                 this.clearStaticFrames();
                 this.renderStaticElements();
@@ -140,6 +148,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'aquarium') {
             this.renderAquariumBackground();
         }
+        else if (this.activeTheme.background.type === 'ansi') {
+            this.renderANSITunnelStatic();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -162,6 +173,11 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.sky.type === 'water') {
             this.renderSkyWater(trackPosition, speed || 0, dt || 0);
         }
+        else if (this.activeTheme.sky.type === 'ansi') {
+            if (this._ansiTunnelRenderer && this._currentRoad) {
+                this._ansiTunnelRenderer.updateScroll(trackPosition, this._currentRoad.totalLength);
+            }
+        }
         if (this.activeTheme.background.type === 'ocean') {
             this.renderOceanWaves(trackPosition);
         }
@@ -173,6 +189,17 @@ var FrameRenderer = (function () {
         this._currentRoad = road;
         this._currentTrackPosition = trackPosition;
         this._currentCameraX = cameraX;
+        if (this._ansiTunnelRenderer && this.activeTheme.background.type === 'ansi') {
+            this._ansiTunnelRenderer.updateScroll(trackPosition, road.totalLength);
+            var roadFrame = this.frameManager.getRoadFrame();
+            if (roadFrame) {
+                this._ansiTunnelRenderer.renderTunnel(roadFrame, this.horizonY, this.height - 3, this.width);
+            }
+            this.renderRoadSurface(trackPosition, cameraX, road);
+            var roadsideObjects = this.buildRoadsideObjects(trackPosition, cameraX, road);
+            this.renderRoadsideSprites(roadsideObjects);
+            return;
+        }
         if (this.activeTheme.ground) {
             if (this.activeTheme.ground.type === 'grid') {
                 this.renderHolodeckFloor(trackPosition);
@@ -1364,6 +1391,19 @@ var FrameRenderer = (function () {
         frame.setData(mermaidX + 3, mermaidY - 3, '.', makeAttr(WHITE, BG_BLUE));
         frame.setData(20, 3, 'o', makeAttr(WHITE, BG_BLUE));
         frame.setData(55, 2, 'o', makeAttr(WHITE, BG_BLUE));
+    };
+    FrameRenderer.prototype.renderANSITunnelStatic = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var darkAttr = makeAttr(BLACK, BG_BLACK);
+        var hintAttr = makeAttr(DARKGRAY, BG_BLACK);
+        for (var y = 0; y < this.horizonY; y++) {
+            for (var x = 0; x < this.width; x++) {
+                var ch = (x + y * 7) % 47 === 0 ? '.' : ' ';
+                frame.setData(x, y, ch, ch === '.' ? hintAttr : darkAttr);
+            }
+        }
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();

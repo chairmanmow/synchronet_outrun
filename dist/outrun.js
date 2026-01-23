@@ -1842,6 +1842,7 @@ var TRACK_CATALOG = [
         themeId: 'thunder_stadium',
         estimatedLapTime: 22,
         npcCount: 6,
+        hidden: true,
         sections: [
             { type: 'straight', length: 6 },
             { type: 'ease_in', length: 2, targetCurve: 0.5 },
@@ -11986,6 +11987,7 @@ var FrameRenderer = (function () {
         this._currentTrackPosition = 0;
         this._currentCameraX = 0;
         this._lightningBolts = [];
+        this._ansiTunnelRenderer = null;
         this.frameManager = new FrameManager(width, height, this.horizonY);
         this.composer = new SceneComposer(width, height);
         this.activeTheme = SynthwaveTheme;
@@ -11997,6 +11999,13 @@ var FrameRenderer = (function () {
             this.activeTheme = theme;
             this._staticElementsDirty = true;
             this.rebuildSpriteCache();
+            if (themeName === 'ansi_tunnel') {
+                this._ansiTunnelRenderer = new ANSITunnelRenderer();
+                logInfo('ANSI Tunnel renderer initialized');
+            }
+            else {
+                this._ansiTunnelRenderer = null;
+            }
             if (this.frameManager.getSunFrame()) {
                 this.clearStaticFrames();
                 this.renderStaticElements();
@@ -12113,6 +12122,9 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.background.type === 'aquarium') {
             this.renderAquariumBackground();
         }
+        else if (this.activeTheme.background.type === 'ansi') {
+            this.renderANSITunnelStatic();
+        }
         this._staticElementsDirty = false;
         logDebug('Static elements rendered, dirty=' + this._staticElementsDirty);
     };
@@ -12135,6 +12147,11 @@ var FrameRenderer = (function () {
         else if (this.activeTheme.sky.type === 'water') {
             this.renderSkyWater(trackPosition, speed || 0, dt || 0);
         }
+        else if (this.activeTheme.sky.type === 'ansi') {
+            if (this._ansiTunnelRenderer && this._currentRoad) {
+                this._ansiTunnelRenderer.updateScroll(trackPosition, this._currentRoad.totalLength);
+            }
+        }
         if (this.activeTheme.background.type === 'ocean') {
             this.renderOceanWaves(trackPosition);
         }
@@ -12146,6 +12163,17 @@ var FrameRenderer = (function () {
         this._currentRoad = road;
         this._currentTrackPosition = trackPosition;
         this._currentCameraX = cameraX;
+        if (this._ansiTunnelRenderer && this.activeTheme.background.type === 'ansi') {
+            this._ansiTunnelRenderer.updateScroll(trackPosition, road.totalLength);
+            var roadFrame = this.frameManager.getRoadFrame();
+            if (roadFrame) {
+                this._ansiTunnelRenderer.renderTunnel(roadFrame, this.horizonY, this.height - 3, this.width);
+            }
+            this.renderRoadSurface(trackPosition, cameraX, road);
+            var roadsideObjects = this.buildRoadsideObjects(trackPosition, cameraX, road);
+            this.renderRoadsideSprites(roadsideObjects);
+            return;
+        }
         if (this.activeTheme.ground) {
             if (this.activeTheme.ground.type === 'grid') {
                 this.renderHolodeckFloor(trackPosition);
@@ -13337,6 +13365,19 @@ var FrameRenderer = (function () {
         frame.setData(mermaidX + 3, mermaidY - 3, '.', makeAttr(WHITE, BG_BLUE));
         frame.setData(20, 3, 'o', makeAttr(WHITE, BG_BLUE));
         frame.setData(55, 2, 'o', makeAttr(WHITE, BG_BLUE));
+    };
+    FrameRenderer.prototype.renderANSITunnelStatic = function () {
+        var frame = this.frameManager.getMountainsFrame();
+        if (!frame)
+            return;
+        var darkAttr = makeAttr(BLACK, BG_BLACK);
+        var hintAttr = makeAttr(DARKGRAY, BG_BLACK);
+        for (var y = 0; y < this.horizonY; y++) {
+            for (var x = 0; x < this.width; x++) {
+                var ch = (x + y * 7) % 47 === 0 ? '.' : ' ';
+                frame.setData(x, y, ch, ch === '.' ? hintAttr : darkAttr);
+            }
+        }
     };
     FrameRenderer.prototype.renderMountains = function () {
         var frame = this.frameManager.getMountainsFrame();
@@ -15920,7 +15961,8 @@ var Game = (function () {
             'thunder_stadium': 'thunder_stadium',
             'glitch_circuit': 'glitch_circuit',
             'kaiju_rampage': 'kaiju_rampage',
-            'underwater_grotto': 'underwater_grotto'
+            'underwater_grotto': 'underwater_grotto',
+            'ansi_tunnel': 'ansi_tunnel'
         };
         var themeName = themeMapping[trackDef.themeId] || 'synthwave';
         if (this.renderer.setTheme) {
@@ -16529,7 +16571,7 @@ var CIRCUITS = [
             '   **   '
         ],
         color: YELLOW,
-        trackIds: ['celestial_circuit', 'thunder_stadium', 'glitch_circuit', 'kaiju_rampage'],
+        trackIds: ['celestial_circuit', 'data_highway', 'glitch_circuit', 'kaiju_rampage'],
         description: 'Ultimate challenge'
     }
 ];
@@ -16570,6 +16612,13 @@ function showTrackSelector(highScoreManager) {
             }
             else if (key === 'Q' || key === KEY_ESC) {
                 return { selected: false, track: null };
+            }
+            else if (key === '?') {
+                var secretResult = showSecretTracksMenu();
+                if (secretResult.selected && secretResult.track) {
+                    return secretResult;
+                }
+                needsRedraw = true;
             }
         }
         else {
@@ -16631,6 +16680,13 @@ function showTrackSelector(highScoreManager) {
             else if (key === 'Q') {
                 return { selected: false, track: null };
             }
+            else if (key === '?') {
+                var secretResult = showSecretTracksMenu();
+                if (secretResult.selected && secretResult.track) {
+                    return secretResult;
+                }
+                needsRedraw = true;
+            }
         }
         if (needsRedraw) {
             console.clear(LIGHTGRAY, false);
@@ -16646,6 +16702,108 @@ function getCircuitTracks(circuit) {
             tracks.push(track);
     }
     return tracks;
+}
+function getSecretTracks() {
+    var secrets = [];
+    var allTracks = getAllTracks();
+    for (var i = 0; i < allTracks.length; i++) {
+        if (allTracks[i].hidden) {
+            secrets.push(allTracks[i]);
+        }
+    }
+    return secrets;
+}
+function showSecretTracksMenu() {
+    var secretTracks = getSecretTracks();
+    if (secretTracks.length === 0) {
+        console.clear(LIGHTGRAY, false);
+        console.gotoxy(1, 10);
+        console.attributes = LIGHTMAGENTA;
+        console.print('       ╔══════════════════════════════════════════╗\r\n');
+        console.print('       ║         NO SECRETS FOUND... YET          ║\r\n');
+        console.print('       ║                                          ║\r\n');
+        console.print('       ║  Keep racing to unlock hidden tracks!    ║\r\n');
+        console.print('       ╚══════════════════════════════════════════╝\r\n');
+        console.print('\r\n');
+        console.attributes = DARKGRAY;
+        console.print('                 Press any key to return...\r\n');
+        console.inkey(K_NONE, 5000);
+        return { selected: false, track: null };
+    }
+    var selectedIndex = 0;
+    while (true) {
+        console.clear(LIGHTGRAY, false);
+        console.gotoxy(1, 1);
+        console.attributes = LIGHTRED;
+        console.print('═══════════════════════════════════════════════════════════════════════════════\r\n');
+        console.attributes = YELLOW;
+        console.print('    ╔═╗╔═╗╔═╗╦═╗╔═╗╔╦╗  ╔╦╗╦═╗╔═╗╔═╗╦╔═╔═╗\r\n');
+        console.print('    ╚═╗║╣ ║  ╠╦╝║╣  ║    ║ ╠╦╝╠═╣║  ╠╩╗╚═╗\r\n');
+        console.print('    ╚═╝╚═╝╚═╝╩╚═╚═╝ ╩    ╩ ╩╚═╩ ╩╚═╝╩ ╩╚═╝\r\n');
+        console.attributes = LIGHTRED;
+        console.print('═══════════════════════════════════════════════════════════════════════════════\r\n');
+        console.print('\r\n');
+        console.attributes = DARKGRAY;
+        console.print('  These tracks are hidden from the main menu. Shh, it\'s a secret!\r\n\r\n');
+        for (var i = 0; i < secretTracks.length; i++) {
+            var track = secretTracks[i];
+            console.gotoxy(5, 9 + i * 2);
+            if (i === selectedIndex) {
+                console.attributes = LIGHTCYAN;
+                console.print('>>  ');
+            }
+            else {
+                console.attributes = DARKGRAY;
+                console.print('    ');
+            }
+            console.attributes = i === selectedIndex ? WHITE : LIGHTGRAY;
+            console.print(track.name);
+            console.attributes = DARKGRAY;
+            console.print(' - ');
+            console.print(track.description);
+            console.gotoxy(65, 9 + i * 2);
+            console.attributes = YELLOW;
+            console.print(renderDifficultyStars(track.difficulty));
+        }
+        console.gotoxy(5, 20);
+        console.attributes = DARKGRAY;
+        console.print('────────────────────────────────────────────────────────────────────\r\n');
+        console.gotoxy(5, 21);
+        console.attributes = CYAN;
+        console.print('[');
+        console.attributes = WHITE;
+        console.print('W/S');
+        console.attributes = CYAN;
+        console.print('] Select   [');
+        console.attributes = WHITE;
+        console.print('ENTER');
+        console.attributes = CYAN;
+        console.print('] Race   [');
+        console.attributes = WHITE;
+        console.print('ESC/Q');
+        console.attributes = CYAN;
+        console.print('] Back');
+        var key = console.inkey(K_UPPER, 100);
+        if (key === '')
+            continue;
+        if (key === KEY_UP || key === 'W' || key === '8') {
+            selectedIndex = (selectedIndex - 1 + secretTracks.length) % secretTracks.length;
+        }
+        else if (key === KEY_DOWN || key === 'S' || key === '2') {
+            selectedIndex = (selectedIndex + 1) % secretTracks.length;
+        }
+        else if (key === '\r' || key === '\n' || key === ' ') {
+            return {
+                selected: true,
+                track: secretTracks[selectedIndex],
+                isCircuitMode: false,
+                circuitTracks: null
+            };
+        }
+        else if (key === 'Q' || key === KEY_ESC) {
+            return { selected: false, track: null };
+        }
+    }
 }
 function drawSelectorUI(state, highScoreManager) {
     drawHeader();
@@ -17299,7 +17457,11 @@ function drawControls(state) {
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;
-        console.print(' Quit');
+        console.print(' Quit  ');
+        console.attributes = DARKGRAY;
+        console.print('?');
+        console.attributes = DARKGRAY;
+        console.print(' ???');
     }
     else {
         console.print('  ');
@@ -17322,7 +17484,11 @@ function drawControls(state) {
         console.attributes = WHITE;
         console.print('Q');
         console.attributes = LIGHTGRAY;
-        console.print(' Quit');
+        console.print(' Quit  ');
+        console.attributes = DARKGRAY;
+        console.print('?');
+        console.attributes = DARKGRAY;
+        console.print(' ???');
     }
     console.gotoxy(1, 25);
     console.attributes = LIGHTMAGENTA;

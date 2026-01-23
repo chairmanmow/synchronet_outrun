@@ -558,6 +558,7 @@ var TRACK_CATALOG = [
         themeId: 'thunder_stadium',
         estimatedLapTime: 22,
         npcCount: 6,
+        hidden: true,
         sections: [
             { type: 'straight', length: 6 },
             { type: 'ease_in', length: 2, targetCurve: 0.5 },
