@@ -8,6 +8,9 @@ dist/*.js
 # Score data
 synthkart.json
 
+# personal config
+synthkart.ini
+
 # Debug logs
 *.log
 debug.log
