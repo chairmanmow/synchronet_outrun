@@ -4,9 +4,10 @@
  * Layer architecture:
  *   Layer 0: Root frame (80x24, black background)
  *   Layer 1: Sky grid frame (animated, scrolls with forward motion)
- *   Layer 2: Mountains frame (transparent, horizontal parallax)
- *   Layer 3: Sun frame (transparent, minimal parallax)
- *   Layer 4: Road frame (the pseudo-3D road surface)
+ *   Layer 2: Sun frame (transparent, celestial bodies behind scenery)
+ *   Layer 3: Mountains frame (transparent, horizontal parallax scenery)
+ *   Layer 4: Ground grid frame (holodeck floor effect)
+ *   Layer 5: Road frame (the pseudo-3D road surface)
  *   Layer 5+: Roadside sprite frames (pooled, z-sorted by distance)
  *   Layer N: Vehicle frames (player + AI cars)
  *   Top: HUD frame (static overlay)
@@ -70,17 +71,17 @@ class FrameManager {
     this.skyGridFrame.open();
     this.addLayer(this.skyGridFrame, 'skyGrid', 1);
     
-    // Mountains layer (transparent, for parallax scrolling)
-    this.mountainsFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
-    this.mountainsFrame.transparent = true;
-    this.mountainsFrame.open();
-    this.addLayer(this.mountainsFrame, 'mountains', 2);
-    
-    // Sun layer (transparent, centered)
+    // Sun layer (transparent, for celestial bodies - behind scenery)
     this.sunFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
     this.sunFrame.transparent = true;
     this.sunFrame.open();
-    this.addLayer(this.sunFrame, 'sun', 3);
+    this.addLayer(this.sunFrame, 'sun', 2);
+    
+    // Mountains layer (transparent, for parallax scrolling scenery - in front of celestials)
+    this.mountainsFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
+    this.mountainsFrame.transparent = true;
+    this.mountainsFrame.open();
+    this.addLayer(this.mountainsFrame, 'mountains', 3);
     
     // Ground grid layer - holodeck floor effect (below road surface)
     // Covers same area as road, but renders the grid pattern

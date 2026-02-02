@@ -44,15 +44,16 @@ var GLYPH = {
   BOX_VD_HD: String.fromCharCode(209),      // ╤ (single vertical, double horizontal down)
   BOX_VD_HU: String.fromCharCode(207),      // ╧ (single vertical, double horizontal up)
 
-  // Geometric shapes (CP437)
-  TRIANGLE_UP: String.fromCharCode(30),     // ▲
-  TRIANGLE_DOWN: String.fromCharCode(31),   // ▼
-  TRIANGLE_LEFT: String.fromCharCode(17),   // ◄
-  TRIANGLE_RIGHT: String.fromCharCode(16),  // ►
-  DIAMOND: String.fromCharCode(4),          // ♦
-  BULLET: String.fromCharCode(7),           // ●
-  CIRCLE: String.fromCharCode(9),           // ○
-  INVERSE_BULLET: String.fromCharCode(8),   // ◘
+  // Geometric shapes - using safe ASCII alternatives
+  // (CP437 chars 0-31 are control codes in most modern terminals)
+  TRIANGLE_UP: '^',                         // Was char 30 (▲) - control char
+  TRIANGLE_DOWN: 'v',                       // Was char 31 (▼) - control char
+  TRIANGLE_LEFT: '<',                       // Was char 17 (◄) - DC1 control char
+  TRIANGLE_RIGHT: '>',                      // Was char 16 (►) - DLE control char
+  DIAMOND: '*',                             // Was char 4 (♦) - EOT control char
+  BULLET: 'o',                              // Was char 7 (●) - BELL control char
+  CIRCLE: 'O',                              // Was char 9 (○) - TAB control char!
+  INVERSE_BULLET: '@',                      // Was char 8 (◘) - BACKSPACE control char!
 
   // Other useful characters
   SPACE: ' ',
@@ -62,18 +63,18 @@ var GLYPH = {
   EQUALS: '=',
   ASTERISK: '*',
 
-  // Scenery characters
-  TREE_TOP: String.fromCharCode(6),         // ♠ (spade - good for tree top)
+  // Scenery characters - using safe alternatives
+  TREE_TOP: '^',                            // Was char 6 (♠) - ACK control char
   TREE_TRUNK: String.fromCharCode(179),     // │
   ROCK: String.fromCharCode(178),           // ▓
   GRASS: String.fromCharCode(176),          // ░
-  CACTUS: String.fromCharCode(157),         // ¥ or use simple |
+  CACTUS: '|',                              // Was char 157 - may be problematic
   MOUNTAIN_PEAK: '/',
   MOUNTAIN_SLOPE: '\\',
   
   // Racing elements
   CHECKER: String.fromCharCode(177),        // ▒ - checkered flag pattern
-  FLAG: String.fromCharCode(16)             // ► - flag marker
+  FLAG: '>'                                 // Was char 16 (►) - DLE control char
 };
 
 /**

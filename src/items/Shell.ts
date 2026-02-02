@@ -228,10 +228,9 @@ class Shell extends Item implements IProjectile {
         } else if (this.playerX > target.playerX + 0.05) {
           this.playerX -= homingRate * dt;
         }
-      } else {
-        // Target gone, convert to straight path
-        this.shellType = ShellType.GREEN;
       }
+      // If target is gone, shell continues straight but keeps its visual type
+      // (don't change shellType - that would make red shells appear green)
     }
     
     // Check for collisions with vehicles

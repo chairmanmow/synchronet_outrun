@@ -87,11 +87,11 @@ var DarkCastleTheme: Theme = {
     }
   },
   
-  // Full moon
+  // Full moon - positioned in gap between castle towers
   celestial: {
     type: 'moon',
     size: 3,
-    positionX: 0.7,
+    positionX: 0.45,
     positionY: 0.25
   },
   

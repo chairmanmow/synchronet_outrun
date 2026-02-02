@@ -1613,7 +1613,8 @@ class FrameRenderer implements IRenderer {
     var frame = this.frameManager.getSunFrame();
     if (!frame) return;
     
-    var baseY = this.horizonY - 1;
+    // Ground the monsters at the horizon line (feet touch ground)
+    var baseY = this.horizonY;
     
     // Position monsters closer together, between road and buildings
     var mothraX = 24;    // Mothra on left side

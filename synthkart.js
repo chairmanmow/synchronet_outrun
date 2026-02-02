@@ -3094,9 +3094,6 @@ var Shell = (function (_super) {
                     this.playerX -= homingRate * dt;
                 }
             }
-            else {
-                this.shellType = ShellType.GREEN;
-            }
         }
         for (var i = 0; i < vehicles.length; i++) {
             var v = vehicles[i];
@@ -4265,29 +4262,29 @@ var GLYPH = {
     DBOX_CROSS: String.fromCharCode(206),
     BOX_VD_HD: String.fromCharCode(209),
     BOX_VD_HU: String.fromCharCode(207),
-    TRIANGLE_UP: String.fromCharCode(30),
-    TRIANGLE_DOWN: String.fromCharCode(31),
-    TRIANGLE_LEFT: String.fromCharCode(17),
-    TRIANGLE_RIGHT: String.fromCharCode(16),
-    DIAMOND: String.fromCharCode(4),
-    BULLET: String.fromCharCode(7),
-    CIRCLE: String.fromCharCode(9),
-    INVERSE_BULLET: String.fromCharCode(8),
+    TRIANGLE_UP: '^',
+    TRIANGLE_DOWN: 'v',
+    TRIANGLE_LEFT: '<',
+    TRIANGLE_RIGHT: '>',
+    DIAMOND: '*',
+    BULLET: 'o',
+    CIRCLE: 'O',
+    INVERSE_BULLET: '@',
     SPACE: ' ',
     DOT: String.fromCharCode(250),
     SLASH: '/',
     BACKSLASH: '\\',
     EQUALS: '=',
     ASTERISK: '*',
-    TREE_TOP: String.fromCharCode(6),
+    TREE_TOP: '^',
     TREE_TRUNK: String.fromCharCode(179),
     ROCK: String.fromCharCode(178),
     GRASS: String.fromCharCode(176),
-    CACTUS: String.fromCharCode(157),
+    CACTUS: '|',
     MOUNTAIN_PEAK: '/',
     MOUNTAIN_SLOPE: '\\',
     CHECKER: String.fromCharCode(177),
-    FLAG: String.fromCharCode(16)
+    FLAG: '>'
 };
 function getShadeGlyph(intensity) {
     if (intensity >= 0.75)
@@ -10485,7 +10482,7 @@ var DarkCastleTheme = {
     celestial: {
         type: 'moon',
         size: 3,
-        positionX: 0.7,
+        positionX: 0.45,
         positionY: 0.25
     },
     stars: {
@@ -11746,14 +11743,14 @@ var FrameManager = (function () {
         this.skyGridFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
         this.skyGridFrame.open();
         this.addLayer(this.skyGridFrame, 'skyGrid', 1);
-        this.mountainsFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
-        this.mountainsFrame.transparent = true;
-        this.mountainsFrame.open();
-        this.addLayer(this.mountainsFrame, 'mountains', 2);
         this.sunFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
         this.sunFrame.transparent = true;
         this.sunFrame.open();
-        this.addLayer(this.sunFrame, 'sun', 3);
+        this.addLayer(this.sunFrame, 'sun', 2);
+        this.mountainsFrame = new Frame(1, 1, this.width, this.horizonY, BG_BLACK, this.rootFrame);
+        this.mountainsFrame.transparent = true;
+        this.mountainsFrame.open();
+        this.addLayer(this.mountainsFrame, 'mountains', 3);
         var roadHeight = this.height - this.horizonY;
         this.groundGridFrame = new Frame(1, this.horizonY + 1, this.width, roadHeight, BG_BLACK, this.rootFrame);
         this.groundGridFrame.open();
@@ -13105,7 +13102,7 @@ var FrameRenderer = (function () {
         var frame = this.frameManager.getSunFrame();
         if (!frame)
             return;
-        var baseY = this.horizonY - 1;
+        var baseY = this.horizonY;
         var mothraX = 24;
         var godzillaX = 56;
         var mothBody = makeAttr(BROWN, BG_BLACK);
